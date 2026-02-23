@@ -39,11 +39,11 @@ public with sharing class DocGenController {
     }
 
     @AuraEnabled
-    public static Id saveGeneratedDocument(Id recordId, String fileName, String base64Data) {
+    public static Id saveGeneratedDocument(Id recordId, String fileName, String base64Data, String extension) {
         try {
             ContentVersion cv = new ContentVersion();
             cv.Title = fileName;
-            cv.PathOnClient = fileName + '.docx';
+            cv.PathOnClient = fileName + (extension.startsWith('.') ? extension : '.' + extension);
             cv.VersionData = EncodingUtil.base64Decode(base64Data);
             cv.IsMajorVersion = true;
             insert cv;

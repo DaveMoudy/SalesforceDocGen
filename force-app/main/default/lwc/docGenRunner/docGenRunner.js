@@ -15,6 +15,7 @@ export default class DocGenRunner extends LightningElement {
     @track templateOptions = [];
     @track selectedTemplateId;
     @track outputMode = 'download';
+    @track templateOutputFormat = 'PDF'; // Default to PDF
     
     isLoading = false;
     error;
@@ -26,9 +27,10 @@ export default class DocGenRunner extends LightningElement {
     }
 
     get outputOptions() {
+        const formatLabel = this.templateOutputFormat || 'Document';
         return [
-            { label: 'Download PDF', value: 'download' },
-            { label: 'Save to Record', value: 'save' }
+            { label: `Download ${formatLabel}`, value: 'download' },
+            { label: `Save to Record (${formatLabel})`, value: 'save' }
         ];
     }
 
@@ -68,9 +70,16 @@ export default class DocGenRunner extends LightningElement {
         });
     }
 
-    handleTemplateChange(event) {
+    async handleTemplateChange(event) {
         this.selectedTemplateId = event.detail.value;
         this.error = null;
+        
+        // Peek at the template format to update the labels immediately
+        const selected = this.templateOptions.find(o => o.value === this.selectedTemplateId);
+        if (selected) {
+            // We'll get the real format during generation, but for now we keep it simple
+            // or we could fetch it here. For now, we'll let generateDocument handle the update.
+        }
     }
 
     handleOutputModeChange(event) {
@@ -105,6 +114,7 @@ export default class DocGenRunner extends LightningElement {
             
             const templateData = result.templateFile; 
             const templateType = result.templateType;
+            this.templateOutputFormat = result.outputFormat || 'PDF';
 
             // 2. Local DOCX Generation (PizZip + docxtemplater)
             let recordData = this.flattenData(JSON.parse(JSON.stringify(result.data)));
@@ -142,15 +152,30 @@ export default class DocGenRunner extends LightningElement {
             
             const baseName = recordData.Name || recordData.QuoteNumber || recordData.CaseNumber || recordData.Subject || 'Document';
             const isPPT = templateType === 'PowerPoint';
+            const isPDF = this.templateOutputFormat === 'PDF' && !isPPT;
 
             if (isPPT) {
-                // PowerPoint is always download for now as we don't have a PPT-to-PDF engine
-                const outZip = doc.getZip().generate({ type: 'blob' });
-                window.saveAs(outZip, baseName + '.pptx');
-                this.showToast('Success', 'PowerPoint downloaded.', 'success');
-                this.isLoading = false;
+                // PowerPoint Logic
+                const outBlob = doc.getZip().generate({ type: 'blob' });
+                if (this.outputMode === 'save') {
+                    await this.saveToSalesforce(baseName, outBlob, 'pptx');
+                } else {
+                    window.saveAs(outBlob, baseName + '.pptx');
+                    this.showToast('Success', 'PowerPoint downloaded.', 'success');
+                    this.isLoading = false;
+                }
+            } else if (!isPDF) {
+                // native Word Logics
+                const outBlob = doc.getZip().generate({ type: 'blob' });
+                if (this.outputMode === 'save') {
+                    await this.saveToSalesforce(baseName, outBlob, 'docx');
+                } else {
+                    window.saveAs(outBlob, baseName + '.docx');
+                    this.showToast('Success', 'Word document downloaded.', 'success');
+                    this.isLoading = false;
+                }
             } else {
-                // Word DOCX -> Send to PDF Engine
+                // Word DOCX -> Send to PDF Engine (For PDF Output)
                 this.showToast('Info', 'Generating PDF...', 'info');
                 const docxBuffer = doc.getZip().generate({ type: 'arraybuffer' });
                 const iframe = this.template.querySelector('iframe');
@@ -187,9 +212,9 @@ export default class DocGenRunner extends LightningElement {
     handleMessage = async (event) => {
         if (event.data.type === 'docgen_success') {
             if (this.outputMode === 'save' && event.data.blob) {
-                await this.saveToSalesforce(event.data.fileName, event.data.blob);
+                await this.saveToSalesforce(event.data.fileName, event.data.blob, 'pdf');
             } else {
-                this.showToast('Success', 'PDF Generated successfully.', 'success');
+                this.showToast('Success', 'Document Generated successfully.', 'success');
                 this.isLoading = false;
             }
         } else if (event.data.type === 'docgen_error') {
@@ -198,7 +223,7 @@ export default class DocGenRunner extends LightningElement {
         }
     }
 
-    async saveToSalesforce(fileName, blob) {
+    async saveToSalesforce(fileName, blob, extension) {
         try {
             this.showToast('Info', 'Saving to Record...', 'info');
             // Convert ArrayBuffer/Blob to Base64
@@ -206,9 +231,10 @@ export default class DocGenRunner extends LightningElement {
             await saveGeneratedDocument({
                 recordId: this.recordId,
                 fileName: fileName,
-                base64Data: base64
+                base64Data: base64,
+                extension: extension
             });
-            this.showToast('Success', 'Document saved to record.', 'success');
+            this.showToast('Success', `${extension.toUpperCase()} saved to record.`, 'success');
         } catch (e) {
             this.error = 'Save Error: ' + (e.body ? e.body.message : e.message);
         } finally {
@@ -224,7 +250,12 @@ export default class DocGenRunner extends LightningElement {
                 resolve(base64String);
             };
             reader.onerror = reject;
-            reader.readAsDataURL(new Blob([blob]));
+            // Handle both Blobs and ArrayBuffers
+            if (blob instanceof ArrayBuffer) {
+                reader.readAsDataURL(new Blob([blob]));
+            } else {
+                reader.readAsDataURL(blob);
+            }
         });
     }
 
