@@ -100,7 +100,13 @@ public with sharing class DocGenRenditionService {
                 audits[0].Error_Message__c = '[' + System.now() + '] ' + errorMessage;
                 update audits;
             } else {
-                System.debug('DocGen: Could not find audit record for CV ' + sourceCvId + ' to log error: ' + errorMessage);
+                // Create a new audit record if one doesn't exist (e.g., Bulk Generation)
+                DocGen_Signature_Audit__c newAudit = new DocGen_Signature_Audit__c(
+                    Document_Hash_SHA256__c = 'PENDING_RENDITION:' + sourceCvId,
+                    Error_Message__c = '[' + System.now() + '] ' + errorMessage
+                );
+                insert newAudit;
+                System.debug('DocGen: Created new audit record for CV ' + sourceCvId + ' failure: ' + errorMessage);
             }
         } catch (Exception e) {
             System.debug('DocGen: Critical error logging rendition failure: ' + e.getMessage());

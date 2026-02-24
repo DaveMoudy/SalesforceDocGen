@@ -2,6 +2,6 @@
 <CustomTab xmlns="http://soap.sforce.com/2006/04/metadata">
     <description>DocGen Setup Wizard</description>
     <label>DocGen Setup</label>
-    <motif>Custom108: TV Widescreen</motif>
     <lwcComponent>docGenSetupWizard</lwcComponent>
+    <motif>Custom108: TV Widescreen</motif>
 </CustomTab>

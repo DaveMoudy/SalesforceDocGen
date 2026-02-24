@@ -15,13 +15,13 @@ Normally, document generation in Salesforce is expensive. We believe that basic 
 You can install the latest stable version of the platform using the following command:
 
 ```bash
-sf package install --package 04tdL000000Nxx3QAC --wait 10 --installation-key-bypass
+sf package install --package 04tdL000000Ny3VQAS --wait 10 --installation-key-bypass
 ```
 
-**Subscriber Package Version ID**: `04tdL000000Nxx3QAC`  
+**Subscriber Package Version ID**: `04tdL000000Ny3VQAS`  
 **Installation Links**:
-- [Install in Production/Developer Org](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000Nxx3QAC)
-- [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000Nxx3QAC)
+- [Install in Production/Developer Org](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000Ny3VQAS)
+- [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000Ny3VQAS)
 
 ---
 
