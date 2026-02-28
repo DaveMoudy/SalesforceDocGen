@@ -144,7 +144,7 @@
                 <div class="slds-modal__content slds-p-around_medium">
                     <lightning-tabset variant="scoped" active-tab-value={activeEditTab}>
                         <!-- Tab 1: Settings -->
-                        <lightning-tab label="Settings" value="details">
+                        <lightning-tab label="Settings" value="details" onactive={handleEditTabChange}>
                             <div class="slds-grid slds-gutters">
                                 <div class="slds-col slds-size_1-of-2">
                                     <lightning-input label="Template Name" value={editTemplateName} onchange={handleEditNameChange} required></lightning-input>
@@ -167,7 +167,7 @@
                         </lightning-tab>
 
                         <!-- Tab 2: Query Configuration -->
-                        <lightning-tab label="Query Configuration" value="query">
+                        <lightning-tab label="Query Configuration" value="query" onactive={handleEditTabChange}>
                              <!-- Header Control -->
                              <div class="slds-grid slds-grid_align-spread slds-m-bottom_small">
                                  <div class="slds-col">
@@ -186,13 +186,9 @@
                                  </div>
                              </div>
 
-                             <!-- Builder Mode -->
+                             <!-- Builder Mode: builder lives below tabset so it stays in DOM when user switches tabs and clicks Save -->
                              <template if:false={isManualQuery}>
-                                <c-doc-gen-query-builder
-                                    selected-object={editTemplateObject}
-                                    query-config={editTemplateQuery} 
-                                    onconfigchange={handleEditConfigChange}>
-                                </c-doc-gen-query-builder>
+                                <p class="slds-text-body_small slds-text-color_weak">Configure fields and child relationships in the section below.</p>
                              </template>
 
                              <!-- Manual Mode -->
@@ -213,7 +209,7 @@
                         </lightning-tab>
 
                         <!-- Tab 3: Template Tags (Dynamic Header) -->
-                        <lightning-tab label="Template Tags" value="tags">
+                        <lightning-tab label="Template Tags" value="tags" onactive={handleEditTabChange}>
                             <div class="slds-grid slds-gutters slds-m-bottom_medium slds-grid_vertical-align-center">
                                 <div class="slds-col">
                                     <h3 class="slds-text-heading_small">{editTemplateObject} Fields</h3>
@@ -242,7 +238,7 @@
                         </lightning-tab>
 
                         <!-- Tab 4: Document & History -->
-                        <lightning-tab label="Document & History" value="document">
+                        <lightning-tab label="Document & History" value="document" onactive={handleEditTabChange}>
                              <div class="slds-m-top_medium">
                                 <!-- Current File Section -->
                                 <article class="slds-card slds-m-bottom_medium slds-theme_shade">
@@ -319,6 +315,14 @@
                              </div>
                         </lightning-tab>
                     </lightning-tabset>
+                    <!-- Single query builder outside tabset so it is always in DOM when modal is open (required for Save to read current state) -->
+                    <div class={queryBuilderSectionClass}>
+                        <c-doc-gen-query-builder
+                            selected-object={editTemplateObject}
+                            query-config={editTemplateQuery}
+                            onconfigchange={handleEditConfigChange}>
+                        </c-doc-gen-query-builder>
+                    </div>
                 </div>
                 <!-- Footer with Renamed Buttons -->
                 <footer class="slds-modal__footer">

@@ -2,7 +2,7 @@
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Type__c</fullName>
     <deprecated>false</deprecated>
-    <description>Type of the template (Word or PowerPoint).</description>
+    <description>Type of the template (Word, PowerPoint, or HTML).</description>
     <label>Type</label>
     <required>true</required>
     <trackTrending>false</trackTrending>
@@ -20,6 +20,11 @@
                 <fullName>PowerPoint</fullName>
                 <default>false</default>
                 <label>PowerPoint</label>
+            </value>
+            <value>
+                <fullName>HTML</fullName>
+                <default>false</default>
+                <label>HTML</label>
             </value>
         </valueSetDefinition>
     </valueSet>

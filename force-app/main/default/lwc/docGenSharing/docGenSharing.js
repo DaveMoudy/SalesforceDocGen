@@ -75,7 +75,10 @@ export default class DocGenSharing extends LightningElement {
         this.isSearching = true;
         searchUsersAndGroups({ searchTerm: this.searchTerm })
             .then(results => {
-                this.searchResults = results;
+                this.searchResults = (results || []).map(r => ({
+                    ...r,
+                    Icon: (r.Icon && String(r.Icon).trim()) ? r.Icon : 'standard:user'
+                }));
             })
             .catch(error => {
                 console.error(error);

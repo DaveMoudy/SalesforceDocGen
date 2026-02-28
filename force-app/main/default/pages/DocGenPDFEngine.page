@@ -60,67 +60,65 @@
                 const data = event.data;
                 if (data.type === 'generate') {
                     console.log('PDF Engine: Received generation request', data.fileName);
-                    
-                    try {
-                        // docx-preview takes a Blob or ArrayBuffer
-                        const blob = new Blob([data.blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-                        
-                        const container = document.getElementById('content-zone');
-                        container.innerHTML = ''; // Clear previous
-                        container.style.display = 'block';
-                        
-                        // docx-preview renderAsync(document, element, styleContainer, options)
-                        console.log('PDF Engine: Rendering DOCX via docx-preview...');
-                        
-                        const renderOptions = {
-                            className: 'docx_viewer', 
-                            inWrapper: false, 
-                            ignoreWidth: true, // Force fit to container width
-                            ignoreHeight: false, 
-                            experimental: true
+                    const container = document.getElementById('content-zone');
+                    container.innerHTML = '';
+                    container.style.display = 'block';
+
+                    function runHtml2Pdf() {
+                        const opt = {
+                            margin:       0,
+                            filename:     data.fileName + '.pdf',
+                            image:        { type: 'jpeg', quality: 0.98 },
+                            html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+                            jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+                            pagebreak:    { mode: ['css', 'legacy'] }
                         };
-                        
-                        await docx.renderAsync(blob, container, null, renderOptions);
-                        
-                        console.log('PDF Engine: DOCX Rendered. converting to PDF...');
-                        
-                        // Small delay to ensure rendering is complete (fonts, etc)
-                        setTimeout(() => {
-                             const opt = {
-                                 margin:       0,
-                                 filename:     data.fileName + '.pdf',
-                                 image:        { type: 'jpeg', quality: 0.98 },
-                                 html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
-                                 jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
-                                 pagebreak:    { mode: ['css', 'legacy'] } 
-                             };
-                             
-                             const worker = html2pdf().from(container).set(opt);
-                             
-                             if (data.mode === 'save') {
-                                 // Return blob to LWC for saving to record
-                                 worker.output('arraybuffer').then(buffer => {
-                                     console.log('PDF Engine: Blob generated for saving.');
-                                     sendSuccess(buffer, data.fileName);
-                                 }).catch(err => {
-                                     console.error(err);
-                                     sendError('PDF Blob Generation Failed: ' + err.message);
-                                 });
-                             } else {
-                                 // Standard download
-                                 worker.save().then(() => {
-                                     console.log('PDF Engine: Download triggered.');
-                                     sendSuccess();
-                                 }).catch(err => {
-                                     console.error(err);
-                                     sendError('PDF Generation Failed: ' + err.message);
-                                 });
-                             }
-                        }, 1000); // 1s wait for render
-                        
+                        const worker = html2pdf().from(container).set(opt);
+                        if (data.mode === 'save') {
+                            worker.output('arraybuffer').then(function(buffer) {
+                                console.log('PDF Engine: Blob generated for saving.');
+                                sendSuccess(buffer, data.fileName);
+                            }).catch(function(err) {
+                                console.error(err);
+                                sendError('PDF Blob Generation Failed: ' + err.message);
+                            });
+                        } else {
+                            worker.save().then(function() {
+                                console.log('PDF Engine: Download triggered.');
+                                sendSuccess();
+                            }).catch(function(err) {
+                                console.error(err);
+                                sendError('PDF Generation Failed: ' + err.message);
+                            });
+                        }
+                    }
+
+                    try {
+                        if (data.html !== undefined && data.html !== null) {
+                            // HTML input: render directly into container then convert to PDF
+                            console.log('PDF Engine: Rendering HTML...');
+                            container.innerHTML = data.html;
+                            setTimeout(function() {
+                                console.log('PDF Engine: Converting HTML to PDF...');
+                                runHtml2Pdf();
+                            }, 500);
+                        } else {
+                            // DOCX input: docx-preview then html2pdf
+                            const blob = new Blob([data.blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                            console.log('PDF Engine: Rendering DOCX via docx-preview...');
+                            await docx.renderAsync(blob, container, null, {
+                                className: 'docx_viewer',
+                                inWrapper: false,
+                                ignoreWidth: true,
+                                ignoreHeight: false,
+                                experimental: true
+                            });
+                            console.log('PDF Engine: DOCX Rendered. Converting to PDF...');
+                            setTimeout(runHtml2Pdf, 1000);
+                        }
                     } catch (e) {
-                         console.error('Render Error', e);
-                         sendError('Render Error: ' + e.message);
+                        console.error('Render Error', e);
+                        sendError('Render Error: ' + e.message);
                     }
                 }
             });

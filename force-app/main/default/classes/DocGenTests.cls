@@ -121,4 +121,37 @@ private class DocGenTests {
         System.assertEquals(EncodingUtil.base64Encode(Blob.valueOf('Test Content')), contentV1, 'Should return V1 content');
         Test.stopTest();
     }
+
+    @isTest
+    static void testGenerateDocumentDataReturnsHtmlTemplateType() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        tpl.Type__c = 'HTML';
+        update tpl;
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Test.startTest();
+        Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, acc.Id);
+        Test.stopTest();
+        System.assertEquals('HTML', result.get('templateType'), 'templateType should be HTML');
+        System.assertNotEquals(null, result.get('templateFile'), 'Template file should be returned');
+    }
+
+    @isTest
+    static void testDocGenServiceThrowsForHtmlTemplate() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        tpl.Type__c = 'HTML';
+        update tpl;
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Boolean threw = false;
+        String message = '';
+        Test.startTest();
+        try {
+            DocGenService.generateDocument(tpl.Id, acc.Id);
+        } catch (DocGenException e) {
+            threw = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+        System.assert(threw, 'DocGenService should throw for HTML template in bulk/server context');
+        System.assert(message.contains('HTML templates are only supported'), 'Exception should mention HTML single-record only');
+    }
 }

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Record Summary – {{Name}}</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
+      color: #1a1a1a;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 2rem;
+      background: #f8f9fa;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, .08);
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-header {
+      background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+      color: #fff;
+      padding: 1.25rem 1.5rem;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .card-body {
+      padding: 1.5rem;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .row:last-child {
+      margin-bottom: 0;
+    }
+
+    .field {
+      flex: 1 1 200px;
+      padding: .5rem 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    .field-label {
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: #6c757d;
+      margin-bottom: .25rem;
+    }
+
+    .field-value {
+      font-weight: 500;
+    }
+
+    .section-title {
+      font-size: .875rem;
+      font-weight: 600;
+      color: #495057;
+      margin: 1.25rem 0 .75rem;
+      padding-bottom: .35rem;
+      border-bottom: 2px solid #0d6efd;
+    }
+
+    .section-title:first-child {
+      margin-top: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+    }
+
+    th,
+    td {
+      padding: .6rem .75rem;
+      text-align: left;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    th {
+      background: #f1f3f5;
+      font-weight: 600;
+      color: #495057;
+    }
+
+    tr:hover td {
+      background: #f8f9fa;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: .25rem .5rem;
+      border-radius: 6px;
+      font-size: .75rem;
+      font-weight: 600;
+    }
+
+    .badge-success {
+      background: #d1e7dd;
+      color: #0f5132;
+    }
+
+    .badge-warning {
+      background: #fff3cd;
+      color: #664d03;
+    }
+
+    .badge-info {
+      background: #cff4fc;
+      color: #055160;
+    }
+
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid #dee2e6;
+      font-size: .8rem;
+      color: #6c757d;
+    }
+
+    .muted {
+      color: #6c757d;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="card-header">Record Summary – {{Name}}</div>
+    <div class="card-body">
+      <div class="section-title">Primary details</div>
+      <div class="row">
+        <div class="field">
+          <div class="field-label">Account Name</div>
+          <div class="field-value">{{Name}}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Account Website</div>
+          <div class="field-value">{{Website}}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Account Phone</div>
+          <div class="field-value">{{Phone}}</div>
+        </div>
+      </div>
+
+      {{#ifList Opportunities "count" "Subscription_Amount__c" ">" 500}}
+      <div class="section-title">Related Opportunities</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Subscription Amount</th>
+            <th>Close Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each Opportunities}}
+          <tr>
+            <td>{{Name}}</td>
+            <td>{{Subscription_Amount__c}}</td>
+            <td>{{CloseDate}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+      {{/ifList}}
+    </div>
+  </div>
+
+  <div class="footer">
+    Generated from DocGen.
+  </div>
+</body>
+
+</html>

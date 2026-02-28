@@ -79,7 +79,7 @@ public with sharing class DocGenController {
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Template__c> getTemplatesForObject(String objectApiName) {
         return [
-            SELECT Id, Name, Description__c, Type__c 
+            SELECT Id, Name, Description__c, Type__c, Output_Format__c 
             FROM DocGen_Template__c 
             WHERE Base_Object_API__c = :objectApiName
             WITH USER_MODE
