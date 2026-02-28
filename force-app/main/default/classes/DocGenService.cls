@@ -16,6 +16,10 @@ public with sharing class DocGenService {
         String templateType = (String) dataMap.get('templateType');
 
         if (base64File == null) throw new DocGenException('Template file content is missing.');
+
+        if (templateType == 'HTML') {
+            throw new DocGenException('HTML templates are only supported when generating from a single record. Use the record page generator for this template.');
+        }
         
         Map<String, Object> recordDataMap;
         if (dataObj instanceof Map<String, Object>) {

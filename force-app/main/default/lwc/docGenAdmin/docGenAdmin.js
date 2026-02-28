@@ -28,6 +28,7 @@ import DESC_FIELD from '@salesforce/schema/DocGen_Template__c.Description__c';
 import PIZZIP_JS from '@salesforce/resourceUrl/pizzip';
 import DOCXTEMPLATER_JS from '@salesforce/resourceUrl/docxtemplater';
 import FILESAVER_JS from '@salesforce/resourceUrl/filesaver';
+import HANDLEBARS_JS from '@salesforce/resourceUrl/handlebars';
 
 const COLUMNS = [
     { label: 'Category', fieldName: 'Category__c', initialWidth: 150 },
@@ -157,18 +158,30 @@ const VERSION_COLUMNS = [
     renderedCallback() {
         if (this.librariesLoaded) return;
         this.librariesLoaded = true;
-        
-        Promise.all([
-            loadScript(this, PIZZIP_JS),
-            loadScript(this, DOCXTEMPLATER_JS),
-            loadScript(this, FILESAVER_JS)
-        ]).then(() => {
-            console.log('Libraries loaded successfully');
-            this.librariesReady = true;
-        }).catch(error => {
-            console.error('Error loading libraries', error);
-            this.showToast('Error', 'Error loading preview libraries', 'error');
-        });
+
+        const scripts = [
+            { name: 'PizZip', p: loadScript(this, PIZZIP_JS) },
+            { name: 'Docxtemplater', p: loadScript(this, DOCXTEMPLATER_JS) },
+            { name: 'FileSaver', p: loadScript(this, FILESAVER_JS) },
+            { name: 'Handlebars', p: loadScript(this, HANDLEBARS_JS) }
+        ];
+        const toMsg = (e) => (e && e.message) || (e && e.body && e.body.message) || (typeof e === 'string' ? e : null);
+        Promise.all(scripts.map(({ name, p }) =>
+            p.catch(err => {
+                const msg = toMsg(err) || 'script failed to load';
+                console.warn('DocGen Admin: Library load failed [' + name + '].', msg, err);
+                throw new Error(name + ': ' + msg);
+            })
+        ))
+            .then(() => {
+                console.log('DocGen Admin: Libraries loaded successfully');
+                this.librariesReady = true;
+            })
+            .catch(err => {
+                const msg = toMsg(err) || 'One or more libraries could not load. Ensure static resources (pizzip, docxtemplater, filesaver, handlebars) are deployed and accessible.';
+                console.warn('DocGen Admin: Library load failed.', msg);
+                this.librariesReady = false;
+            });
     }
 
     // --- Wizard Logic ---
@@ -248,15 +261,40 @@ const VERSION_COLUMNS = [
         this.editTemplateTitleFormat = event.detail.value;
     }
 
+    handleEditTabChange(event) {
+        const val = event.target.value;
+        if (val) this.activeEditTab = val;
+        if (val === 'query' && !this.isManualQuery) {
+            this.refreshEditQueryBuilder();
+        }
+    }
+
+    refreshEditQueryBuilder() {
+        const builders = this.template.querySelectorAll('c-doc-gen-query-builder');
+        for (const b of builders) {
+            if (b.showTagsOnly === true) continue;
+            if (typeof b.refreshFromConfig === 'function') {
+                b.refreshFromConfig();
+                break;
+            }
+        }
+    }
+
     get isBuilderDisabled() {
         return this.isManualQuery;
+    }
+
+    get queryBuilderSectionClass() {
+        const show = this.activeEditTab === 'query' && !this.isManualQuery;
+        return show ? '' : 'slds-hide';
     }
 
     // --- Options ---
     get typeOptions() {
         return [
             { label: 'Word', value: 'Word' },
-            { label: 'PowerPoint', value: 'PowerPoint' }
+            { label: 'PowerPoint', value: 'PowerPoint' },
+            { label: 'HTML', value: 'HTML' }
         ];
     }
     
@@ -268,7 +306,9 @@ const VERSION_COLUMNS = [
     }
     
     get acceptedFormats() {
-        return this.editTemplateType === 'PowerPoint' ? ['.pptx'] : ['.docx'];
+        if (this.editTemplateType === 'HTML') return ['.html'];
+        if (this.editTemplateType === 'PowerPoint') return ['.pptx'];
+        return ['.docx'];
     }
 
     // --- Create Logic ---
@@ -389,6 +429,7 @@ const VERSION_COLUMNS = [
             this.loadVersions(row.Id);
             this.isCreating = false;
             this.isEditModalOpen = true;
+            setTimeout(() => this.refreshEditQueryBuilder(), 400);
         } catch (e) {
             console.error('Error opening Edit Modal:', e);
             this.showToast('Error', 'Failed to open modal: ' + e.message, 'error');
@@ -486,6 +527,21 @@ const VERSION_COLUMNS = [
     }
 
     // --- Save Logic ---
+    getEditModeQueryConfig() {
+        if (this.isManualQuery) {
+            return this.editTemplateQuery || '';
+        }
+        const builders = this.template.querySelectorAll('c-doc-gen-query-builder');
+        for (const b of builders) {
+            if (b.showTagsOnly === true) continue;
+            if (typeof b.getQueryConfig === 'function') {
+                const q = b.getQueryConfig();
+                if (q && typeof q === 'string' && q.trim().length > 0) return q;
+            }
+        }
+        return this.editTemplateQuery || '';
+    }
+
     async handleSaveOnly() {
          // Validate
          if (!this.editTemplateName || !this.editTemplateType) {
@@ -493,6 +549,7 @@ const VERSION_COLUMNS = [
             return;
         }
 
+        const queryToSave = this.getEditModeQueryConfig();
         const fields = {
             Id: this.editTemplateId,
             Name: this.editTemplateName,
@@ -501,7 +558,7 @@ const VERSION_COLUMNS = [
             Output_Format__c: this.editTemplateOutputFormat,
             Base_Object_API__c: this.editTemplateObject,
             Description__c: this.editTemplateDesc,
-            Query_Config__c: this.editTemplateQuery,
+            Query_Config__c: queryToSave,
             Test_Record_Id__c: this.editTemplateTestRecordId,
             Document_Title_Format__c: this.editTemplateTitleFormat
         };
@@ -522,6 +579,7 @@ const VERSION_COLUMNS = [
             return;
         }
 
+        const queryToSave = this.getEditModeQueryConfig();
         const fields = {
             Id: this.editTemplateId,
             Name: this.editTemplateName,
@@ -530,11 +588,11 @@ const VERSION_COLUMNS = [
             Output_Format__c: this.editTemplateOutputFormat,
             Base_Object_API__c: this.editTemplateObject,
             Description__c: this.editTemplateDesc,
-            Query_Config__c: this.editTemplateQuery,
+            Query_Config__c: queryToSave,
             Test_Record_Id__c: this.editTemplateTestRecordId,
             Document_Title_Format__c: this.editTemplateTitleFormat
         };
-        
+
         const createVersion = true; 
 
         try {
@@ -589,15 +647,50 @@ const VERSION_COLUMNS = [
             const templateType = this.editTemplateType; 
 
             // 4. Sanitize Data
-            let recordData; 
+            let recordData;
             try {
                 const rawData = JSON.parse(JSON.stringify(result.data));
                 recordData = this.flattenData(rawData);
+                console.log('DocGen Admin: Record data:')
+                console.log(recordData);
             } catch (jsonErr) {
-                 throw new Error('Data sanitization failed: ' + jsonErr.message);
+                throw new Error('Data sanitization failed: ' + jsonErr.message);
             }
 
-            // 5. PizZip
+            const baseName = 'Sample_' + (recordData.Name || 'Document');
+
+            // HTML + Handlebars path
+            if (templateType === 'HTML') {
+                if (!window.Handlebars) {
+                    throw new Error('Handlebars library not loaded.');
+                }
+                console.log('DEBUG: HTML template. Rendering with Handlebars...');
+                const htmlString = this.base64ToUtf8String(templateData);
+                const template = window.Handlebars.compile(htmlString);
+                const renderedHtml = template(recordData);
+                if (this.editTemplateOutputFormat === 'PDF') {
+                    this.showToast('Info', 'Generating PDF Sample...', 'info');
+                    const iframe = this.template.querySelector('iframe');
+                    if (!iframe) {
+                        this.showToast('Error', 'PDF Engine not found in DOM.', 'error');
+                        return;
+                    }
+                    iframe.contentWindow.postMessage({
+                        type: 'generate',
+                        html: renderedHtml,
+                        fileName: baseName
+                    }, '*');
+                } else {
+                    // Use application/octet-stream so FileSaver/LWS accepts the blob (filename .html still opens as HTML)
+                    const blob = new Blob([renderedHtml], { type: 'application/octet-stream' });
+                    window.saveAs(blob, baseName + '.html');
+                    this.showToast('Success', 'Sample HTML Downloaded', 'success');
+                }
+                this.isLoadingVersions = false;
+                return;
+            }
+
+            // 5. PizZip (Word/PowerPoint)
             console.log('DEBUG: PizZip Loading...');
             let zip;
             try {
@@ -670,8 +763,7 @@ const VERSION_COLUMNS = [
             // 8. Output
             console.log('DEBUG: Outputting. TemplateType:', templateType);
             const isPPT = ['PowerPoint', 'PPT', 'PPTX'].includes(templateType);
-            const downloadMime = 'application/octet-stream'; 
-            const baseName = 'Sample_' + (recordData.Name || 'Document');
+            const downloadMime = 'application/octet-stream';
             
             let outZip;
             try {
@@ -726,16 +818,26 @@ const VERSION_COLUMNS = [
         }
     }
 
+    base64ToUtf8String(base64) {
+        const binaryString = atob(base64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return new TextDecoder('utf-8').decode(bytes);
+    }
+
     flattenData(obj) {
         if (!obj || typeof obj !== 'object') return obj;
         if (Array.isArray(obj)) return obj.map(item => this.flattenData(item));
         if (obj.hasOwnProperty('totalSize') && obj.hasOwnProperty('records') && Array.isArray(obj.records)) {
-             return this.flattenData(obj.records);
+            return this.flattenData(obj.records);
         }
         const newObj = {};
         for (const key in obj) {
             if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                if (key === 'attributes') continue; 
+                if (key === 'attributes') continue;
                 newObj[key] = this.flattenData(obj[key]);
             }
         }

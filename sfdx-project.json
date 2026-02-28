@@ -1,26 +1,12 @@
 {
   "packageDirectories": [
     {
-      "versionName": "ver 0.1",
-      "versionNumber": "0.1.0.NEXT",
       "path": "force-app",
-      "default": true,
-      "package": "Document Generation",
-      "versionDescription": ""
+      "default": true
     }
   ],
   "name": "Document Generation",
   "namespace": "",
   "sfdcLoginUrl": "https://login.salesforce.com",
-  "sourceApiVersion": "65.0",
-  "packageAliases": {
-    "Document Generation": "0HodL0000002DkLSAU",
-    "Document Generation@0.1.0-1": "04tdL000000NnT3QAK",
-    "Document Generation@0.1.0-2": "04tdL000000NnUfQAK",
-    "Document Generation@0.1.0-3": "04tdL000000NoXBQA0",
-    "Document Generation@0.1.0-4": "04tdL000000Nos9QAC",
-    "Document Generation@0.1.0-5": "04tdL000000NrlBQAS",
-    "Document Generation@0.1.0-6": "04tdL000000Nxx3QAC",
-    "Document Generation@0.1.0-7": "04tdL000000Ny3VQAS"
-  }
+  "sourceApiVersion": "65.0"
 }

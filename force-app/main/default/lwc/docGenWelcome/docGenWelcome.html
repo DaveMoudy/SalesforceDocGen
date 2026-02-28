@@ -15,8 +15,8 @@
                         </div>
                     </div>
                      <p class="slds-text-body_regular slds-m-bottom_medium">
-                        DocGen allows you to merge Salesforce data into Microsoft Word and PowerPoint templates seamlessly.
-                        Follow the steps below to get started.
+                        DocGen allows you to merge Salesforce data into Microsoft Word, PowerPoint, or HTML templates seamlessly.
+                        HTML templates use Handlebars syntax (e.g. <code>&#123;&#123;fieldName&#125;&#125;</code>, <code>&#123;&#123;#each&#125;&#125;</code>). Follow the steps below to get started.
                     </p>
                     
                     <div class="slds-grid slds-gutters">
@@ -32,7 +32,7 @@
                     <h2 class="slds-text-heading_medium slds-m-bottom_medium">How to Create a Document</h2>
                      <lightning-progress-indicator type="path" current-step="step0">
                         <lightning-progress-step label="Create Template Record" value="step1"></lightning-progress-step>
-                        <lightning-progress-step label="Upload Word/PPT" value="step2"></lightning-progress-step>
+                        <lightning-progress-step label="Upload Word / PPT / HTML" value="step2"></lightning-progress-step>
                         <lightning-progress-step label="Map Data" value="step3"></lightning-progress-step>
                         <lightning-progress-step label="Generate" value="step4"></lightning-progress-step>
                     </lightning-progress-indicator>
@@ -59,7 +59,7 @@
                                     </div>
                                     <div class="slds-media__body">
                                         <h3 class="slds-text-heading_small">2. Upload Your Document</h3>
-                                        <p>Create a Word (.docx) or PowerPoint (.pptx) file. Use merge tags like <code>{NAME}</code>. Upload this file to the Template record.</p>
+                                        <p>Create a Word (.docx), PowerPoint (.pptx), or HTML (.html) file. Use merge tags like <code>{NAME}</code> for Word/PPT, or Handlebars like <code>&#123;&#123;Name&#125;&#125;</code> for HTML. Upload this file to the Template record.</p>
                                     </div>
                                 </div>
                             </div>
