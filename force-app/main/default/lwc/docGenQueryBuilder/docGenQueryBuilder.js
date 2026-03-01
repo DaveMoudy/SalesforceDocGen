@@ -14,22 +14,22 @@ export default class DocGenQueryBuilder extends LightningElement {
     @track filteredFieldOptions = [];
     @track childOptions = [];
     @track parentOptions = []; // New
-    
+
     @api selectedObject;
     @track selectedObjectLabel = '';
-    
+
     @track baseFieldSelection = [];
     @track parentFieldSelection = [];
-    
+
     @track selectedFields = [];
-    
+
     // Child Configs
-    @track childConfigs = []; 
-    
+    @track childConfigs = [];
+
     // Search & UI State
     @track showObjectDropdown = false;
     @track filteredObjectOptions = [];
-    
+
     @track selectedChildRel;
     @track selectedChildLabel = '';
     @track showChildDropdown = false;
@@ -40,7 +40,7 @@ export default class DocGenQueryBuilder extends LightningElement {
     @track selectedParentLabel = '';
     @track showParentDropdown = false;
     @track filteredParentOptions = [];
-    
+
     @track parentFieldOptions = [];
     @track selectedParentField;
     @track selectedParentFieldLabel = '';
@@ -49,12 +49,12 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     // --- New Mode ---
     @api showTagsOnly = false;
-    
+
     // --- Layout Getters ---
-    get mainColumnClass() { 
+    get mainColumnClass() {
         return this.showTagsOnly ? 'slds-hide' : 'slds-col slds-size_2-of-3';
     }
-    
+
     get tagsColumnClass() {
         return this.showTagsOnly ? 'slds-col slds-size_1-of-1' : 'slds-col slds-size_1-of-3';
     }
@@ -69,7 +69,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         this.baseFieldSelection = this._fieldOptions.map(opt => opt.value);
         this.updateCombinedSelection();
     }
-    
+
     get isSelectAllDisabled() {
         return !this._fieldOptions || this._fieldOptions.length === 0;
     }
@@ -79,7 +79,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         event.preventDefault();
         const tag = event.currentTarget.dataset.tag;
         if (tag) {
-             try {
+            try {
                 // Use a temporary TextArea for broader compatibility if navigator.clipboard fails in some LWC contexts,
                 // but navigator.clipboard is standard now.
                 // Note: Secure contexts required.
@@ -137,9 +137,9 @@ export default class DocGenQueryBuilder extends LightningElement {
             console.error(error);
         }
     }
-    
+
     // --- Field Logic ---
-    
+
     @track isLoadingFields = false;
     fieldSearchKey = '';
     @track showSelectedOnly = false; // New
@@ -156,7 +156,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         }
         this.isLoadingFields = false;
     }
-    
+
     handleFieldSearch(event) {
         window.clearTimeout(this.delayTimeout);
         const searchKey = event.target.value;
@@ -165,7 +165,7 @@ export default class DocGenQueryBuilder extends LightningElement {
             this.filterFields();
         }, 300);
     }
-    
+
     handleToggleSelectedOnly(event) {
         this.showSelectedOnly = event.target.checked;
         this.filterFields();
@@ -176,15 +176,15 @@ export default class DocGenQueryBuilder extends LightningElement {
             });
         }
     }
-    
+
     filterFields() {
         let optionsToShow = [];
-        
+
         let sourceOptions = this._fieldOptions;
-        
+
         // 1. Filter by Selected Only
         if (this.showSelectedOnly) {
-             sourceOptions = sourceOptions.filter(opt => this.baseFieldSelection.includes(opt.value));
+            sourceOptions = sourceOptions.filter(opt => this.baseFieldSelection.includes(opt.value));
         }
 
         if (!this.fieldSearchKey) {
@@ -192,12 +192,12 @@ export default class DocGenQueryBuilder extends LightningElement {
             optionsToShow = sourceOptions.slice(0, 200);
         } else {
             const key = this.fieldSearchKey.toLowerCase();
-            optionsToShow = sourceOptions.filter(opt => 
-                opt.label.toLowerCase().includes(key) || 
+            optionsToShow = sourceOptions.filter(opt =>
+                opt.label.toLowerCase().includes(key) ||
                 opt.value.toLowerCase().includes(key)
             );
             // Slice the search results too if massive? Maybe 500?
-            optionsToShow = optionsToShow.slice(0, 500); 
+            optionsToShow = optionsToShow.slice(0, 500);
         }
 
         // CRITICAL: Ensure currently selected fields are ALWAYS in the options
@@ -207,23 +207,23 @@ export default class DocGenQueryBuilder extends LightningElement {
         if (this.selectedFields && this.selectedFields.length > 0) {
             const selectedSet = new Set(this.selectedFields);
             const visibleSet = new Set(optionsToShow.map(o => o.value));
-            
+
             // Find missing selected options
             // Only add them if NOT in showSelectedOnly mode (because if in showSelectedOnly, we already included them above)
             // Actually, baseFieldSelection logic above covers base fields. 
             // Parent fields in selectedFields are NOT in _fieldOptions.
-            
-            const missingOptions = this._fieldOptions.filter(o => 
+
+            const missingOptions = this._fieldOptions.filter(o =>
                 selectedSet.has(o.value) && !visibleSet.has(o.value)
             );
-            
+
             // If showSelectedOnly is ON, we technically have all selected base fields. 
             // If showSelectedOnly is OFF, we need to enforce visibility.
             if (!this.showSelectedOnly && missingOptions.length > 0) {
                 optionsToShow = [...optionsToShow, ...missingOptions];
             }
         }
-        
+
         this.filteredFieldOptions = optionsToShow;
     }
 
@@ -231,10 +231,12 @@ export default class DocGenQueryBuilder extends LightningElement {
         this.baseFieldSelection = event.detail.value;
         this.updateCombinedSelection();
     }
-    
-    updateCombinedSelection() {
+
+    updateCombinedSelection(skipNotify = false) {
         this.selectedFields = [...this.baseFieldSelection, ...this.parentFieldSelection];
-        this.notifyChange();
+        if (!skipNotify) {
+            this.notifyChange();
+        }
     }
 
     @wire(getChildRelationships, { objectName: '$selectedObject' })
@@ -242,88 +244,88 @@ export default class DocGenQueryBuilder extends LightningElement {
         if (data) {
             this.childOptions = data;
             this.filteredChildOptions = data;
-             if (this._queryConfig && this.childConfigs.length === 0) {
-                 // Try parsing again now that we have relationship map
-                 // But don't overwrite if user already edited? 
-                 // Simple check: if fully empty/init state.
-                 this.parseConfig(this._queryConfig);
-             }
+            if (this._queryConfig && this.childConfigs.length === 0) {
+                // Try parsing again now that we have relationship map
+                // But don't overwrite if user already edited? 
+                // Simple check: if fully empty/init state.
+                this.parseConfig(this._queryConfig);
+            }
         } else if (error) {
             this.childOptions = [];
         }
     }
-    
+
     @wire(getParentRelationships, { objectName: '$selectedObject' })
     wiredParents({ error, data }) {
         if (data) {
             this.parentOptions = data;
             this.filteredParentOptions = data;
         } else if (error) {
-             this.parentOptions = [];
+            this.parentOptions = [];
         }
     }
-    
+
     // ... (rest of wire methods)
 
     // --- Parser ---
-    
+
     // --- Parser ---
-    
+
     parseConfig(queryStr) {
         if (!queryStr) return;
-        
+
         // 1. Extract Subqueries (Nested Parentheses Handling is tricky with Regex, assuming standard SOQL)
         // Match: (SELECT ... FROM ...)
         // We use a non-greedy match for the content to allow multiple subqueries
         const subqueryRegex = /\(\s*SELECT\s+([\s\S]+?)\s+FROM\s+([\s\S]+?)\s*\)/gi;
-        
+
         let match;
         const subqueries = [];
         const fullMatches = []; // To remove them from base string later
-        
+
         while ((match = subqueryRegex.exec(queryStr)) !== null) {
             fullMatches.push(match[0]);
-            
+
             const fieldsStr = match[1];
             const tailStr = match[2].trim(); // Relationship + Clauses
-            
+
             // Parse Tail: Relationship [WHERE ...] [ORDER BY ...] [LIMIT ...]
             // Regex identifying tokens. 
             // NOTE: SOQL sequence is FROM -> WHERE -> WITH -> GROUP BY -> ORDER BY -> LIMIT
             // We only care about WHERE, ORDER BY, LIMIT
-            
+
             // Simple approach: Split by keywords? Or regex extraction.
             // Relationship is the first word.
             const relationshipMatch = tailStr.match(/^(\w+)/);
             if (!relationshipMatch) continue;
-            
+
             const relationshipName = relationshipMatch[1];
             let clauses = tailStr.substring(relationshipName.length).trim();
-            
+
             let whereClause = '';
             let orderBy = '';
             let limitAmount = '';
-            
+
             // Extract LIMIT (Last)
             const limitMatch = clauses.match(/\s+LIMIT\s+(\d+)$/i);
             if (limitMatch) {
                 limitAmount = limitMatch[1];
                 clauses = clauses.substring(0, clauses.length - limitMatch[0].length).trim();
             }
-            
+
             // Extract ORDER BY (Before LIMIT)
             const orderMatch = clauses.match(/\s+ORDER\s+BY\s+(.+)$/i);
             if (orderMatch) {
                 orderBy = orderMatch[1];
                 clauses = clauses.substring(0, clauses.length - orderMatch[0].length).trim();
             }
-            
+
             // Extract WHERE (Remaining)
             const whereMatch = clauses.match(/\s*WHERE\s+(.+)$/i);
             if (whereMatch) {
-                 whereClause = whereMatch[1];
+                whereClause = whereMatch[1];
             }
-            
+
             subqueries.push({
                 relationshipName: relationshipName,
                 fields: fieldsStr.split(',').map(s => s.trim()),
@@ -332,23 +334,23 @@ export default class DocGenQueryBuilder extends LightningElement {
                 limitAmount: limitAmount
             });
         }
-        
+
         // 2. Base Fields
         // Remove all subquery blocks to get base fields
         let baseFieldsStr = queryStr;
         fullMatches.forEach(m => {
-            baseFieldsStr = baseFieldsStr.replace(m, ''); 
+            baseFieldsStr = baseFieldsStr.replace(m, '');
         });
-        
+
         // Cleanup commas left behind "Name, , Industry" if subquery was in middle
         const allFlatFields = baseFieldsStr.split(',')
             .map(s => s.trim())
             .filter(s => s.length > 0 && !s.startsWith('('));
-            
+
         // Distribute to Base vs Parent
         this.baseFieldSelection = [];
         this.parentFieldSelection = [];
-        
+
         allFlatFields.forEach(f => {
             if (f.includes('.')) {
                 this.parentFieldSelection.push(f);
@@ -356,30 +358,30 @@ export default class DocGenQueryBuilder extends LightningElement {
                 this.baseFieldSelection.push(f);
             }
         });
-        
-        this.updateCombinedSelection();
-            
+
+        this.updateCombinedSelection(true);
+
         if (this._fieldOptions.length > 0) {
             this.filterFields();
         }
-            
+
         // 3. Child Configs
-        if (this.childOptions.length === 0) return; 
-        
+        if (this.childOptions.length === 0) return;
+
         this.rebuildChildConfigs(subqueries);
-        
+
         // Force tags refresh
         this.selectedFields = [...this.selectedFields];
     }
-    
+
     rebuildChildConfigs(subqueries) {
         this.childConfigs = [];
         subqueries.forEach(sub => {
             const relOption = this.childOptions.find(opt => opt.value === sub.relationshipName);
             if (!relOption) return;
-            
+
             const childObjName = relOption.childObjectApiName;
-            
+
             const newChild = {
                 relationshipName: sub.relationshipName,
                 childObjectApiName: childObjName,
@@ -388,28 +390,28 @@ export default class DocGenQueryBuilder extends LightningElement {
                 orderBy: sub.orderBy || '',
                 limitAmount: sub.limitAmount || '',
                 availableFields: [],
-                filteredFields: [] 
+                filteredFields: []
             };
-            
+
             // Load available fields
             getObjectFields({ objectName: childObjName })
                 .then(data => {
                     this.childConfigs = this.childConfigs.map(c => {
                         if (c.relationshipName === newChild.relationshipName) {
-                            return { 
-                                ...c, 
+                            return {
+                                ...c,
                                 availableFields: data,
-                                filteredFields: data.slice(0, 200) 
+                                filteredFields: data.slice(0, 200)
                             };
                         }
                         return c;
                     });
                 });
-                
+
             this.childConfigs = [...this.childConfigs, newChild];
         });
     }
-    
+
     // --- Tags Filtering ---
     @track tagsSearchKey = '';
     @track activeSections = ['Base', 'Parent', 'Children']; // Expand all by default? Or let them collapse.
@@ -421,28 +423,28 @@ export default class DocGenQueryBuilder extends LightningElement {
             this.tagsSearchKey = searchKey;
         }, 300);
     }
-    
+
     get complexityWarning() {
         const warnings = [];
-        
+
         // 1. Parent Fields Count
         if (this.parentFieldSelection.length >= 10) {
             warnings.push(`Maximum strict limit of 10 parent fields reached. You cannot add more.`);
         } else if (this.parentFieldSelection.length > 8) {
-             warnings.push(`Approaching parent field limit (${this.parentFieldSelection.length}/10).`);
+            warnings.push(`Approaching parent field limit (${this.parentFieldSelection.length}/10).`);
         }
-        
+
         // 2. Child Lists Count
         if (this.childConfigs.length >= 5) {
             warnings.push(`Maximum strict limit of 5 related lists reached. You cannot add more.`);
         }
-        
+
         // 3. Total Fields
         const totalFields = this.selectedFields.length + this.childConfigs.reduce((acc, c) => acc + c.selectedFields.length, 0);
         if (totalFields > 60) {
-             warnings.push(`Total field count is high (${totalFields}). Consider removing unused fields.`);
+            warnings.push(`Total field count is high (${totalFields}). Consider removing unused fields.`);
         }
-        
+
         if (warnings.length > 0) {
             return {
                 title: 'Limit & Performance Status',
@@ -468,17 +470,17 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     @track previewError = null;
 
-    @wire(previewRecordData, { 
-        recordId: '$testRecordId', 
-        baseObject: '$selectedObject', 
-        queryConfig: '$queryConfig' 
+    @wire(previewRecordData, {
+        recordId: '$testRecordId',
+        baseObject: '$selectedObject',
+        queryConfig: '$queryConfig'
     })
     wiredPreview(result) {
         this.previewResult = result; // Store for refresh
         const { error, data } = result;
 
         console.log('DEBUG: wiredPreview triggered. testRecordId:', this.testRecordId);
-        
+
         if (data) {
             console.log('DEBUG: Data received');
             this.previewData = this.flattenPreview(data);
@@ -488,11 +490,11 @@ export default class DocGenQueryBuilder extends LightningElement {
             this.previewData = null;
             this.previewError = error.body ? error.body.message : error.message;
         } else {
-             // Loading or null
-             console.log('DEBUG: No data/error (Loading/Null)');
+            // Loading or null
+            console.log('DEBUG: No data/error (Loading/Null)');
         }
     }
-    
+
     // Manual Refresh
     @api
     refreshPreview() {
@@ -516,13 +518,13 @@ export default class DocGenQueryBuilder extends LightningElement {
         let flat = {};
         for (let key in data) {
             let val = data[key];
-             if (val && typeof val === 'object' && val.records) {
-                 flat[key] = val.records; // Keep array
-             } else if (val && typeof val === 'object' && !Array.isArray(val)) {
-                 flat[key] = val; // Nested object (Parent)
-             } else {
-                 flat[key] = val;
-             }
+            if (val && typeof val === 'object' && val.records) {
+                flat[key] = val.records; // Keep array
+            } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+                flat[key] = val; // Nested object (Parent)
+            } else {
+                flat[key] = val;
+            }
         }
         return flat;
     }
@@ -543,11 +545,11 @@ export default class DocGenQueryBuilder extends LightningElement {
                 sample: sampleVal
             };
         });
-        
+
         if (search) {
             baseTags = baseTags.filter(t => t.label.toLowerCase().includes(search) || t.code.toLowerCase().includes(search));
         }
-        
+
         const baseCopyAll = this.baseFieldSelection.map(f => `{${f}}`).join('\n');
 
         // 2. Parent Fields (Grouped)
@@ -555,31 +557,31 @@ export default class DocGenQueryBuilder extends LightningElement {
         this.parentFieldSelection.forEach(f => {
             const parts = f.split('.');
             const objName = parts[0];
-            const fieldName = parts.slice(1).join('.'); 
-            
+            const fieldName = parts.slice(1).join('.');
+
             if (!parentGroups[objName]) parentGroups[objName] = [];
-            
+
             // Sample resolution: data[objName][fieldName]
             let sampleVal = '';
             if (data[objName]) {
-                 sampleVal = data[objName][fieldName];
+                sampleVal = data[objName][fieldName];
             }
-            
+
             parentGroups[objName].push({
                 label: fieldName,
                 code: `{${f}}`,
                 sample: sampleVal
             });
         });
-        
+
         let parentSections = Object.keys(parentGroups).sort().map(obj => {
             let fields = parentGroups[obj];
             const fullSectionCode = fields.map(t => t.code).join('\n');
-            
+
             if (search) {
                 fields = fields.filter(t => t.label.toLowerCase().includes(search) || t.code.toLowerCase().includes(search));
             }
-            
+
             return {
                 name: obj,
                 fields: fields,
@@ -587,7 +589,7 @@ export default class DocGenQueryBuilder extends LightningElement {
                 isVisible: fields.length > 0
             };
         });
-        
+
         if (search) {
             parentSections = parentSections.filter(s => s.isVisible);
         }
@@ -596,7 +598,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         let childTags = this.childConfigs.map(child => {
             const loopStart = `{#${child.relationshipName}}`;
             const loopEnd = `{/${child.relationshipName}}`;
-            
+
             // Get first record of sample
             const childRecords = data[child.relationshipName];
             const firstRecord = (childRecords && Array.isArray(childRecords) && childRecords.length > 0) ? childRecords[0] : null;
@@ -612,23 +614,23 @@ export default class DocGenQueryBuilder extends LightningElement {
                         sampleVal = firstRecord[f];
                     }
                 }
-                
+
                 return {
                     label: f,
                     code: `{${f}}`,
                     sample: sampleVal
                 };
             });
-            
+
             const allCodes = [loopStart, ...fields.map(f => f.code), loopEnd];
-            
+
             if (search) {
                 fields = fields.filter(f => f.label.toLowerCase().includes(search) || f.code.toLowerCase().includes(search));
             }
-            
+
             const isSectionMatch = child.relationshipName.toLowerCase().includes(search);
             const hasVisibleFields = fields.length > 0;
-            
+
             return {
                 name: child.relationshipName,
                 loopStart: loopStart,
@@ -638,19 +640,19 @@ export default class DocGenQueryBuilder extends LightningElement {
                 isVisible: !search || isSectionMatch || hasVisibleFields
             };
         });
-        
+
         if (search) {
-             childTags = childTags.filter(c => c.isVisible);
+            childTags = childTags.filter(c => c.isVisible);
         }
 
         return {
             hasBase: baseTags.length > 0,
             baseFields: baseTags,
             baseCopyAll: baseCopyAll,
-            
+
             hasParent: parentSections.length > 0,
             parentSections: parentSections,
-             
+
             hasChildren: childTags.length > 0,
             children: childTags
         };
@@ -662,9 +664,9 @@ export default class DocGenQueryBuilder extends LightningElement {
         const searchKey = event.target.value.toLowerCase();
         this.selectedObjectLabel = event.target.value;
         this.showObjectDropdown = true;
-        
+
         if (searchKey) {
-            this.filteredObjectOptions = this.objectOptions.filter(opt => 
+            this.filteredObjectOptions = this.objectOptions.filter(opt =>
                 opt.label.toLowerCase().includes(searchKey)
             );
         } else {
@@ -674,27 +676,27 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     handleObjectFocus() {
         this.showObjectDropdown = true;
-        this.filteredObjectOptions = this.objectOptions.filter(opt => 
-             opt.label.toLowerCase().includes((this.selectedObjectLabel || '').toLowerCase())
+        this.filteredObjectOptions = this.objectOptions.filter(opt =>
+            opt.label.toLowerCase().includes((this.selectedObjectLabel || '').toLowerCase())
         );
     }
 
     handleObjectSelect(event) {
         const value = event.currentTarget.dataset.value;
         const label = event.currentTarget.dataset.label;
-        
+
         this.selectedObject = value;
         this.selectedObjectLabel = label;
         this.showObjectDropdown = false;
-        
+
         // Reset downstream
         this.selectedFields = [];
         this.childConfigs = [];
         this.selectedChildRel = null;
         this.selectedChildLabel = '';
-        this.selectedParentRel = null; 
+        this.selectedParentRel = null;
         this.selectedParentLabel = '';
-        
+
         this.notifyChange();
     }
 
@@ -704,9 +706,9 @@ export default class DocGenQueryBuilder extends LightningElement {
         const searchKey = event.target.value.toLowerCase();
         this.selectedChildLabel = event.target.value;
         this.showChildDropdown = true;
-        
+
         if (searchKey) {
-            this.filteredChildOptions = this.childOptions.filter(opt => 
+            this.filteredChildOptions = this.childOptions.filter(opt =>
                 opt.label.toLowerCase().includes(searchKey)
             );
         } else {
@@ -716,15 +718,15 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     handleChildFocus() {
         this.showChildDropdown = true;
-        this.filteredChildOptions = this.childOptions.filter(opt => 
-             opt.label.toLowerCase().includes((this.selectedChildLabel || '').toLowerCase())
+        this.filteredChildOptions = this.childOptions.filter(opt =>
+            opt.label.toLowerCase().includes((this.selectedChildLabel || '').toLowerCase())
         );
     }
 
     handleChildSelect(event) {
         const value = event.currentTarget.dataset.value;
         const label = event.currentTarget.dataset.label;
-        
+
         this.selectedChildRel = value;
         this.selectedChildLabel = label;
         this.showChildDropdown = false;
@@ -736,51 +738,51 @@ export default class DocGenQueryBuilder extends LightningElement {
         this.childConfigs[index].whereClause = event.target.value;
         this.notifyChange();
     }
-    
+
     handleChildOrderChange(event) {
         const index = event.target.dataset.index;
         this.childConfigs[index].orderBy = event.target.value;
         this.notifyChange();
     }
-    
+
     handleChildLimitChange(event) {
         const index = event.target.dataset.index;
         this.childConfigs[index].limitAmount = event.target.value;
         this.notifyChange();
     }
-    
+
     // --- Parent Search Handling ---
     handleParentSearch(event) {
         const key = event.target.value.toLowerCase();
         this.selectedParentLabel = event.target.value;
         this.showParentDropdown = true;
-        this.filteredParentOptions = key ? 
-            this.parentOptions.filter(o => o.label.toLowerCase().includes(key)) : 
+        this.filteredParentOptions = key ?
+            this.parentOptions.filter(o => o.label.toLowerCase().includes(key)) :
             this.parentOptions;
     }
-    
+
     handleParentFocus() {
         this.showParentDropdown = true;
-        this.filteredParentOptions = this.parentOptions.filter(opt => 
-             opt.label.toLowerCase().includes((this.selectedParentLabel || '').toLowerCase())
+        this.filteredParentOptions = this.parentOptions.filter(opt =>
+            opt.label.toLowerCase().includes((this.selectedParentLabel || '').toLowerCase())
         );
     }
-    
+
     handleParentSelect(event) {
-         const value = event.currentTarget.dataset.value;
-         const label = event.currentTarget.dataset.label;
-         const targetObj = event.currentTarget.dataset.target;
-         
-         this.selectedParentRel = value;
-         this.selectedParentLabel = label;
-         this.showParentDropdown = false;
-         
-         // Load fields for parent
-         this.parentFieldOptions = [];
-         this.filteredParentFieldOptions = [];
-         this.selectedParentFields = []; // Reset multiselect state
-         
-         getObjectFields({ objectName: targetObj })
+        const value = event.currentTarget.dataset.value;
+        const label = event.currentTarget.dataset.label;
+        const targetObj = event.currentTarget.dataset.target;
+
+        this.selectedParentRel = value;
+        this.selectedParentLabel = label;
+        this.showParentDropdown = false;
+
+        // Load fields for parent
+        this.parentFieldOptions = [];
+        this.filteredParentFieldOptions = [];
+        this.selectedParentFields = []; // Reset multiselect state
+
+        getObjectFields({ objectName: targetObj })
             .then(data => {
                 this.parentFieldOptions = data;
                 this.filteredParentFieldOptions = data.slice(0, 200); // Limit initially
@@ -793,16 +795,16 @@ export default class DocGenQueryBuilder extends LightningElement {
     handleParentFieldSearch(event) {
         const key = event.target.value.toLowerCase();
         if (key) {
-            this.filteredParentFieldOptions = this.parentFieldOptions.filter(o => 
+            this.filteredParentFieldOptions = this.parentFieldOptions.filter(o =>
                 o.label.toLowerCase().includes(key) || o.value.toLowerCase().includes(key)
             );
         } else {
-             this.filteredParentFieldOptions = this.parentFieldOptions.slice(0, 200);
+            this.filteredParentFieldOptions = this.parentFieldOptions.slice(0, 200);
         }
     }
-    
+
     handleParentFieldChange(event) {
-         this.selectedParentFields = event.detail.value;
+        this.selectedParentFields = event.detail.value;
     }
 
     get isParentFieldDisabled() {
@@ -814,9 +816,9 @@ export default class DocGenQueryBuilder extends LightningElement {
         if (this.parentFieldSelection.length >= 10) return true;
         return !this.selectedParentFields || this.selectedParentFields.length === 0;
     }
-    
+
     get isAddChildDisabled() {
-         return this.childConfigs.length >= 5;
+        return this.childConfigs.length >= 5;
     }
 
     addParentField() {
@@ -834,11 +836,11 @@ export default class DocGenQueryBuilder extends LightningElement {
         if (this.selectedParentRel && this.selectedParentFields.length > 0) {
             const remaining = 10 - this.parentFieldSelection.length;
             let newFields = [];
-            
+
             // Slice if they tried to select more than allowed in one go
             const candidates = this.selectedParentFields.slice(0, remaining);
             if (this.selectedParentFields.length > remaining) {
-                 this.dispatchEvent(
+                this.dispatchEvent(
                     new ShowToastEvent({
                         title: 'Selection Truncated',
                         message: `Only added ${remaining} fields to stay within the limit of 10.`,
@@ -848,17 +850,17 @@ export default class DocGenQueryBuilder extends LightningElement {
             }
 
             candidates.forEach(field => {
-                 const fieldPath = `${this.selectedParentRel}.${field}`;
-                 if (!this.selectedFields.includes(fieldPath)) {
-                     newFields.push(fieldPath);
-                 }
+                const fieldPath = `${this.selectedParentRel}.${field}`;
+                if (!this.selectedFields.includes(fieldPath)) {
+                    newFields.push(fieldPath);
+                }
             });
-            
+
             if (newFields.length > 0) {
                 this.parentFieldSelection = [...this.parentFieldSelection, ...newFields];
                 this.updateCombinedSelection();
-                
-                 this.dispatchEvent(
+
+                this.dispatchEvent(
                     new ShowToastEvent({
                         title: 'Fields Added',
                         message: `Added ${newFields.length} parent fields.`,
@@ -889,27 +891,27 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     handleParentSelectAll() {
         if (!this.filteredParentFieldOptions || this.filteredParentFieldOptions.length === 0) return;
-        
+
         // Select all filtered
         const allFilteredValues = this.filteredParentFieldOptions.map(f => f.value);
         // Multiselect works by binding value array.
         // Union approach for parent selector
         const set = new Set([...this.selectedParentFields, ...allFilteredValues]);
         this.selectedParentFields = Array.from(set);
-        
+
         // Note: This only selects them in the listbox. User must still click "Add".
     }
-    
+
     handleOutsideClick(event) {
         // ... (Existing)
     }
-    
+
     // --- Child Logic ---
 
     // Updated Logic for Child Checkboxes
     addChildConfig() {
         if (this.childConfigs.length >= 5) {
-             this.dispatchEvent(
+            this.dispatchEvent(
                 new ShowToastEvent({
                     title: 'Limit Reached',
                     message: 'You cannot add more than 5 related lists.',
@@ -923,11 +925,11 @@ export default class DocGenQueryBuilder extends LightningElement {
 
         const selectedOption = this.childOptions.find(o => o.value === this.selectedChildRel);
         if (!selectedOption) return;
-        
+
         const childObjName = selectedOption.childObjectApiName;
 
         if (this.childConfigs.find(c => c.relationshipName === this.selectedChildRel)) {
-            return; 
+            return;
         }
 
         const newChild = {
@@ -940,15 +942,15 @@ export default class DocGenQueryBuilder extends LightningElement {
             availableFields: [],
             filteredFields: [] // For search state
         };
-        
+
         this.childConfigs = [...this.childConfigs, newChild];
-        
+
         getObjectFields({ objectName: childObjName })
             .then(data => {
                 this.childConfigs = this.childConfigs.map(c => {
                     if (c.relationshipName === newChild.relationshipName) {
-                        return { 
-                            ...c, 
+                        return {
+                            ...c,
                             availableFields: data,
                             filteredFields: data.slice(0, 200) // Initial limit
                         };
@@ -963,7 +965,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         this.selectedChildRel = null;
         this.selectedChildLabel = '';
     }
-    
+
     handleChildFieldSearch(event) {
         const index = event.target.dataset.index;
         const key = event.target.value.toLowerCase();
@@ -972,58 +974,58 @@ export default class DocGenQueryBuilder extends LightningElement {
             this.filterChildFields(index, key);
         }, 300);
     }
-    
+
     // Helper to filter specific child
     filterChildFields(index, searchKey) {
         const child = this.childConfigs[index];
         if (!child) return;
-        
+
         let sourceOptions = child.availableFields;
-        
+
         // 1. Filter by Selected
         if (this.showSelectedOnly) {
             sourceOptions = sourceOptions.filter(opt => child.selectedFields.includes(opt.value));
         }
-        
+
         let optionsToShow = [];
-        
+
         if (searchKey) {
-            optionsToShow = sourceOptions.filter(o => 
+            optionsToShow = sourceOptions.filter(o =>
                 o.label.toLowerCase().includes(searchKey) || o.value.toLowerCase().includes(searchKey)
             );
         } else {
             optionsToShow = sourceOptions.slice(0, 200);
         }
-        
+
         // Ensure selected are visible if NOT in showSelectedOnly mode
         if (!this.showSelectedOnly && child.selectedFields.length > 0) {
-             const selectedSet = new Set(child.selectedFields);
-             const visibleSet = new Set(optionsToShow.map(o => o.value));
-             
-             const missingOptions = child.availableFields.filter(o => 
-                 selectedSet.has(o.value) && !visibleSet.has(o.value)
-             );
-             
-             if (missingOptions.length > 0) {
-                 optionsToShow = [...optionsToShow, ...missingOptions];
-             }
+            const selectedSet = new Set(child.selectedFields);
+            const visibleSet = new Set(optionsToShow.map(o => o.value));
+
+            const missingOptions = child.availableFields.filter(o =>
+                selectedSet.has(o.value) && !visibleSet.has(o.value)
+            );
+
+            if (missingOptions.length > 0) {
+                optionsToShow = [...optionsToShow, ...missingOptions];
+            }
         }
-        
+
         child.filteredFields = optionsToShow;
         this.childConfigs = [...this.childConfigs];
     }
-    
+
     handleChildSelectAll(event) {
         const index = event.target.dataset.index;
         const child = this.childConfigs[index];
-        
+
         // Select all currently filtered fields
         const allFilteredValues = child.filteredFields.map(f => f.value);
         // Merge with existing logic? or Replace? 
         // Union approach:
         const set = new Set([...child.selectedFields, ...allFilteredValues]);
         child.selectedFields = Array.from(set);
-        
+
         this.childConfigs = [...this.childConfigs];
         this.notifyChange();
     }
@@ -1033,14 +1035,14 @@ export default class DocGenQueryBuilder extends LightningElement {
         const val = event.detail.value;
         const child = this.childConfigs[index];
         child.selectedFields = val;
-        
+
         // Check if we need to re-filter (e.g. if showSelectedOnly is on, and we deselected something, it should disappear?)
         // Usually better UX not to make it disappear immediately under cursor.
         // But if showSelectedOnly is TRUE, and I deselect, it should eventually vanish.
         // Let's re-run filter if showSelectedOnly is true?
         // Actually, checkbox group handles changes. Filtering happens on search/toggle.
-        
-        this.childConfigs = [...this.childConfigs]; 
+
+        this.childConfigs = [...this.childConfigs];
         this.notifyChange();
     }
 
@@ -1056,22 +1058,22 @@ export default class DocGenQueryBuilder extends LightningElement {
         // If NO fields selected but we have subqueries, technically valid SOQL? No, SELECT list cannot be empty.
         // Assuming user selects base/parent fields.
         let queryParts = [...this.selectedFields];
-        
+
         this.childConfigs.forEach(child => {
             if (child.selectedFields.length > 0) {
                 let childQuery = `(SELECT ${child.selectedFields.join(', ')} FROM ${child.relationshipName}`;
-                
+
                 if (child.whereClause) childQuery += ` WHERE ${child.whereClause}`;
                 if (child.orderBy) childQuery += ` ORDER BY ${child.orderBy}`;
                 if (child.limitAmount) childQuery += ` LIMIT ${child.limitAmount}`;
-                
+
                 childQuery += ')';
                 queryParts.push(childQuery);
             }
         });
         return queryParts.join(', ');
     }
-    
+
 
 
     notifyChange() {
@@ -1079,14 +1081,26 @@ export default class DocGenQueryBuilder extends LightningElement {
             detail: {
                 objectName: this.selectedObject,
                 queryConfig: this.generatedQuery,
-                titleFormat: this.titleFormat 
+                titleFormat: this.titleFormat
             }
         });
         this.dispatchEvent(event);
     }
-    
+
     propagateConfig() {
         this.notifyChange();
+    }
+
+    @api
+    getQueryConfig() {
+        return this.generatedQuery;
+    }
+
+    @api
+    refreshFromConfig() {
+        if (this._queryConfig) {
+            this.parseConfig(this._queryConfig);
+        }
     }
 
     @api titleFormat = '';
@@ -1099,8 +1113,8 @@ export default class DocGenQueryBuilder extends LightningElement {
     handleInsertToTitle(event) {
         const tag = event.currentTarget.dataset.tag;
         if (tag) {
-             this.titleFormat = (this.titleFormat || '') + tag;
-             this.notifyChange();
+            this.titleFormat = (this.titleFormat || '') + tag;
+            this.notifyChange();
         }
     }
 }
