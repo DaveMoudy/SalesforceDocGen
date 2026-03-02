@@ -1,10 +1,8 @@
 .search-results-container {
-    position: absolute;
     z-index: 9999;
-    background: white;
-    width: 100%;
-    margin-top: 2px;
-    border: 1px solid #dddbda;
-    border-radius: .25rem;
-    box-shadow: 0 2px 3px 0 rgba(0,0,0,0.16);
+    background: var(--lwc-colorBackgroundAlt, white);
+    margin-top: var(--lwc-spacingXxxSmall, 2px);
+    border: var(--lwc-borderWidthThin, 1px) solid var(--lwc-colorBorder, #dddbda);
+    border-radius: var(--lwc-borderRadiusMedium, .25rem);
+    box-shadow: var(--lwc-shadowDropDown, 0 2px 3px 0 rgba(0,0,0,0.16));
 }

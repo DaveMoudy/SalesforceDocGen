@@ -2,8 +2,8 @@
     <lightning-card title="DocGen Template Manager" icon-name="standard:template">
         <lightning-tabset variant="scoped" active-tab-value={activeMainTab}>
             <lightning-tab label="Templates" value="list" onactive={handleTabActive}>
-                <div class="slds-p-around_medium">
-                    <div class="slds-grid slds-grid_vertical-align-end slds-m-bottom_medium">
+                <div class="slds-var-p-around_medium">
+                    <div class="slds-grid slds-grid_vertical-align-end slds-var-m-bottom_medium">
                         <div class="slds-col slds-size_1-of-3">
                             <lightning-input 
                                 type="search" 
@@ -13,7 +13,7 @@
                                 onchange={handleSearch}>
                             </lightning-input>
                         </div>
-                        <div class="slds-col slds-p-left_small">
+                        <div class="slds-col slds-var-p-left_small">
                             <lightning-button-icon 
                                 icon-name="utility:refresh" 
                                 onclick={handleRefresh} 
@@ -35,41 +35,41 @@
 
             
                 <lightning-tab label="New Template Wizard" value="new_template" onactive={handleWizardTabActive}>
-                    <div class="slds-p-around_medium">
+                    <div class="slds-var-p-around_medium">
                         <lightning-progress-indicator current-step={currentWizardStep} type="base" variant="base">
                             <lightning-progress-step label="Details" value="1"></lightning-progress-step>
                             <lightning-progress-step label="Query Config" value="2"></lightning-progress-step>
                             <lightning-progress-step label="Finish" value="3"></lightning-progress-step>
                         </lightning-progress-indicator>
                         
-                        <div class="slds-m-vertical_large">
+                        <div class="slds-var-m-vertical_large">
                             <!-- Step 1: Details -->
                             <template if:true={isStep1}>
                                 <div class="slds-grid slds-gutters">
                                     <div class="slds-col slds-size_1-of-2">
                                         <lightning-input label="Template Name" value={newTemplateName} onchange={handleNameChange} required></lightning-input>
-                                        <lightning-input label="Category" value={newTemplateCategory} onchange={handleCategoryChange} class="slds-m-top_small"></lightning-input>
+                                        <lightning-input label="Category" value={newTemplateCategory} onchange={handleCategoryChange} class="slds-var-m-top_small"></lightning-input>
                                     </div>
                                     <div class="slds-col slds-size_1-of-2">
                                         <lightning-combobox label="Type" value={newTemplateType} options={typeOptions} onchange={handleTypeChange} required></lightning-combobox>
-                                        <lightning-combobox label="Output Format" value={newTemplateOutputFormat} options={outputFormatOptions} onchange={handleOutputFormatChange} class="slds-m-top_small" required></lightning-combobox>
-                                        <lightning-textarea label="Description" value={newTemplateDesc} onchange={handleDescChange} class="slds-m-top_small"></lightning-textarea>
+                                        <lightning-combobox label="Output Format" value={newTemplateOutputFormat} options={outputFormatOptions} onchange={handleOutputFormatChange} class="slds-var-m-top_small" required></lightning-combobox>
+                                        <lightning-textarea label="Description" value={newTemplateDesc} onchange={handleDescChange} class="slds-var-m-top_small"></lightning-textarea>
                                     </div>
                                 </div>
                             </template>
 
                             <!-- Step 2: Query Builder -->
                             <template if:true={isStep2}>
-                                <div class="slds-m-bottom_medium slds-p-around_small slds-theme_info slds-border_around">
-                                    <h3 class="slds-text-heading_small slds-m-bottom_xx-small">
-                                        <lightning-icon icon-name="utility:info" size="x-small" class="slds-m-right_x-small" variant="info"></lightning-icon>
+                                <div class="slds-var-m-bottom_medium slds-var-p-around_small slds-theme_info slds-box">
+                                    <h3 class="slds-text-heading_small slds-var-m-bottom_xx-small">
+                                        <lightning-icon icon-name="utility:info" size="x-small" class="slds-var-m-right_x-small" variant="info"></lightning-icon>
                                         How to build your query
                                     </h3>
                                     <p class="slds-text-body_small">
                                         Select the <strong>Base Object</strong> first. Then, pick the fields you want to include in your document. 
                                         You can also add <strong>Parent Fields</strong> (e.g., Account Name from a Contact) or <strong>Child Lists</strong> (e.g., Contacts from an Account) to create complex documents.
                                     </p>
-                                    <p class="slds-text-body_small slds-m-top_small slds-text-color_weak">
+                                    <p class="slds-text-body_small slds-var-m-top_small slds-text-color_weak">
                                         <strong>Performance Tip:</strong> Avoid selecting "All Fields" if possible to keep generation fast.
                                     </p>
                                 </div>
@@ -84,10 +84,10 @@
                             <template if:true={isStep3}>
                                 <div class="slds-box slds-theme_shade">
                                     <h3 class="slds-text-heading_small">Review Template</h3>
-                                    <p class="slds-m-top_small"><strong>Name:</strong> {newTemplateName}</p>
+                                    <p class="slds-var-m-top_small"><strong>Name:</strong> {newTemplateName}</p>
                                     <p><strong>Object:</strong> {newTemplateObject}</p>
                                     <p><strong>Query:</strong> {newTemplateQuery}</p>
-                                    <p class="slds-m-top_medium">Click "Create Template" to save.</p>
+                                    <p class="slds-var-m-top_medium">Click "Create Template" to save.</p>
                                 </div>
                             </template>
                         </div>
@@ -99,7 +99,7 @@
                                     label="Back" 
                                     onclick={handlePrevStep} 
                                     disabled={isBackDisabled} 
-                                    class="slds-m-right_small">
+                                    class="slds-var-m-right_small">
                                 </lightning-button>
                                 
                                 <template if:false={isStep3}>
@@ -125,8 +125,8 @@
 
     <!-- Empty State / Sample Install -->
     <template if:true={showInstallSample}>
-        <div class="slds-m-around_medium slds-text-align_center">
-            <p class="slds-m-bottom_small">No templates found.</p>
+        <div class="slds-var-m-around_medium slds-text-align_center">
+            <p class="slds-var-m-bottom_small">No templates found.</p>
             <lightning-button label="Install Sample Data" onclick={handleInstallSample} variant="brand"></lightning-button>
         </div>
     </template>
@@ -141,35 +141,35 @@
                     </button>
                     <h2 class="slds-text-heading_medium slds-hyphenate">Edit / View Template</h2>
                 </header>
-                <div class="slds-modal__content slds-p-around_medium">
+                <div class="slds-modal__content slds-var-p-around_medium">
                     <lightning-tabset variant="scoped" active-tab-value={activeEditTab}>
                         <!-- Tab 1: Settings -->
                         <lightning-tab label="Settings" value="details">
                             <div class="slds-grid slds-gutters">
                                 <div class="slds-col slds-size_1-of-2">
                                     <lightning-input label="Template Name" value={editTemplateName} onchange={handleEditNameChange} required></lightning-input>
-                                    <lightning-input label="Category" value={editTemplateCategory} onchange={handleEditCategoryChange} class="slds-m-top_small"></lightning-input>
+                                    <lightning-input label="Category" value={editTemplateCategory} onchange={handleEditCategoryChange} class="slds-var-m-top_small"></lightning-input>
                                 </div>
                                 <div class="slds-col slds-size_1-of-2">
                                     <lightning-combobox label="Type" value={editTemplateType} options={typeOptions} onchange={handleEditTypeChange} required></lightning-combobox>
-                                    <lightning-combobox label="Output Format" value={editTemplateOutputFormat} options={outputFormatOptions} onchange={handleEditOutputFormatChange} class="slds-m-top_small" required></lightning-combobox>
-                                    <lightning-input label="Base Object API Name" value={editTemplateObject} readonly class="slds-m-top_small"></lightning-input>
+                                    <lightning-combobox label="Output Format" value={editTemplateOutputFormat} options={outputFormatOptions} onchange={handleEditOutputFormatChange} class="slds-var-m-top_small" required></lightning-combobox>
+                                    <lightning-input label="Base Object API Name" value={editTemplateObject} readonly class="slds-var-m-top_small"></lightning-input>
                                     
                                     <c-doc-gen-title-editor
                                         value={editTemplateTitleFormat}
                                         query-config={editTemplateQuery}
                                         onchange={handleTitleFormatChange}
-                                        class="slds-m-top_small slds-d-block">
+                                        class="slds-var-m-top_small slds-d-block">
                                     </c-doc-gen-title-editor>
                                 </div>
                             </div>
-                            <lightning-textarea label="Description" value={editTemplateDesc} onchange={handleEditDescChange} class="slds-m-top_small"></lightning-textarea>
+                            <lightning-textarea label="Description" value={editTemplateDesc} onchange={handleEditDescChange} class="slds-var-m-top_small"></lightning-textarea>
                         </lightning-tab>
 
                         <!-- Tab 2: Query Configuration -->
                         <lightning-tab label="Query Configuration" value="query">
                              <!-- Header Control -->
-                             <div class="slds-grid slds-grid_align-spread slds-m-bottom_small">
+                             <div class="slds-grid slds-grid_align-spread slds-var-m-bottom_small">
                                  <div class="slds-col">
                                      <p class="slds-text-body_small slds-text-color_weak">
                                          Configure the data query for this template.
@@ -205,7 +205,7 @@
                                         class="slds-text-font_monospace"
                                         style="min-height: 200px;">
                                      </lightning-textarea>
-                                     <p class="slds-text-body_small slds-m-top_x-small">
+                                     <p class="slds-text-body_small slds-var-m-top_x-small">
                                          Enter comma-separated fields or subqueries. Example: <code>Name, Industry, (SELECT LastName FROM Contacts)</code>
                                      </p>
                                  </div>
@@ -214,7 +214,7 @@
 
                         <!-- Tab 3: Template Tags (Dynamic Header) -->
                         <lightning-tab label="Template Tags" value="tags">
-                            <div class="slds-grid slds-gutters slds-m-bottom_medium slds-grid_vertical-align-center">
+                            <div class="slds-grid slds-gutters slds-var-m-bottom_medium slds-grid_vertical-align-center">
                                 <div class="slds-col">
                                     <h3 class="slds-text-heading_small">{editTemplateObject} Fields</h3>
                                 </div>
@@ -228,7 +228,7 @@
                                         placeholder="Search test record..."
                                         disabled={isCreating}> 
                                     </lightning-record-picker>
-                                    <p class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small">
+                                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small">
                                         Current ID: {editTemplateTestRecordId}
                                     </p>
                                 </div>
@@ -243,9 +243,9 @@
 
                         <!-- Tab 4: Document & History -->
                         <lightning-tab label="Document & History" value="document">
-                             <div class="slds-m-top_medium">
+                             <div class="slds-var-m-top_medium">
                                 <!-- Current File Section -->
-                                <article class="slds-card slds-m-bottom_medium slds-theme_shade">
+                                <article class="slds-card slds-var-m-bottom_medium slds-theme_shade">
                                      <div class="slds-card__header slds-grid">
                                          <header class="slds-media slds-media_center slds-has-flexi-truncate">
                                              <div class="slds-media__figure">
@@ -255,9 +255,9 @@
                                                  <h2 class="slds-card__header-title">
                                                      <span class="slds-text-heading_small">Current Template File</span>
                                                      <template if:true={currentFileId}>
-                                                         <lightning-badge label="Active" class="slds-m-left_small slds-theme_success"></lightning-badge>
+                                                         <lightning-badge label="Active" class="slds-var-m-left_small slds-theme_success"></lightning-badge>
                                                          <template if:true={currentVersionLabel}>
-                                                             <lightning-badge label={currentVersionLabel} class="slds-m-left_x-small slds-theme_info"></lightning-badge>
+                                                             <lightning-badge label={currentVersionLabel} class="slds-var-m-left_x-small slds-theme_info"></lightning-badge>
                                                          </template>
                                                      </template>
                                                  </h2>
@@ -279,30 +279,30 @@
                                         </lightning-file-upload>
                                         
                                         <template if:true={uploadedFileName}>
-                                            <div class="slds-box slds-box_xx-small slds-theme_success slds-m-top_small">
-                                                <lightning-icon icon-name="utility:check" size="xx-small" class="slds-m-right_x-small" variant="inverse"></lightning-icon>
+                                            <div class="slds-box slds-box_xx-small slds-theme_success slds-var-m-top_small">
+                                                <lightning-icon icon-name="utility:check" size="xx-small" class="slds-var-m-right_x-small" variant="inverse"></lightning-icon>
                                                 <strong>Ready to Save:</strong> {uploadedFileName}
                                             </div>
                                         </template>
                                         
-                                        <p class="slds-text-body_small slds-m-top_x-small"><strong>Note:</strong> Uploading attaches the file. You must click <strong>"Save New Version"</strong> below to create a new Version Snapshot.</p>
+                                        <p class="slds-text-body_small slds-var-m-top_x-small"><strong>Note:</strong> Uploading attaches the file. You must click <strong>"Save New Version"</strong> below to create a new Version Snapshot.</p>
                                      </div>
                                  </article>
 
                                 <!-- Version History -->
-                                <div class="slds-m-top_large">
-                                    <h3 class="slds-text-heading_small slds-m-bottom_medium">Version History</h3>
+                                <div class="slds-var-m-top_large">
+                                    <h3 class="slds-text-heading_small slds-var-m-bottom_medium">Version History</h3>
                                     
                                     <template if:false={hasVersions}>
-                                         <div class="slds-text-color_weak slds-p-around_medium slds-text-align_center">
+                                         <div class="slds-text-color_weak slds-var-p-around_medium slds-text-align_center">
                                              <p>No versions available yet.</p>
                                              <p class="slds-text-body_small">Upload a file and save to create v1.</p>
                                          </div>
                                     </template>
 
                                     <template if:true={hasVersions}>
-                                        <div class="slds-m-bottom_small slds-p-around_small slds-theme_info slds-border_around">
-                                            <lightning-icon icon-name="utility:info" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                                        <div class="slds-var-m-bottom_small slds-var-p-around_small slds-theme_info slds-box">
+                                            <lightning-icon icon-name="utility:info" size="x-small" class="slds-var-m-right_x-small"></lightning-icon>
                                             Restoring a version will activate its configuration immediately.
                                         </div>
                                         <div style="height: 300px;">
@@ -328,8 +328,8 @@
                         </div>
                         <div class="slds-col">
                            <lightning-button variant="neutral" label="Cancel" onclick={closeEditModal}></lightning-button>
-                           <lightning-button variant="brand" label="Save Details" onclick={handleSaveOnly} class="slds-m-left_small"></lightning-button>
-                           <lightning-button variant="brand-outline" label="Save as New Version" onclick={handleSaveAndClose} class="slds-m-left_small"></lightning-button>
+                           <lightning-button variant="brand" label="Save Details" onclick={handleSaveOnly} class="slds-var-m-left_small"></lightning-button>
+                           <lightning-button variant="brand-outline" label="Save as New Version" onclick={handleSaveAndClose} class="slds-var-m-left_small"></lightning-button>
                         </div>
                     </div>
                 </footer>
@@ -348,8 +348,8 @@
                     </button>
                     <h2 class="slds-text-heading_medium">Version Preview: {previewVersion.VersionNumber}</h2>
                 </header>
-                <div class="slds-modal__content slds-p-around_medium">
-                    <div class="slds-grid slds-gutters slds-m-bottom_medium">
+                <div class="slds-modal__content slds-var-p-around_medium">
+                    <div class="slds-grid slds-gutters slds-var-m-bottom_medium">
                         <div class="slds-col">
                             <p><strong>Created:</strong> <lightning-formatted-date-time value={previewVersion.CreatedDate}></lightning-formatted-date-time></p>
                             <p><strong>By:</strong> {previewVersion.CreatedByName}</p>
@@ -359,7 +359,7 @@
                             <p><strong>Category:</strong> {previewVersion.Category__c}</p>
                         </div>
                     </div>
-                    <div class="slds-box slds-theme_shade slds-m-bottom_small">
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
                         <p><strong>Configuration Snapshot:</strong></p>
                     </div>
                     <c-doc-gen-query-builder
@@ -370,7 +370,7 @@
                     </c-doc-gen-query-builder>
                 </div>
                 <footer class="slds-modal__footer">
-                    <lightning-button label="Close" onclick={closePreviewModal} class="slds-m-right_small"></lightning-button>
+                    <lightning-button label="Close" onclick={closePreviewModal} class="slds-var-m-right_small"></lightning-button>
                     <!-- Row ID check in JS handleRestoreVersion if we add data attribute?
                          Actually restore usually works on row. 
                          In handleRestoreVersion I logic'd it out.
@@ -394,7 +394,7 @@
                     </button>
                     <h2 class="slds-text-heading_medium slds-hyphenate">Share Template</h2>
                 </header>
-                <div class="slds-modal__content slds-p-around_medium">
+                <div class="slds-modal__content slds-var-p-around_medium">
                     <c-doc-gen-sharing 
                         record-id={sharingTemplateId}
                         onclose={handleCloseSharing}>

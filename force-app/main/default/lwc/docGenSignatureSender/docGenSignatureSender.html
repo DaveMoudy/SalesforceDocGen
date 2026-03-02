@@ -1,12 +1,12 @@
 <template>
-    <div class="slds-p-around_medium">
+    <div class="slds-var-p-around_medium">
         <template if:true={isLoading}>
             <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
         </template>
 
         <template if:false={signerResults}>
             <!-- Document Selection -->
-            <div class="slds-m-bottom_medium">
+            <div class="slds-var-m-bottom_medium">
                 <lightning-combobox
                     name="document"
                     label="Select Document to Sign"
@@ -19,7 +19,7 @@
             </div>
 
             <!-- Template Loader -->
-            <div class="slds-m-bottom_medium">
+            <div class="slds-var-m-bottom_medium">
                 <div class="slds-grid slds-gutters_x-small slds-grid_vertical-align-end">
                     <div class="slds-col slds-grow">
                         <lightning-combobox
@@ -43,10 +43,10 @@
             </div>
 
             <!-- Signers Table -->
-            <div class="slds-m-bottom_medium">
-                <h3 class="slds-text-heading_small slds-m-bottom_x-small">Signers</h3>
+            <div class="slds-var-m-bottom_medium">
+                <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">Signers</h3>
                 <template for:each={signers} for:item="signer" for:index="index">
-                    <div key={signer.id} class="slds-box slds-theme_shade slds-m-bottom_x-small slds-p-around_small">
+                    <div key={signer.id} class="slds-box slds-theme_shade slds-var-m-bottom_x-small slds-var-p-around_small">
                         <div class="slds-grid slds-gutters_x-small slds-wrap">
                             <div class="slds-col slds-size_3-of-12">
                                 <lightning-combobox
@@ -108,12 +108,12 @@
                     variant="neutral"
                     icon-name="utility:add"
                     onclick={handleAddSigner}
-                    class="slds-m-top_x-small">
+                    class="slds-var-m-top_x-small">
                 </lightning-button>
             </div>
 
             <!-- Generate Button -->
-            <div class="slds-m-top_large">
+            <div class="slds-var-m-top_large">
                 <lightning-button
                     variant="brand"
                     label="Generate Signature Links"
@@ -123,25 +123,25 @@
             </div>
 
             <template if:true={error}>
-                <div class="slds-text-color_error slds-m-top_medium">{error}</div>
+                <div class="slds-text-color_error slds-var-m-top_medium">{error}</div>
             </template>
         </template>
 
         <!-- Success State: Show generated URLs -->
         <template if:true={signerResults}>
-            <div class="slds-notify slds-notify_alert slds-theme_success slds-m-bottom_medium" role="alert">
+            <div class="slds-notify slds-notify_alert slds-theme_success slds-var-m-bottom_medium" role="alert">
                 <h2>Signature Links Generated!</h2>
             </div>
-            <p class="slds-m-bottom_small">Provide each signer with their unique secure link:</p>
+            <p class="slds-var-m-bottom_small">Provide each signer with their unique secure link:</p>
 
             <template for:each={signerResults} for:item="result">
-                <div key={result.signerUrl} class="slds-box slds-theme_shade slds-m-bottom_x-small slds-p-around_small">
+                <div key={result.signerUrl} class="slds-box slds-theme_shade slds-var-m-bottom_x-small slds-var-p-around_small">
                     <div class="slds-grid slds-grid_vertical-align-center">
                         <div class="slds-col slds-grow">
                             <p class="slds-text-body_regular">
                                 <strong>{result.signerName}</strong>
                                 <template if:true={result.roleName}>
-                                    <span class="slds-badge slds-m-left_x-small">{result.roleName}</span>
+                                    <span class="slds-badge slds-var-m-left_x-small">{result.roleName}</span>
                                 </template>
                             </p>
                             <p class="slds-text-body_small" style="word-break: break-all;">
@@ -154,7 +154,7 @@
                                 alternative-text="Copy link"
                                 data-url={result.signerUrl}
                                 onclick={handleCopyUrl}
-                                class="slds-m-left_small">
+                                class="slds-var-m-left_small">
                             </lightning-button-icon>
                         </div>
                     </div>
@@ -166,12 +166,12 @@
                 label="Copy All Links"
                 icon-name="utility:copy"
                 onclick={handleCopyAllUrls}
-                class="slds-m-top_small">
+                class="slds-var-m-top_small">
             </lightning-button>
         </template>
 
         <!-- Previous Requests Toggle -->
-        <div class="slds-m-top_large">
+        <div class="slds-var-m-top_large">
             <lightning-button
                 variant="neutral"
                 label={previousRequestsLabel}
@@ -182,12 +182,12 @@
 
         <!-- Previous Requests List -->
         <template if:true={showPreviousRequests}>
-            <div class="slds-m-top_medium">
-                <h3 class="slds-text-heading_small slds-m-bottom_x-small">Previous Signature Requests</h3>
+            <div class="slds-var-m-top_medium">
+                <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">Previous Signature Requests</h3>
                 <template if:true={hasPreviousRequests}>
                     <template for:each={previousRequests} for:item="req">
-                        <div key={req.id} class="slds-box slds-m-bottom_small">
-                            <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_x-small">
+                        <div key={req.id} class="slds-box slds-var-m-bottom_small">
+                            <div class="slds-grid slds-grid_vertical-align-center slds-var-m-bottom_x-small">
                                 <div class="slds-col slds-grow">
                                     <p class="slds-text-body_regular">
                                         <strong>{req.name}</strong>
@@ -199,9 +199,9 @@
                                 </div>
                             </div>
                             <template for:each={req.signers} for:item="signer">
-                                <div key={signer.signerUrl} class="slds-box slds-theme_shade slds-m-bottom_xx-small slds-p-around_x-small">
+                                <div key={signer.signerUrl} class="slds-box slds-theme_shade slds-var-m-bottom_xx-small slds-var-p-around_x-small">
                                     <div class="slds-grid slds-grid_vertical-align-center">
-                                        <div class="slds-col slds-no-flex slds-m-right_x-small">
+                                        <div class="slds-col slds-no-flex slds-var-m-right_x-small">
                                             <lightning-icon
                                                 icon-name={signer.statusIcon}
                                                 variant={signer.statusVariant}
@@ -212,9 +212,9 @@
                                             <p class="slds-text-body_small">
                                                 <strong>{signer.signerName}</strong>
                                                 <template if:true={signer.roleName}>
-                                                    <span class="slds-badge slds-m-left_xx-small">{signer.roleName}</span>
+                                                    <span class="slds-badge slds-var-m-left_xx-small">{signer.roleName}</span>
                                                 </template>
-                                                <span class="slds-text-color_weak slds-m-left_x-small">{signer.status}</span>
+                                                <span class="slds-text-color_weak slds-var-m-left_x-small">{signer.status}</span>
                                             </p>
                                         </div>
                                         <div class="slds-col slds-no-flex">
@@ -246,7 +246,7 @@
                 <header class="slds-modal__header">
                     <h2 class="slds-text-heading_medium">Save as Signature Template</h2>
                 </header>
-                <div class="slds-modal__content slds-p-around_medium">
+                <div class="slds-modal__content slds-var-p-around_medium">
                     <lightning-input
                         type="text"
                         label="Template Name"
@@ -258,7 +258,7 @@
                 </div>
                 <footer class="slds-modal__footer">
                     <lightning-button label="Cancel" onclick={handleCancelTemplate}></lightning-button>
-                    <lightning-button variant="brand" label="Save" onclick={handleConfirmSaveTemplate} disabled={isTemplateSaveDisabled} class="slds-m-left_x-small"></lightning-button>
+                    <lightning-button variant="brand" label="Save" onclick={handleConfirmSaveTemplate} disabled={isTemplateSaveDisabled} class="slds-var-m-left_x-small"></lightning-button>
                 </footer>
             </div>
         </section>

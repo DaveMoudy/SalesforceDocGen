@@ -1,6 +1,6 @@
 <template>
     <lightning-card title="DocGen Secure E-Signature Setup" icon-name="custom:custom108">
-        <div class="slds-p-around_medium">
+        <div class="slds-var-p-around_medium">
             <template if:false={isLoaded}>
                 <div class="slds-is-relative" style="height: 100px;">
                     <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
@@ -9,13 +9,13 @@
             
             <template if:true={isLoaded}>
                 <!-- Introduction Banner -->
-                <div class="slds-notify slds-notify_alert slds-theme_info slds-m-bottom_large" role="alert">
+                <div class="slds-notify slds-notify_alert slds-theme_info slds-var-m-bottom_large" role="alert">
                     <span class="slds-assistive-text">info</span>
                     <h2>Public E-Signatures require a secure API Loopback to generate background PDFs. Complete these steps to configure the OAuth integration and Salesforce Site so Guest Users can sign documents securely.</h2>
                 </div>
 
                 <!-- Progress Bar -->
-                <lightning-progress-indicator current-step={currentStep} type="path" variant="base" class="slds-m-bottom_large">
+                <lightning-progress-indicator current-step={currentStep} type="path" variant="base" class="slds-var-m-bottom_large">
                     <lightning-progress-step label="1. Connected App" value="1" onclick={handleStepClick}></lightning-progress-step>
                     <lightning-progress-step label="2. Auth Provider" value="2" onclick={handleStepClick}></lightning-progress-step>
                     <lightning-progress-step label="3. Named Credential" value="3" onclick={handleStepClick}></lightning-progress-step>
@@ -25,13 +25,13 @@
                 <!-- Step 1 -->
                 <template if:true={isStep1}>
                     <div class="slds-box slds-theme_default">
-                        <h2 class="slds-text-heading_medium slds-m-bottom_small 0">Step 1: Create the Connected App</h2>
-                        <ol class="slds-list_ordered slds-m-left_medium slds-m-bottom_medium slds-text-body_regular">
+                        <h2 class="slds-text-heading_medium slds-var-m-bottom_small 0">Step 1: Create the Connected App</h2>
+                        <ol class="slds-list_ordered slds-var-m-left_medium slds-var-m-bottom_medium slds-text-body_regular">
                             <li>Go to <strong>Setup > App Manager</strong> and click <strong>New Connected App</strong>.</li>
                             <li>Name it: <strong>DocGen Loopback</strong>, Contact Email: your email.</li>
                             <li>Check <strong>Enable OAuth Settings</strong>.</li>
                             <li>Set the Callback URL to exactly:<br/>
-                                <div class="slds-box slds-theme_shade slds-m-top_xx-small slds-m-bottom_small"><strong>{callbackUrl}</strong></div>
+                                <div class="slds-box slds-theme_shade slds-var-m-top_xx-small slds-var-m-bottom_small"><strong>{callbackUrl}</strong></div>
                             </li>
                             <li>Add the <strong>"Manage user data via APIs (api)"</strong> scope and <strong>"Perform requests at any time (refresh_token, offline_access)"</strong> scope.</li>
                             <li>Save the app. <strong>Ignore the 10-minute wait warning.</strong></li>
@@ -44,8 +44,8 @@
                 <!-- Step 2 -->
                 <template if:true={isStep2}>
                     <div class="slds-box slds-theme_default">
-                        <h2 class="slds-text-heading_medium slds-m-bottom_small">Step 2: Create the Auth Provider</h2>
-                        <ol class="slds-list_ordered slds-m-left_medium slds-m-bottom_medium slds-text-body_regular">
+                        <h2 class="slds-text-heading_medium slds-var-m-bottom_small">Step 2: Create the Auth Provider</h2>
+                        <ol class="slds-list_ordered slds-var-m-left_medium slds-var-m-bottom_medium slds-text-body_regular">
                             <li>Go to <strong>Setup > Auth. Providers</strong> and click <strong>New</strong>.</li>
                             <li>Select Provider Type: <strong>Salesforce</strong>.</li>
                             <li>Name it exactly: <strong>DocGen Auth Provider</strong>. The URL Suffix must be: <strong>DocGen_Auth_Provider</strong>.</li>
@@ -53,7 +53,7 @@
                             <li>Set Default Scopes to: <strong>api refresh_token</strong>.</li>
                             <li>Leave everything else default and click <strong>Save</strong>.</li>
                         </ol>
-                        <lightning-button label="Back" onclick={prevStep} class="slds-m-right_small"></lightning-button>
+                        <lightning-button label="Back" onclick={prevStep} class="slds-var-m-right_small"></lightning-button>
                         <lightning-button variant="brand" label="Next Step" onclick={nextStep}></lightning-button>
                     </div>
                 </template>
@@ -61,8 +61,8 @@
                 <!-- Step 3 -->
                 <template if:true={isStep3}>
                     <div class="slds-box slds-theme_default">
-                        <h2 class="slds-text-heading_medium slds-m-bottom_small">Step 3: Create the Named Credential</h2>
-                        <ol class="slds-list_ordered slds-m-left_medium slds-m-bottom_medium slds-text-body_regular">
+                        <h2 class="slds-text-heading_medium slds-var-m-bottom_small">Step 3: Create the Named Credential</h2>
+                        <ol class="slds-list_ordered slds-var-m-left_medium slds-var-m-bottom_medium slds-text-body_regular">
                             <li>Go to <strong>Setup > Named Credentials</strong>. Select the <strong>External Credentials</strong> tab and click <strong>New</strong>.</li>
                             <li>Name it: <strong>DocGen Loopback Auth</strong>. Set Auth Protocol to <strong>OAuth 2.0</strong> and Authentication Flow to <strong>Browser Flow</strong>.</li>
                             <li>Select the <strong>DocGen Auth Provider</strong> you just created and save.</li>
@@ -74,7 +74,7 @@
                             <li><strong>IMPORTANT:</strong> Go to <strong>Setup > Permission Sets</strong> and open <strong>DocGen Admin</strong>.</li>
                             <li>Click <strong>External Credential Principal Access</strong>, click Edit, and add your new <strong>DocGen Loopback Auth - Admin</strong> principal. Repeat this for the <strong>DocGen User</strong> permission set.</li>
                         </ol>
-                        <lightning-button label="Back" onclick={prevStep} class="slds-m-right_small"></lightning-button>
+                        <lightning-button label="Back" onclick={prevStep} class="slds-var-m-right_small"></lightning-button>
                         <lightning-button variant="brand" label="Next Step" onclick={nextStep}></lightning-button>
                     </div>
                 </template>
@@ -82,12 +82,12 @@
                 <!-- Step 4 -->
                 <template if:true={isStep4}>
                     <div class="slds-box slds-theme_default">
-                        <h2 class="slds-text-heading_medium slds-m-bottom_small">Step 4: Salesforce Site Configuration</h2>
-                        <ol class="slds-list_ordered slds-m-left_medium slds-m-bottom_medium slds-text-body_regular">
+                        <h2 class="slds-text-heading_medium slds-var-m-bottom_small">Step 4: Salesforce Site Configuration</h2>
+                        <ol class="slds-list_ordered slds-var-m-left_medium slds-var-m-bottom_medium slds-text-body_regular">
                             <li>Go to <strong>Setup &gt; Sites</strong> (search "Sites" in Quick Find).</li>
                             <li>If you don't have a Sites domain registered, register one (e.g., <strong>docgen</strong>).</li>
                             <li>Click <strong>New</strong> to create a new site:
-                                <ul class="slds-list_dotted slds-m-left_medium">
+                                <ul class="slds-list_dotted slds-var-m-left_medium">
                                     <li>Site Label: <strong>DocGen Signatures</strong></li>
                                     <li>Active Site Home Page: <strong>DocGenSignature</strong></li>
                                     <li>Check <strong>Active</strong></li>
@@ -99,7 +99,7 @@
                             <li>Copy the <strong>Site URL</strong> from the Site detail page and paste it below.</li>
                         </ol>
 
-                        <div class="slds-form-element slds-m-bottom_medium">
+                        <div class="slds-form-element slds-var-m-bottom_medium">
                             <lightning-input
                                 type="url"
                                 label="Salesforce Site Base URL"
@@ -108,14 +108,14 @@
                                 onchange={handleUrlChange}
                                 required>
                             </lightning-input>
-                            <p class="slds-text-body_small slds-m-top_xx-small">Base URL only, no path. Example: https://docgen.my.salesforce-sites.com</p>
+                            <p class="slds-text-body_small slds-var-m-top_xx-small">Base URL only, no path. Example: https://docgen.my.salesforce-sites.com</p>
                         </div>
 
-                        <div class="slds-notify slds-notify_alert slds-theme_success slds-m-bottom_medium" role="alert">
+                        <div class="slds-notify slds-notify_alert slds-theme_success slds-var-m-bottom_medium" role="alert">
                             <h2>Configuration Complete! E-Signatures are ready for production.</h2>
                         </div>
 
-                        <lightning-button label="Back" onclick={prevStep} class="slds-m-right_small"></lightning-button>
+                        <lightning-button label="Back" onclick={prevStep} class="slds-var-m-right_small"></lightning-button>
                         <lightning-button variant="brand" label="Save Settings" onclick={handleSaveSettings}></lightning-button>
                     </div>
                 </template>

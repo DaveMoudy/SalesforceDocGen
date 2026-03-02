@@ -1,5 +1,5 @@
 <template>
-    <div class="slds-position-relative">
+    <div class="slds-is-relative">
         <lightning-input 
             label="Document Title Format" 
             value={value} 
@@ -9,7 +9,7 @@
             placeholder="e.g. Reference_{Name}_{CreatedDate}"
             autocomplete="off">
         </lightning-input>
-        <p class="slds-form-element__help slds-m-top_xx-small">Use <strong>&#123;</strong> to see available merge fields.</p>
+        <p class="slds-form-element__help slds-var-m-top_xx-small">Use <strong>&#123;</strong> to see available merge fields.</p>
 
         <!-- Typeahead Dropdown -->
         <template if:true={showSuggestions}>

@@ -1,9 +1,9 @@
 <template>
     <lightning-card title="Bulk Document Generation" icon-name="standard:record_create">
-        <div class="slds-p-around_medium">
-            <div class="slds-m-bottom_medium slds-p-around_small slds-theme_info slds-border_around">
-                <h3 class="slds-text-heading_small slds-m-bottom_xx-small">
-                    <lightning-icon icon-name="utility:info" size="x-small" class="slds-m-right_x-small" variant="info"></lightning-icon>
+        <div class="slds-var-p-around_medium">
+            <div class="slds-var-m-bottom_medium slds-var-p-around_small slds-theme_info slds-box">
+                <h3 class="slds-text-heading_small slds-var-m-bottom_xx-small">
+                    <lightning-icon icon-name="utility:info" size="x-small" class="slds-var-m-right_x-small" variant="info"></lightning-icon>
                     How Bulk Generation Works
                 </h3>
                 <p class="slds-text-body_small">
@@ -24,7 +24,7 @@
                     </lightning-combobox>
                     
                     <template if:true={baseObject}>
-                        <div class="slds-text-color_weak slds-m-top_x-small">
+                        <div class="slds-text-color_weak slds-var-m-top_x-small">
                             Target Object: <strong>{baseObject}</strong>
                         </div>
                     </template>
@@ -34,11 +34,11 @@
                      <!-- Monitor -->
                      <template if:true={jobId}>
                         <div class="slds-box slds-theme_shade">
-                            <h3 class="slds-text-heading_small slds-m-bottom_small">Batch Job Status</h3>
-                            <div class="slds-m-bottom_small">
+                            <h3 class="slds-text-heading_small slds-var-m-bottom_small">Batch Job Status</h3>
+                            <div class="slds-var-m-bottom_small">
                                 <div class="slds-grid slds-grid_align-spread">
                                     <span>Status:</span>
-                                    <span class="slds-text-weight_bold">{jobStatus}</span>
+                                    <strong>{jobStatus}</strong>
                                 </div>
                                 <div class="slds-grid slds-grid_align-spread">
                                     <span>Success:</span>
@@ -50,9 +50,9 @@
                                 </div>
                             </div>
                              <template if:true={isProcessing}>
-                                <div class="slds-m-top_x-small">
+                                <div class="slds-var-m-top_x-small">
                                     <lightning-progress-bar value={jobProgress.percent} variant="circular"></lightning-progress-bar>
-                                    <div class="slds-grid slds-grid_align-spread slds-m-top_xx-small">
+                                    <div class="slds-grid slds-grid_align-spread slds-var-m-top_xx-small">
                                         <p class="slds-text-body_small">Processing records...</p>
                                         <lightning-button-icon 
                                             icon-name="utility:refresh" 
@@ -66,7 +66,7 @@
                                 </div>
                             </template>
                             <template if:false={isProcessing}>
-                                <div class="slds-m-top_x-small">
+                                <div class="slds-var-m-top_x-small">
                                     <lightning-button 
                                         label="Refresh Final Status" 
                                         icon-name="utility:refresh" 
@@ -82,9 +82,9 @@
             </div>
 
             <template if:true={baseObject}>
-                <div class="slds-m-top_medium slds-box slds-theme_default">
-                    <h3 class="slds-text-heading_small slds-m-bottom_small">Record Filter (SOQL)</h3>
-                    <p class="slds-m-bottom_small">Define a SOQL WHERE clause to select records. Leave empty to process ALL records.</p>
+                <div class="slds-var-m-top_medium slds-box slds-theme_default">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Record Filter (SOQL)</h3>
+                    <p class="slds-var-m-bottom_small">Define a SOQL WHERE clause to select records. Leave empty to process ALL records.</p>
                     
                     <lightning-textarea
                         label="SOQL Condition"
@@ -93,11 +93,11 @@
                         placeholder="e.g. StageName = 'Closed Won'">
                     </lightning-textarea>
 
-                    <div class="slds-grid slds-gutters slds-m-top_small">
+                    <div class="slds-grid slds-gutters slds-var-m-top_small">
                         <!-- Left: Examples -->
                         <div class="slds-col slds-size_1-of-2">
                              <div class="slds-box slds-box_x-small slds-theme_shade">
-                                <p class="slds-text-weight_bold slds-m-bottom_x-small">Examples:</p>
+                                <p class="slds-var-m-bottom_x-small"><strong>Examples:</strong></p>
                                 <ul class="slds-list_dotted slds-text-body_small">
                                     <li>Simple: <code>StageName = 'Closed Won'</code></li>
                                     <li>Grouped: <code>(Type = 'Customer' OR Industry = 'Energy') AND AnnualRevenue > 1000000</code></li>
@@ -109,7 +109,7 @@
                         <!-- Right: Saved Queries -->
                         <div class="slds-col slds-size_1-of-2">
                             <div class="slds-box slds-box_x-small slds-theme_default">
-                                <div class="slds-grid slds-grid_align-spread slds-m-bottom_x-small">
+                                <div class="slds-grid slds-grid_align-spread slds-var-m-bottom_x-small">
                                     <h3 class="slds-text-heading_small">Saved Queries</h3>
                                     <lightning-button-icon icon-name="utility:add" onclick={openSaveModal} alternative-text="Save Current Query" title="Save Current Query"></lightning-button-icon>
                                 </div>
@@ -132,13 +132,13 @@
                         </div>
                     </div>
                     
-                    <div class="slds-m-top_small">
+                    <div class="slds-var-m-top_small">
                         <lightning-button 
                             label="Validate Filter" 
                             onclick={handleValidate} 
                             disabled={isProcessing}
                             variant="neutral"
-                            class="slds-m-right_small">
+                            class="slds-var-m-right_small">
                         </lightning-button>
                         
                         <template if:true={recordCount}>
@@ -151,13 +151,13 @@
                 </div>
             </template>
             
-            <div class="slds-m-top_medium slds-align_absolute-center">
+            <div class="slds-var-m-top_medium slds-align_absolute-center">
                 <lightning-button 
                     label="Run Bulk Generation" 
                     variant="brand" 
                     onclick={handleRun}
                     disabled={isRunDisabled}
-                    class="slds-p-horizontal_medium">
+                    class="slds-var-p-horizontal_medium">
                 </lightning-button>
             </div>
         </div>
@@ -173,15 +173,15 @@
                     </button>
                     <h2 class="slds-text-heading_medium slds-hyphenate">Save Query</h2>
                 </header>
-                <div class="slds-modal__content slds-p-around_medium">
+                <div class="slds-modal__content slds-var-p-around_medium">
                     <lightning-input label="Query Name" value={newQueryName} onchange={handleNewQueryNameChange} required></lightning-input>
                     <lightning-input label="Description" value={newQueryDesc} onchange={handleNewQueryDescChange}></lightning-input>
-                    <div class="slds-m-top_medium p-around_small slds-box slds-theme_shade">
+                    <div class="slds-var-m-top_medium p-around_small slds-box slds-theme_shade">
                         <p><strong>Condition:</strong> {condition}</p>
                     </div>
                 </div>
                 <footer class="slds-modal__footer">
-                    <lightning-button label="Cancel" onclick={closeSaveModal} class="slds-m-right_small"></lightning-button>
+                    <lightning-button label="Cancel" onclick={closeSaveModal} class="slds-var-m-right_small"></lightning-button>
                     <lightning-button label="Save" variant="brand" onclick={handleSaveQuery}></lightning-button>
                 </footer>
             </div>

@@ -2,16 +2,16 @@
     <!-- BUILDER MODE -->
     <template if:false={showTagsOnly}>
         <lightning-card title="Visual Query Builder" icon-name="standard:search">
-            <div class="slds-p-around_medium" onclick={handleOutsideClick}>
+            <div class="slds-var-p-around_medium" onclick={handleOutsideClick}>
                 <!-- 1. Object Search -->
-                 <div class="slds-box slds-m-bottom_medium slds-theme_shade">
+                 <div class="slds-box slds-var-m-bottom_medium slds-theme_shade">
                     <p class="slds-text-body_small">
                         <strong>Instructions:</strong> Select a base object, then pick the fields you want to include in your document template. 
                         You can also include fields from parent records or related child lists.
                     </p>
                  </div>
 
-                 <div class="slds-form-element slds-m-bottom_medium">
+                 <div class="slds-form-element slds-var-m-bottom_medium">
                     <label class="slds-form-element__label">Base Object</label>
                     <div class="slds-form-element__control slds-input-has-icon slds-input-has-icon_right">
                         <lightning-icon icon-name="utility:search" size="x-small" class="slds-icon slds-input__icon slds-input__icon_right slds-icon-text-default"></lightning-icon>
@@ -45,31 +45,31 @@
                             <template if:true={complexityWarning}>
                                 <div class="slds-notify slds-notify_alert slds-alert_warning" role="alert">
                                     <span class="slds-assistive-text">warning</span>
-                                    <span class="slds-icon_container slds-icon-utility-warning slds-m-right_x-small" title="Description of icon when needed">
+                                    <span class="slds-icon_container slds-icon-utility-warning slds-var-m-right_x-small" title="Description of icon when needed">
                                         <lightning-icon icon-name="utility:warning" variant="warning" size="x-small"></lightning-icon>
                                     </span>
                                     <h2>
                                         <strong>{complexityWarning.title}: </strong>
                                         <template for:each={complexityWarning.messages} for:item="msg">
-                                            <span key={msg} class="slds-p-horizontal_xx-small">{msg}</span>
+                                            <span key={msg} class="slds-var-p-horizontal_xx-small">{msg}</span>
                                         </template>
                                     </h2>
                                 </div>
                             </template>
 
                             <!-- Fields Selection (Filtered) -->
-                            <div class="slds-m-top_medium">
+                            <div class="slds-var-m-top_medium">
                                 <label class="slds-form-element__label">Select Fields</label>
-                                <div class="slds-grid slds-gutters slds-m-bottom_x-small">
+                                <div class="slds-grid slds-gutters slds-var-m-bottom_x-small">
                                     <div class="slds-col slds-size_1-of-2">
                                         <lightning-input type="search" placeholder="Search fields..." variant="label-hidden" onchange={handleFieldSearch}></lightning-input>
                                     </div>
                                     <div class="slds-col slds-size_1-of-2 slds-align-bottom">
                                         <div class="slds-float_right slds-grid slds-grid_vertical-align-center">
                                             <lightning-input type="toggle" label="Show Selected Only" message-toggle-active="" message-toggle-inactive="" 
-                                                variant="label-hidden" class="slds-m-right_small" onchange={handleToggleSelectedOnly}>
+                                                variant="label-hidden" class="slds-var-m-right_small" onchange={handleToggleSelectedOnly}>
                                             </lightning-input>
-                                            <span class="slds-form-element__label slds-m-bottom_none slds-m-right_small">Selected Only</span>
+                                            <span class="slds-form-element__label slds-var-m-bottom_none slds-var-m-right_small">Selected Only</span>
                                             <lightning-button label="Select All" onclick={handleSelectAll} disabled={isSelectAllDisabled} size="small" variant="neutral"></lightning-button>
                                         </div>
                                     </div>
@@ -82,14 +82,14 @@
                                          <lightning-checkbox-group name="fields" label="Available Fields" variant="label-hidden" options={filteredFieldOptions} value={baseFieldSelection} onchange={handleFieldChange}></lightning-checkbox-group>
                                     </template>
                                 </div>
-                                <p class="slds-text-body_small slds-m-top_x-small">{selectedFields.length} fields selected.</p>
+                                <p class="slds-text-body_small slds-var-m-top_x-small">{selectedFields.length} fields selected.</p>
                             </div>
             
                             <!-- Parent Fields -->
-                            <div class="slds-m-top_medium slds-box slds-theme_shade">
+                            <div class="slds-var-m-top_medium slds-box slds-theme_shade">
                                 <h3 class="slds-text-heading_small">Parent Fields (Optional)</h3>
-                                <p class="slds-text-body_small slds-m-bottom_medium">Add fields from parent records (e.g. Account.Name)</p>
-                                <div class="slds-form-element slds-m-bottom_small">
+                                <p class="slds-text-body_small slds-var-m-bottom_medium">Add fields from parent records (e.g. Account.Name)</p>
+                                <div class="slds-form-element slds-var-m-bottom_small">
                                     <label class="slds-form-element__label">Find Parent Object</label>
                                     <div class="slds-form-element__control slds-input-has-icon slds-input-has-icon_right">
                                         <lightning-icon icon-name="utility:search" size="x-small" class="slds-icon slds-input__icon slds-input__icon_right slds-icon-text-default"></lightning-icon>
@@ -110,22 +110,22 @@
                                     </template>
                                 </div>
                                 <template if:true={selectedParentRel}>
-                                    <div class="slds-box slds-theme_default slds-m-bottom_small">
-                                         <div class="slds-grid slds-grid_align-spread slds-m-bottom_x-small">
+                                    <div class="slds-box slds-theme_default slds-var-m-bottom_small">
+                                         <div class="slds-grid slds-grid_align-spread slds-var-m-bottom_x-small">
                                              <div class="slds-col"><strong>Fields for {selectedParentLabel}</strong></div>
-                                             <div class="slds-col"><lightning-input type="search" placeholder="Search fields..." variant="label-hidden" onchange={handleParentFieldSearch} class="slds-m-bottom_xx-small"></lightning-input></div>
-                                             <div class="slds-col slds-no-flex slds-m-left_small"><lightning-button label="Select All" variant="neutral" size="small" onclick={handleParentSelectAll}></lightning-button></div>
+                                             <div class="slds-col"><lightning-input type="search" placeholder="Search fields..." variant="label-hidden" onchange={handleParentFieldSearch} class="slds-var-m-bottom_xx-small"></lightning-input></div>
+                                             <div class="slds-col slds-no-flex slds-var-m-left_small"><lightning-button label="Select All" variant="neutral" size="small" onclick={handleParentSelectAll}></lightning-button></div>
                                          </div>
                                          <div class="slds-scrollable_y" style="height: 150px;">
                                              <lightning-checkbox-group name="parentFields" label="Select Fields" variant="label-hidden" options={filteredParentFieldOptions} value={selectedParentFields} onchange={handleParentFieldChange}></lightning-checkbox-group>
                                          </div>
-                                         <div class="slds-m-top_x-small slds-text-align_right">
+                                         <div class="slds-var-m-top_x-small slds-text-align_right">
                                              <lightning-button label="Add Selected Fields" variant="brand" onclick={addParentField} disabled={isAddParentDisabled}></lightning-button>
                                          </div>
                                     </div>
                                 </template>
                                 <template if:true={hasAddedParentFields}>
-                                     <div class="slds-m-top_small border-top slds-p-top_small">
+                                     <div class="slds-var-m-top_small border-top slds-var-p-top_small">
                                          <p class="slds-form-element__label">Added Parent Fields</p>
                                          <!-- Switched to List as per potential preference, or stick to Pills. User asked "Why pills". I'll switch to List to be safe. -->
                                          <!-- Actually, let's keep Pills for consistency in Builder, but Tags View shows clean list. -->
@@ -135,7 +135,7 @@
                             </div>
     
                             <!-- Child Relationships -->
-                            <div class="slds-m-top_medium slds-box slds-theme_shade">
+                            <div class="slds-var-m-top_medium slds-box slds-theme_shade">
                                 <h3 class="slds-text-heading_small">Child Relationships (Optional)</h3>
                                 <div class="slds-grid slds-gutters">
                                     <div class="slds-col slds-size_1-of-2">
@@ -165,15 +165,15 @@
                                     </div>
                                 </div>
                                 <template if:true={childConfigs.length}>
-                                    <div class="slds-m-top_medium">
+                                    <div class="slds-var-m-top_medium">
                                         <template for:each={childConfigs} for:item="child" for:index="index">
-                                            <div key={child.relationshipName} class="slds-box slds-m-bottom_small slds-theme_default">
-                                                <div class="slds-grid slds-grid_align-spread slds-m-bottom_small">
+                                            <div key={child.relationshipName} class="slds-box slds-var-m-bottom_small slds-theme_default">
+                                                <div class="slds-grid slds-grid_align-spread slds-var-m-bottom_small">
                                                     <h4 class="slds-text-heading_small">{child.relationshipName}</h4>
                                                     <lightning-button-icon icon-name="utility:delete" alternative-text="Remove" onclick={removeChildConfig} data-index={index}></lightning-button-icon>
                                                 </div>
                                                 <div class="slds-form-element">
-                                                     <div class="slds-grid slds-m-bottom_x-small">
+                                                     <div class="slds-grid slds-var-m-bottom_x-small">
                                                          <div class="slds-col slds-size_1-of-2">
                                                              <lightning-input type="search" placeholder="Search child fields..." variant="label-hidden" onchange={handleChildFieldSearch} data-index={index}></lightning-input>
                                                          </div>
@@ -204,7 +204,7 @@
                                                 </div>
                                                 
                                                 <!-- Child Query Options -->
-                                                <div class="slds-grid slds-gutters slds-m-top_small slds-p-top_x-small slds-border_top">
+                                                <div class="slds-grid slds-gutters slds-var-m-top_small slds-var-p-top_x-small slds-border_top">
                                                     <div class="slds-col slds-size_6-of-12">
                                                         <lightning-input 
                                                             label="Filter (WHERE)" 
@@ -244,9 +244,9 @@
                     </div>
                     
                     <!-- Generated Query Output (Builder Mode Only) -->
-                     <div class="slds-m-top_medium slds-box slds-theme_default">
-                        <h3 class="slds-text-heading_small slds-m-bottom_small">Generated Query Config</h3>
-                        <div class="slds-text-font_monospace slds-p-around_small slds-theme_shade">{generatedQuery}</div>
+                     <div class="slds-var-m-top_medium slds-box slds-theme_default">
+                        <h3 class="slds-text-heading_small slds-var-m-bottom_small">Generated Query Config</h3>
+                        <div class="slds-text-font_monospace slds-var-p-around_small slds-theme_shade">{generatedQuery}</div>
                     </div>
                 </template>
             </div>
@@ -255,19 +255,19 @@
 
     <!-- VIEW/TAGS MODE -->
     <template if:true={showTagsOnly}>
-        <div class="slds-p-around_medium">
+        <div class="slds-var-p-around_medium">
             
 
             
             <!-- Tools Bar -->
-             <div class="slds-grid slds-m-bottom_medium">
+             <div class="slds-grid slds-var-m-bottom_medium">
                  <div class="slds-col slds-grow">
                      <lightning-input type="search" label="Search Tags" placeholder="Filter fields..." 
                          onchange={handleTagsSearch} value={tagsSearchKey} variant="label-hidden">
                      </lightning-input>
                  </div>
-                 <div class="slds-col slds-no-flex slds-m-left_small">
-                     <lightning-button-icon icon-name="utility:refresh" onclick={refreshPreview} alternative-text="Refresh Data" title="Refresh Data" class="slds-m-right_x-small"></lightning-button-icon>
+                 <div class="slds-col slds-no-flex slds-var-m-left_small">
+                     <lightning-button-icon icon-name="utility:refresh" onclick={refreshPreview} alternative-text="Refresh Data" title="Refresh Data" class="slds-var-m-right_x-small"></lightning-button-icon>
                      <lightning-button-stateful label-when-off="Show Raw Data" label-when-on="Hide Raw Data" 
                          icon-name-when-off="utility:preview" icon-name-when-on="utility:hide"
                          selected={showRawData} onclick={handleToggleRawData}>
@@ -277,8 +277,8 @@
 
              <!-- Raw Data Preview -->
              <template if:true={showRawData}>
-                 <div class="slds-box slds-theme_shade slds-m-bottom_medium">
-                     <h3 class="slds-text-heading_small slds-m-bottom_x-small">Raw Data Preview (JSON)</h3>
+                 <div class="slds-box slds-theme_shade slds-var-m-bottom_medium">
+                     <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">Raw Data Preview (JSON)</h3>
                      <div class="slds-scrollable_y" style="max-height: 300px;">
                          <pre>{rawPreviewJson}</pre>
                      </div>
@@ -287,7 +287,7 @@
 
              <div class="slds-box slds-theme_default">
                  <!-- Headers -->
-                 <div class="slds-grid slds-border_bottom slds-p-bottom_x-small slds-m-bottom_small slds-text-title_caps slds-text-color_weak">
+                 <div class="slds-grid slds-border_bottom slds-var-p-bottom_x-small slds-var-m-bottom_small slds-text-title_caps slds-text-color_weak">
                      <div class="slds-col slds-size_1-of-3">Field Label</div>
                      <div class="slds-col slds-size_1-of-3">Merge Tag</div>
                      <div class="slds-col slds-size_1-of-3">Sample Value</div>
@@ -304,11 +304,11 @@
                                  </lightning-button-icon>
                              </div>
                              <template for:each={generatedTags.baseFields} for:item="tag">
-                                <div key={tag.code} class="slds-grid slds-p-vertical_xx-small border-bottom-dashed slds-grid_vertical-align-center">
+                                <div key={tag.code} class="slds-grid slds-var-p-vertical_xx-small border-bottom-dashed slds-grid_vertical-align-center">
                                     <div class="slds-col slds-size_1-of-3 slds-truncate" title={tag.label}>{tag.label}</div>
                                     <div class="slds-col slds-size_1-of-3">
                                         <div class="slds-grid slds-grid_vertical-align-center">
-                                            <code class="slds-box slds-box_xx-small slds-theme_shade slds-m-right_x-small" style="user-select:all;">{tag.code}</code>
+                                            <code class="slds-box slds-box_xx-small slds-theme_shade slds-var-m-right_x-small" style="user-select:all;">{tag.code}</code>
                                             <lightning-button-icon icon-name="utility:copy" variant="bare" size="small" onclick={handleCopyTag} data-tag={tag.code}></lightning-button-icon>
                                         </div>
                                     </div>
@@ -335,11 +335,11 @@
                                     </lightning-button-icon>
                                 </div>
                                 <template for:each={section.fields} for:item="tag">
-                                    <div key={tag.code} class="slds-grid slds-p-vertical_xx-small border-bottom-dashed slds-grid_vertical-align-center">
+                                    <div key={tag.code} class="slds-grid slds-var-p-vertical_xx-small border-bottom-dashed slds-grid_vertical-align-center">
                                         <div class="slds-col slds-size_1-of-3 slds-truncate" title={tag.label}>{tag.label}</div>
                                         <div class="slds-col slds-size_1-of-3">
                                             <div class="slds-grid slds-grid_vertical-align-center">
-                                                <code class="slds-box slds-box_xx-small slds-theme_shade slds-m-right_x-small" style="user-select:all;">{tag.code}</code>
+                                                <code class="slds-box slds-box_xx-small slds-theme_shade slds-var-m-right_x-small" style="user-select:all;">{tag.code}</code>
                                                 <lightning-button-icon icon-name="utility:copy" variant="bare" size="small" onclick={handleCopyTag} data-tag={tag.code}></lightning-button-icon>
                                             </div>
                                         </div>
@@ -359,7 +359,7 @@
     
                      <!-- Children -->
                      <template if:true={generatedTags.hasChildren}>
-                         <h3 class="slds-text-heading_small slds-m-top_medium slds-m-bottom_small slds-p-left_small">Child Lists</h3>
+                         <h3 class="slds-text-heading_small slds-var-m-top_medium slds-var-m-bottom_small slds-var-p-left_small">Child Lists</h3>
                          <template for:each={generatedTags.children} for:item="child">
                              <lightning-accordion-section key={child.name} name={child.name} label={child.name}>
                                  <div slot="actions">
@@ -369,7 +369,7 @@
                                  </div>
                                  
                                  <!-- Loop Start/End -->
-                                 <div class="slds-grid slds-p-vertical_xx-small slds-theme_shade slds-p-horizontal_small slds-m-bottom_small slds-grid_vertical-align-center">
+                                 <div class="slds-grid slds-var-p-vertical_xx-small slds-theme_shade slds-var-p-horizontal_small slds-var-m-bottom_small slds-grid_vertical-align-center">
                                     <div class="slds-col slds-size_1-of-3"><strong>Loop Block</strong></div>
                                     <div class="slds-col slds-size_1-of-3">
                                         <code class="slds-box slds-box_xx-small slds-theme_default">{child.loopStart}</code> ... <code class="slds-box slds-box_xx-small slds-theme_default">{child.loopEnd}</code>
@@ -379,11 +379,11 @@
 
                                  <!-- Child Fields -->
                                  <template for:each={child.fields} for:item="f">
-                                     <div key={f.code} class="slds-grid slds-p-vertical_xx-small slds-m-left_small border-bottom-dashed slds-grid_vertical-align-center">
+                                     <div key={f.code} class="slds-grid slds-var-p-vertical_xx-small slds-var-m-left_small border-bottom-dashed slds-grid_vertical-align-center">
                                         <div class="slds-col slds-size_1-of-3 slds-truncate" title={f.label}>{f.label}</div>
                                         <div class="slds-col slds-size_1-of-3">
                                             <div class="slds-grid slds-grid_vertical-align-center">
-                                                <code class="slds-box slds-box_xx-small slds-theme_shade slds-m-right_x-small" style="user-select:all;">{f.code}</code>
+                                                <code class="slds-box slds-box_xx-small slds-theme_shade slds-var-m-right_x-small" style="user-select:all;">{f.code}</code>
                                                 <lightning-button-icon icon-name="utility:copy" variant="bare" size="small" onclick={handleCopyTag} data-tag={f.code}></lightning-button-icon>
                                             </div>
                                         </div>

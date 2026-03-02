@@ -1,9 +1,9 @@
 <template>
     <lightning-card title="Share Template" icon-name="standard:groups">
-        <div class="slds-p-around_medium">
+        <div class="slds-var-p-around_medium">
             
             <!-- Search Section -->
-            <div class="slds-box slds-theme_shade slds-m-bottom_medium">
+            <div class="slds-box slds-theme_shade slds-var-m-bottom_medium">
                 <div class="slds-grid slds-gutters slds-grid_vertical-align-end">
                     <div class="slds-col slds-grow">
                         <lightning-input 
@@ -17,7 +17,7 @@
                         
                         <!-- Search Results Dropdown -->
                         <template if:true={hasSearchResults}>
-                            <div class="search-results-container slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid" role="listbox">
+                            <div class="search-results-container slds-is-absolute slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid" role="listbox">
                                 <ul class="slds-listbox slds-listbox_vertical" role="presentation">
                                     <template for:each={searchResults} for:item="result">
                                         <li role="presentation" class="slds-listbox__item" key={result.Id} onclick={handleSelectResult} data-id={result.Id}>
@@ -26,8 +26,8 @@
                                                     <lightning-icon icon-name={result.Icon} size="small"></lightning-icon>
                                                 </span>
                                                 <span class="slds-media__body">
-                                                    <span class="slds-listbox__option-text slds-listbox__option-text_entity">{result.Name}</span>
-                                                    <span class="slds-listbox__option-meta slds-listbox__option-meta_entity">{result.Type}</span>
+                                                    <span class="slds-listbox__option-text_entity">{result.Name}</span>
+                                                    <span class="slds-listbox__option-meta">{result.Type}</span>
                                                 </span>
                                             </div>
                                         </li>
@@ -58,7 +58,7 @@
                 
                 <!-- Selected User Label -->
                 <template if:true={selectedRecord}>
-                     <div class="slds-m-top_x-small">
+                     <div class="slds-var-m-top_x-small">
                         <lightning-pill label={selectedRecord.Name} onremove={handleClearSelection}>
                             <lightning-icon icon-name={selectedRecord.Icon} alternative-text={selectedRecord.Type}></lightning-icon>
                         </lightning-pill>
@@ -67,7 +67,7 @@
             </div>
 
             <!-- Existing Shares Table -->
-            <h3 class="slds-text-heading_small slds-m-bottom_small">Existing Shares</h3>
+            <h3 class="slds-text-heading_small slds-var-m-bottom_small">Existing Shares</h3>
             <div style="height: 300px;">
                 <lightning-datatable
                     key-field="Id"

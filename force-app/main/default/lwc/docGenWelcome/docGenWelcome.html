@@ -1,11 +1,11 @@
 <template>
-    <div class="slds-p-around_medium">
+    <div class="slds-var-p-around_medium">
         <div class="slds-grid slds-gutters">
             
             <!-- Main Content -->
             <div class="slds-col slds-size_2-of-3">
-                <div class="slds-box slds-theme_default slds-m-bottom_medium">
-                    <div class="slds-media slds-media_center slds-m-bottom_medium">
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <div class="slds-media slds-media_center slds-var-m-bottom_medium">
                         <div class="slds-media__figure">
                             <lightning-icon icon-name="standard:template" size="large"></lightning-icon>
                         </div>
@@ -14,14 +14,14 @@
                             <p class="slds-text-title_caps slds-text-color_weak">Your native document generation engine</p>
                         </div>
                     </div>
-                     <p class="slds-text-body_regular slds-m-bottom_medium">
+                     <p class="slds-text-body_regular slds-var-m-bottom_medium">
                         DocGen allows you to merge Salesforce data into Microsoft Word and PowerPoint templates seamlessly.
                         Follow the steps below to get started.
                     </p>
                     
                     <div class="slds-grid slds-gutters">
                         <div class="slds-col">
-                            <lightning-button variant="brand" label="Create New Template" onclick={navigateToTemplates} class="slds-m-right_small"></lightning-button>
+                            <lightning-button variant="brand" label="Create New Template" onclick={navigateToTemplates} class="slds-var-m-right_small"></lightning-button>
                             <lightning-button label="Bulk Generation" onclick={navigateToBulk}></lightning-button>
                         </div>
                     </div>
@@ -29,7 +29,7 @@
 
                 <!-- Step by Step -->
                 <div class="slds-box slds-theme_default">
-                    <h2 class="slds-text-heading_medium slds-m-bottom_medium">How to Create a Document</h2>
+                    <h2 class="slds-text-heading_medium slds-var-m-bottom_medium">How to Create a Document</h2>
                      <lightning-progress-indicator type="path" current-step="step0">
                         <lightning-progress-step label="Create Template Record" value="step1"></lightning-progress-step>
                         <lightning-progress-step label="Upload Word/PPT" value="step2"></lightning-progress-step>
@@ -37,7 +37,7 @@
                         <lightning-progress-step label="Generate" value="step4"></lightning-progress-step>
                     </lightning-progress-indicator>
                     
-                     <ul class="slds-timeline slds-m-top_large">
+                     <ul class="slds-timeline slds-var-m-top_large">
                         <li>
                             <div class="slds-timeline__item_expandable slds-timeline__item_task">
                                 <div class="slds-media">
@@ -70,9 +70,9 @@
 
             <!-- Sidebar -->
             <div class="slds-col slds-size_1-of-3">
-                 <div class="slds-box slds-theme_shade slds-m-bottom_medium">
-                    <h2 class="slds-text-heading_small slds-m-bottom_small">
-                        <lightning-icon icon-name="utility:light_bulb" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                 <div class="slds-box slds-theme_shade slds-var-m-bottom_medium">
+                    <h2 class="slds-text-heading_small slds-var-m-bottom_small">
+                        <lightning-icon icon-name="utility:light_bulb" size="x-small" class="slds-var-m-right_x-small"></lightning-icon>
                         Tips & Tricks
                     </h2>
                     <ul class="slds-list_dotted">
@@ -84,8 +84,8 @@
                 </div>
                 
                 <div class="slds-box slds-theme_warning">
-                    <h2 class="slds-text-heading_small slds-m-bottom_small">
-                        <lightning-icon icon-name="utility:warning" size="x-small" variant="warning" class="slds-m-right_x-small"></lightning-icon>
+                    <h2 class="slds-text-heading_small slds-var-m-bottom_small">
+                        <lightning-icon icon-name="utility:warning" size="x-small" variant="warning" class="slds-var-m-right_x-small"></lightning-icon>
                         Limits
                     </h2>
                      <ul class="slds-list_dotted">

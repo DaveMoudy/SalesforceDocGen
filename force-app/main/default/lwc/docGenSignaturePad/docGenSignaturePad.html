@@ -1,30 +1,30 @@
 <template>
     <div class="signature-container slds-box slds-theme_default">
         <template if:true={isLocked}>
-            <div class="slds-text-align_center slds-p-around_medium slds-text-color_success">
+            <div class="slds-text-align_center slds-var-p-around_medium slds-text-color_success">
                 <lightning-icon icon-name="action:approval" size="large"></lightning-icon>
-                <h2 class="slds-text-heading_medium slds-m-top_small">Signature Captured!</h2>
+                <h2 class="slds-text-heading_medium slds-var-m-top_small">Signature Captured!</h2>
                 <p>Your signature has been securely submitted.</p>
             </div>
         </template>
 
         <template if:true={isProcessing}>
-            <div class="slds-is-relative slds-p-around_large slds-text-align_center">
+            <div class="slds-is-relative slds-var-p-around_large slds-text-align_center">
                 <lightning-spinner alternative-text="Generating PDF..." size="medium" variant="brand"></lightning-spinner>
-                <h2 class="slds-text-heading_small slds-m-top_large">Generating PDF...</h2>
+                <h2 class="slds-text-heading_small slds-var-m-top_large">Generating PDF...</h2>
                 <p class="slds-text-body_small">Please wait while we finalize your document.</p>
             </div>
         </template>
         
         <template if:true={showPad}>
-            <div class="header slds-m-bottom_medium">
+            <div class="header slds-var-m-bottom_medium">
                 <h2 class="slds-text-heading_small">Please Sign Below</h2>
                 <p class="slds-text-body_small slds-text-color_weak">Use your mouse or finger to sign inside the box.</p>
             </div>
             
 
 
-            <div class="canvas-wrapper slds-m-bottom_medium">
+            <div class="canvas-wrapper slds-var-m-bottom_medium">
                 <canvas 
                     class="signature-pad" 
                     onmousedown={handleMousedown}

@@ -1,6 +1,6 @@
 <template>
     <lightning-card title="Document Generator" icon-name="custom:custom18">
-        <div class="slds-p-around_medium">
+        <div class="slds-var-p-around_medium">
             <template lwc:if={error}>
                 <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_error" role="alert">
                     <span class="slds-assistive-text">error</span>
@@ -20,10 +20,10 @@
                     placeholder="Choose a template..."
                     options={templateOptions}
                     onchange={handleTemplateChange}
-                    class="slds-m-bottom_medium">
+                    class="slds-var-m-bottom_medium">
                 </lightning-combobox>
 
-                <div class="slds-m-bottom_medium">
+                <div class="slds-var-m-bottom_medium">
                     <lightning-radio-group
                         name="outputMode"
                         label="Action"
@@ -39,7 +39,7 @@
                     label="Generate Document" 
                     onclick={generateDocument} 
                     disabled={isGenerateDisabled}
-                    class="slds-m-top_medium">
+                    class="slds-var-m-top_medium">
                 </lightning-button>
             </template>
             

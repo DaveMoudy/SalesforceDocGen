@@ -1,15 +1,15 @@
 <template>
     <div class="slds-box slds-theme_default">
-        <div class="slds-text-heading_medium slds-m-bottom_medium slds-text-align_center">
-            <lightning-icon icon-name="utility:shield" size="medium" class="slds-m-right_small"></lightning-icon>
+        <div class="slds-text-heading_medium slds-var-m-bottom_medium slds-text-align_center">
+            <lightning-icon icon-name="utility:shield" size="medium" class="slds-var-m-right_small"></lightning-icon>
             Document Authenticator
         </div>
         
-        <p class="slds-m-bottom_medium slds-text-align_center">
+        <p class="slds-var-m-bottom_medium slds-text-align_center">
             Drop a signed PDF here to cryptographically verify its authenticity. The file never leaves your browser; we only mathematically verify its unique signature payload.
         </p>
 
-        <div class="drop-zone slds-box slds-box_x-small slds-theme_shade slds-text-align_center slds-m-bottom_medium"
+        <div class="drop-zone slds-box slds-box_x-small slds-theme_shade slds-text-align_center slds-var-m-bottom_medium"
              ondragover={handleDragOver}
              ondrop={handleDrop}
              style="border: 2px dashed #0070d2; cursor: pointer; min-height: 100px; display: flex; align-items: center; justify-content: center;">
@@ -19,34 +19,34 @@
         </div>
 
         <template if:true={isProcessing}>
-            <div class="slds-align_absolute-center slds-m-bottom_medium">
+            <div class="slds-align_absolute-center slds-var-m-bottom_medium">
                 <lightning-spinner alternative-text="Verifying" size="small" inline="true"></lightning-spinner>
-                <span class="slds-m-left_small">Computing cryptographic hash...</span>
+                <span class="slds-var-m-left_small">Computing cryptographic hash...</span>
             </div>
         </template>
 
         <template if:true={result}>
             <div class={resultContainerClass} role="alert">
-                <div class="slds-text-heading_small slds-m-bottom_small">
-                    <lightning-icon icon-name={resultIcon} size="small" class="slds-m-right_x-small"></lightning-icon>
+                <div class="slds-text-heading_small slds-var-m-bottom_small">
+                    <lightning-icon icon-name={resultIcon} size="small" class="slds-var-m-right_x-small"></lightning-icon>
                     {result.message}
                 </div>
                 
                 <template if:true={result.isValid}>
-                    <div class="slds-grid slds-wrap slds-m-top_medium">
-                        <div class="slds-col slds-size_1-of-2 slds-p-bottom_small">
+                    <div class="slds-grid slds-wrap slds-var-m-top_medium">
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
                             <strong>Signer Name</strong><br/>
                             {result.signerName}
                         </div>
-                        <div class="slds-col slds-size_1-of-2 slds-p-bottom_small">
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
                             <strong>Contact Email</strong><br/>
                             {result.signerEmail}
                         </div>
-                        <div class="slds-col slds-size_1-of-2 slds-p-bottom_small">
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
                             <strong>Signed Date</strong><br/>
                             <lightning-formatted-date-time value={result.signedDate} year="numeric" month="long" day="2-digit" hour="2-digit" minute="2-digit"></lightning-formatted-date-time>
                         </div>
-                        <div class="slds-col slds-size_1-of-2 slds-p-bottom_small">
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
                             <strong>Recorded IP Address</strong><br/>
                             {result.ipAddress}
                         </div>
