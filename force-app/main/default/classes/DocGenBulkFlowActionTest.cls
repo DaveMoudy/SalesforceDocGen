@@ -3,13 +3,20 @@ private class DocGenBulkFlowActionTest {
     
     @testSetup
     static void setup() {
+        // Assign DocGen_Admin permission set for custom object/field access in 2GP context
+        PermissionSet ps = [SELECT Id FROM PermissionSet WHERE Name = 'DocGen_Admin' LIMIT 1];
+        insert new PermissionSetAssignment(
+            AssigneeId = UserInfo.getUserId(),
+            PermissionSetId = ps.Id
+        );
+
         DocGen_Template__c temp = new DocGen_Template__c(
             Name = 'Test Bulk Template',
             Base_Object_API__c = 'Account',
             Type__c = 'Word'
         );
         insert temp;
-        
+
         insert new Account(Name = 'Test Account 1', Website = 'https://test1.com');
         insert new Account(Name = 'Test Account 2', Website = 'https://test2.com');
     }

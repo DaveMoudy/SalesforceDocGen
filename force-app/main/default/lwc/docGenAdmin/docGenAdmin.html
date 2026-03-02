@@ -137,9 +137,7 @@
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_large">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" aria-label="Close" onclick={closeEditModal}>
-                        <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
-                    </button>
+                    <lightning-button-icon icon-name="utility:close" alternative-text="Close" variant="bare-inverse" class="slds-modal__close" onclick={closeEditModal}></lightning-button-icon>
                     <h2 class="slds-text-heading_medium slds-hyphenate">Edit / View Template</h2>
                 </header>
                 <div class="slds-modal__content slds-var-p-around_medium">
@@ -344,9 +342,7 @@
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_small">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" aria-label="Close" onclick={closePreviewModal}>
-                        <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
-                    </button>
+                    <lightning-button-icon icon-name="utility:close" alternative-text="Close" variant="bare-inverse" class="slds-modal__close" onclick={closePreviewModal}></lightning-button-icon>
                     <h2 class="slds-text-heading_medium">Version Preview: {previewVersion.VersionNumber}</h2>
                 </header>
                 <div class="slds-modal__content slds-var-p-around_medium">
@@ -390,9 +386,7 @@
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" aria-label="Close" onclick={handleCloseSharing}>
-                        <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
-                    </button>
+                    <lightning-button-icon icon-name="utility:close" alternative-text="Close" variant="bare-inverse" class="slds-modal__close" onclick={handleCloseSharing}></lightning-button-icon>
                     <h2 class="slds-text-heading_medium slds-hyphenate">Share Template</h2>
                 </header>
                 <div class="slds-modal__content slds-var-p-around_medium">

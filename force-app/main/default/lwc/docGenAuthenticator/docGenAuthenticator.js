@@ -8,8 +8,8 @@ export default class DocGenAuthenticator extends LightningElement {
     get resultContainerClass() {
         if (!this.result) return '';
         return this.result.isValid 
-            ? 'slds-box slds-theme_success slds-m-top_medium' 
-            : 'slds-box slds-theme_error slds-m-top_medium';
+            ? 'slds-box slds-theme_success slds-var-m-top_medium'
+            : 'slds-box slds-theme_error slds-var-m-top_medium';
     }
 
     get resultIcon() {

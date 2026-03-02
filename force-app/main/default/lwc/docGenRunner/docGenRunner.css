@@ -28,10 +28,10 @@
 
 /* UI Styling for Preview Box */
 .debug-container {
-    background: white; 
-    padding: 2rem; 
-    border: 1px solid #c9c9c9; 
+    background: var(--lwc-colorBackgroundAlt, white);
+    padding: var(--lwc-spacingXLarge, 2rem);
+    border: var(--lwc-borderWidthThin, 1px) solid var(--lwc-colorBorderSeparatorAlt2, #c9c9c9);
     min-height: 200px;
-    margin-top: 1rem;
-    box-shadow: 0 2px 4px 0 rgba(0,0,0,0.16);
+    margin-top: var(--lwc-spacingMedium, 1rem);
+    box-shadow: var(--lwc-spacingNone, 0) var(--lwc-spacingXxxSmall, 2px) var(--lwc-spacingXxSmall, 4px) var(--lwc-spacingNone, 0) rgba(0,0,0,0.16);
 }

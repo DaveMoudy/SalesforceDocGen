@@ -1,22 +1,19 @@
 .signature-container {
     max-width: 600px;
-    margin: 0 auto;
-    background: #ffffff;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    margin: var(--lwc-spacingNone, 0) auto;
+    background: var(--lwc-colorBackgroundAlt, #ffffff);
+    border-radius: var(--lwc-borderRadiusLarge, 8px);
+    box-shadow: var(--lwc-spacingNone, 0) var(--lwc-spacingXxSmall, 4px) 6px -1px rgba(0, 0, 0, 0.1), var(--lwc-spacingNone, 0) var(--lwc-spacingXxxSmall, 2px) var(--lwc-spacingXxSmall, 4px) -1px rgba(0, 0, 0, 0.06);
 }
 
 .canvas-wrapper {
-    width: 100%;
-    border: 2px dashed #cbd5e1;
-    border-radius: 8px;
-    background-color: #f8fafc;
-    overflow: hidden;
+    border: var(--lwc-borderWidthThick, 2px) dashed #cbd5e1;
+    border-radius: var(--lwc-borderRadiusLarge, 8px);
+    background-color: var(--lwc-colorGray1, #f8fafc);
     touch-action: none; /* Prevents scrolling while signing on mobile */
 }
 
 .signature-pad {
-    width: 100%;
     height: 300px;
     cursor: crosshair;
 }

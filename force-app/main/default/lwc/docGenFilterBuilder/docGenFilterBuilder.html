@@ -1,5 +1,5 @@
 <template>
-    <div class="slds-box slds-max-width_large">
+    <div class="slds-box slds-container_large">
         <h3 class="slds-text-heading_small slds-var-m-bottom_medium">Record Filter</h3>
         
         <template if:true={isLoading}>
@@ -38,7 +38,7 @@
 
                 <!-- Delete -->
                 <div class="slds-col slds-size_1-of-12">
-                    <lightning-button-icon icon-name="utility:delete" variant="bare" onclick={handleRemoveRow} data-index={index}></lightning-button-icon>
+                    <lightning-button-icon icon-name="utility:delete" alternative-text="Remove condition" variant="bare" onclick={handleRemoveRow} data-index={index}></lightning-button-icon>
                 </div>
             </div>
         </template>
