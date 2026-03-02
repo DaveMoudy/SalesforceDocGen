@@ -148,11 +148,6 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
-        <field>DocGen_Signature_Template_Role__c.Role_Name__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
         <field>DocGen_Signature_Template_Role__c.Sort_Order__c</field>
         <readable>true</readable>
     </fieldPermissions>
