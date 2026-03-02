@@ -87,7 +87,8 @@ public with sharing class DocGenController {
                 'templateType' => result.get('templateType')
             };
         } catch (Exception e) {
-            throw new AuraHandledException('Error generating document: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Error generating document: ' + e.getMessage());
+            throw new AuraHandledException('Error generating document. Please check the template configuration.');
         }
     }
 
@@ -189,7 +190,8 @@ public with sharing class DocGenController {
                 insert version;
             }
         } catch (Exception e) {
-            throw new AuraHandledException('Error saving template: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Error saving template: ' + e.getMessage());
+            throw new AuraHandledException('Error saving template. Please verify your inputs and permissions.');
         }
     }
 
@@ -199,7 +201,8 @@ public with sharing class DocGenController {
             DocGen_Template__c template = new DocGen_Template__c(Id = templateId);
             delete template;
         } catch (Exception e) {
-            throw new AuraHandledException('Error deleting template: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Error deleting template: ' + e.getMessage());
+            throw new AuraHandledException('Error deleting template. Please check your permissions.');
         }
     }
 
@@ -272,7 +275,8 @@ public with sharing class DocGenController {
 
             return [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :htmlCvId WITH USER_MODE].ContentDocumentId;
         } catch (Exception e) {
-            throw new AuraHandledException('Error saving temp HTML: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Error saving temp HTML: ' + e.getMessage());
+            throw new AuraHandledException('Error preparing document for PDF rendering.');
         }
     }
 
@@ -442,7 +446,8 @@ public with sharing class DocGenController {
         try {
             insert share;
         } catch (DmlException e) {
-            throw new AuraHandledException('Error sharing template: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Error sharing template: ' + e.getMessage());
+            throw new AuraHandledException('Error sharing template. Please check permissions.');
         }
     }
 
@@ -452,7 +457,8 @@ public with sharing class DocGenController {
             DocGen_Template__Share shareToDelete = new DocGen_Template__Share(Id = shareId);
             delete shareToDelete;
         } catch (DmlException e) {
-            throw new AuraHandledException('Error removing share: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Error removing share: ' + e.getMessage());
+            throw new AuraHandledException('Error removing share. Please check permissions.');
         }
     }
     

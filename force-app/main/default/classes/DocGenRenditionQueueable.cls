@@ -44,7 +44,9 @@ public with sharing class DocGenRenditionQueueable implements Queueable, Databas
 
         if (!pdfsToInsert.isEmpty()) {
             try {
-                insert pdfsToInsert;
+                SObjectAccessDecision cvDecision = Security.stripInaccessible(AccessType.CREATABLE, pdfsToInsert);
+                insert cvDecision.getRecords();
+                pdfsToInsert = (List<ContentVersion>) cvDecision.getRecords();
                 System.debug('DocGen: Inserted ' + pdfsToInsert.size() + ' PDFs.');
                 
                 // --- DIRECT LINKAGE ---
@@ -73,7 +75,8 @@ public with sharing class DocGenRenditionQueueable implements Queueable, Databas
                 }
                 
                 if (!cdlsToInsert.isEmpty()) {
-                    Database.insert(cdlsToInsert, false);
+                    SObjectAccessDecision cdlDecision = Security.stripInaccessible(AccessType.CREATABLE, cdlsToInsert);
+                    Database.insert(cdlDecision.getRecords(), false);
                     System.debug('DocGen: Linked ' + cdlsToInsert.size() + ' PDFs to records.');
                 }
 

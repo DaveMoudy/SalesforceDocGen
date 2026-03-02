@@ -528,8 +528,8 @@ public with sharing class DocGenService {
                 if (docId.contains('?')) docId = docId.substringBefore('?');
                 imageBlob = fetchSalesforceImage(docId);
             }
-            // 7. Generic HTTP/HTTPS URL — attempt to fetch as image
-            else if (fieldValue.startsWith('http://') || fieldValue.startsWith('https://')) {
+            // 7. Generic HTTPS URL — attempt to fetch as image (reject plain HTTP)
+            else if (fieldValue.startsWith('https://')) {
                 if (fieldValue.contains('.salesforce.com') || fieldValue.contains('.force.com') || fieldValue.contains('.documentforce.com')) {
                     imageBlob = fetchViaNamedCredential(fieldValue.substringAfter('.com'));
                 } else {
@@ -647,8 +647,8 @@ public with sharing class DocGenService {
             return fetchSalesforceImage(refId);
         }
 
-        // Generic HTTP/HTTPS URL in <img> tag — fetch directly or via Named Credential
-        if (src.startsWith('http://') || src.startsWith('https://')) {
+        // Generic HTTPS URL in <img> tag — fetch directly or via Named Credential (reject plain HTTP)
+        if (src.startsWith('https://')) {
             if (src.contains('.salesforce.com') || src.contains('.force.com') || src.contains('.documentforce.com')) {
                 return fetchViaNamedCredential(src.substringAfter('.com'));
             }

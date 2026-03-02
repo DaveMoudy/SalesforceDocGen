@@ -1,25 +1,25 @@
-global with sharing class DocGenBulkFlowAction {
-    
-    global class Request {
+public with sharing class DocGenBulkFlowAction {
+
+    public class Request {
         @InvocableVariable(label='Template ID' required=true)
-        global Id templateId;
-        
+        public Id templateId;
+
         @InvocableVariable(label='Query Condition' description='Optional SOQL WHERE clause (e.g. Type = \'Customer\')')
-        global String queryCondition;
+        public String queryCondition;
     }
-    
-    global class Response {
+
+    public class Response {
         @InvocableVariable(label='Job ID')
-        global Id jobId;
-        
+        public Id jobId;
+
         @InvocableVariable(label='Error Message')
-        global String errorMessage;
+        public String errorMessage;
     }
 
     @InvocableMethod(label='Generate Bulk Documents' description='Starts a batch job to generate documents for multiple records based on a template and condition.')
-    global static List<Response> generateBulkDocuments(List<Request> requests) {
+    public static List<Response> generateBulkDocuments(List<Request> requests) {
         List<Response> responses = new List<Response>();
-        
+
         for (Request req : requests) {
             Response res = new Response();
             try {
@@ -28,7 +28,7 @@ global with sharing class DocGenBulkFlowAction {
                 res.jobId = jobId;
             } catch (Exception e) {
                 res.errorMessage = e.getMessage();
-                System.debug('DocGen Bulk Flow Error: ' + e.getStackTraceString());
+                System.debug(LoggingLevel.ERROR, 'DocGen Bulk Flow Error: ' + e.getMessage());
             }
             responses.add(res);
         }

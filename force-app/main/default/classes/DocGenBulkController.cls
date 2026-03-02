@@ -28,6 +28,10 @@ public with sharing class DocGenBulkController {
      */
     private static String sanitizeCondition(String condition) {
         if (String.isBlank(condition)) return condition;
+        // Reject dangerous characters (statement termination, comments)
+        if (condition.contains(';') || condition.contains('--') || condition.contains('/*')) {
+            throw new AuraHandledException('Invalid filter condition.');
+        }
         String upper = condition.toUpperCase().trim();
         // Reject conditions containing SOQL/DML keywords that don't belong in a WHERE clause
         List<String> disallowed = new List<String>{
@@ -37,7 +41,7 @@ public with sharing class DocGenBulkController {
         };
         for (String keyword : disallowed) {
             if (upper.contains(keyword)) {
-                throw new AuraHandledException('Invalid filter condition: contains disallowed keyword.');
+                throw new AuraHandledException('Invalid filter condition.');
             }
         }
         return condition;
@@ -63,7 +67,8 @@ public with sharing class DocGenBulkController {
 
             return job.Id;
         } catch (Exception e) {
-            throw new AuraHandledException('Error starting job: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Error starting job: ' + e.getMessage());
+            throw new AuraHandledException('Error starting bulk generation job.');
         }
     }
 
@@ -76,9 +81,9 @@ public with sharing class DocGenBulkController {
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Saved_Query__c> getSavedQueries(Id templateId) {
         return [
-            SELECT Id, Name, Description__c, Query_Condition__c 
-            FROM DocGen_Saved_Query__c 
-            WHERE DocGen_Template__c = :templateId 
+            SELECT Id, Name, Description__c, Query_Condition__c
+            FROM DocGen_Saved_Query__c
+            WHERE DocGen_Template__c = :templateId
             WITH SYSTEM_MODE
             ORDER BY CreatedDate DESC
         ];
@@ -95,7 +100,8 @@ public with sharing class DocGenBulkController {
             );
             insert sq;
         } catch (Exception e) {
-            throw new AuraHandledException('Error saving query: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Error saving query: ' + e.getMessage());
+            throw new AuraHandledException('Error saving query.');
         }
     }
 
@@ -104,7 +110,8 @@ public with sharing class DocGenBulkController {
         try {
             delete new DocGen_Saved_Query__c(Id = queryId);
         } catch (Exception e) {
-            throw new AuraHandledException('Error deleting query: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Error deleting query: ' + e.getMessage());
+            throw new AuraHandledException('Error deleting query.');
         }
     }
 }

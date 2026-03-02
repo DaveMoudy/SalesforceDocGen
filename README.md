@@ -276,7 +276,7 @@ force-app/main/default/
   objects/              9 custom objects + 1 platform event + 1 custom setting
   pages/                4 Visualforce pages (PDF engine, signature portal, verification)
   permissionsets/       3 permission sets (Admin, User, Guest Signature)
-  staticresources/      DocGenEngine bundle (docx-preview, jszip, html2pdf), mammoth, filesaver, sample templates
+  staticresources/      DocGenEngine bundle (docx-preview, jszip, html2pdf), filesaver, sample templates
   triggers/             Platform event trigger for async PDF rendition
   applications/         DocGen Lightning App
   tabs/                 8 custom tabs

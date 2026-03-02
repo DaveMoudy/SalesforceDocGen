@@ -1,14 +1,14 @@
-global with sharing class DocGenBatch implements Database.Batchable<SObject>, Database.Stateful, Database.AllowsCallouts {
+public with sharing class DocGenBatch implements Database.Batchable<SObject>, Database.Stateful, Database.AllowsCallouts {
     
-    global Id jobId;
-    global Id templateId;
-    global String baseObject;
-    global String condition;
+    public Id jobId;
+    public Id templateId;
+    public String baseObject;
+    public String condition;
     
-    global Integer successCount = 0;
-    global Integer failCount = 0;
+    public Integer successCount = 0;
+    public Integer failCount = 0;
     
-    global DocGenBatch(Id jobId) {
+    public DocGenBatch(Id jobId) {
         this.jobId = jobId;
         DocGen_Job__c job = [SELECT Template__c, Template__r.Base_Object_API__c, Query_Condition__c FROM DocGen_Job__c WHERE Id = :jobId WITH SYSTEM_MODE];
         this.templateId = job.Template__c;
@@ -16,7 +16,7 @@ global with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         this.condition = job.Query_Condition__c;
     }
     
-    global Database.QueryLocator start(Database.BatchableContext BC) {
+    public Database.QueryLocator start(Database.BatchableContext BC) {
         // Update Status to Processing
         update new DocGen_Job__c(Id = jobId, Status__c = 'Processing');
 
@@ -49,6 +49,10 @@ global with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
      */
     private static String sanitizeCondition(String condition) {
         if (String.isBlank(condition)) return condition;
+        // Reject dangerous characters (statement termination, comments)
+        if (condition.contains(';') || condition.contains('--') || condition.contains('/*')) {
+            throw new DocGenException('Invalid filter condition.');
+        }
         String upper = condition.toUpperCase().trim();
         List<String> disallowed = new List<String>{
             'SELECT ', 'INSERT ', 'UPDATE ', 'DELETE ', 'MERGE ', 'UNDELETE ',
@@ -57,13 +61,13 @@ global with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         };
         for (String keyword : disallowed) {
             if (upper.contains(keyword)) {
-                throw new DocGenException('Invalid filter condition: contains disallowed keyword.');
+                throw new DocGenException('Invalid filter condition.');
             }
         }
         return condition;
     }
     
-    global void execute(Database.BatchableContext BC, List<SObject> scope) {
+    public void execute(Database.BatchableContext BC, List<SObject> scope) {
         for (SObject rec : scope) {
             try {
                 DocGenService.generateDocument(templateId, rec.Id);
@@ -86,7 +90,7 @@ global with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         DocGenRenditionService.enqueueRenditions(true);
     }
     
-    global void finish(Database.BatchableContext BC) {
+    public void finish(Database.BatchableContext BC) {
         String status;
         if (successCount == 0 && failCount > 0) {
             status = 'Failed';

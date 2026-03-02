@@ -121,8 +121,8 @@ public with sharing class DocGenDataRetriever {
             return mapSObject(results[0]);
         } catch (Exception e) {
              // Fallback: If stripping failed (e.g. subquery error), return clear error
-            System.debug(LoggingLevel.ERROR, 'DocGen: Query Execution Error: ' + e.getMessage() + '\nStack: ' + e.getStackTraceString());
-            throw new AuraHandledException('Error executing query. Details: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Query Execution Error: ' + e.getMessage());
+            throw new AuraHandledException('Error executing query. Please verify your template configuration.');
         }
     }
 

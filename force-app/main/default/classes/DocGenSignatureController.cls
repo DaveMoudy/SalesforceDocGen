@@ -167,7 +167,9 @@ public without sharing class DocGenSignatureController {
         cd.PreferencesAllowViewInBrowser = true;
         cd.PreferencesLinkLatestVersion = true;
         cd.PreferencesExpires = false;
-        insert cd;
+        SObjectAccessDecision cdDecision = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentDistribution>{ cd });
+        insert cdDecision.getRecords();
+        cd = new ContentDistribution(Id = cdDecision.getRecords()[0].Id);
         cd = [SELECT DistributionPublicUrl FROM ContentDistribution WHERE Id = :cd.Id WITH SYSTEM_MODE LIMIT 1];
         return cd.DistributionPublicUrl;
     }
@@ -319,7 +321,8 @@ public without sharing class DocGenSignatureController {
                 'title' => sourceDoc.Title + ' - Signed'
             };
         } catch (Exception e) {
-            throw new AuraHandledException('Stamping failed: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Stamping failed: ' + e.getMessage());
+            throw new AuraHandledException('An error occurred while processing signatures.');
         }
     }
 
@@ -357,7 +360,8 @@ public without sharing class DocGenSignatureController {
                 'title' => sourceDoc.Title + ' - Signed'
             };
         } catch (Exception e) {
-            throw new AuraHandledException('Stamping failed: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Legacy stamping failed: ' + e.getMessage());
+            throw new AuraHandledException('An error occurred while processing the signature.');
         }
     }
 
@@ -427,7 +431,8 @@ public without sharing class DocGenSignatureController {
             update toClean;
 
         } catch (Exception e) {
-            throw new AuraHandledException('Finalization failed: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Multi-signer finalization failed: ' + e.getMessage());
+            throw new AuraHandledException('An error occurred while finalizing the signed document.');
         }
     }
 
@@ -457,7 +462,8 @@ public without sharing class DocGenSignatureController {
                 update audits;
             }
         } catch (Exception e) {
-            throw new AuraHandledException('Finalization failed: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'DocGen: Legacy finalization failed: ' + e.getMessage());
+            throw new AuraHandledException('An error occurred while finalizing the signed document.');
         }
     }
 }

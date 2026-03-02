@@ -11,7 +11,7 @@ public without sharing class DocGenSignatureFinalizer {
     @InvocableMethod(label='Finalize Signature Image' description='Stamps the signature onto the DOCX and enqueues the Server-Side PDF Rendition. Runs in System Context.')
     public static void finalizeSignature(List<FinalizeRequest> requests) {
         for (FinalizeRequest req : requests) {
-            System.debug('DocGen: Finalizing signature via Flow System Context for token: ' + req.token);
+            System.debug('DocGen: Finalizing signature via Flow System Context.');
             // This runs in System Mode thanks to the Flow context, bypassing Guest User limits on ContentVersion
             DocGenSignatureService.handleSignatureSubmission(req.token, req.base64Image);
         }

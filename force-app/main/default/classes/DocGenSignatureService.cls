@@ -213,20 +213,23 @@ public without sharing class DocGenSignatureService {
         newCv.PathOnClient = newCv.Title + '.docx';
         newCv.VersionData = resultBlob;
         newCv.IsMajorVersion = true;
-        insert newCv;
-        
-        Id newDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :newCv.Id].ContentDocumentId;
-        
+        SObjectAccessDecision cvDecision = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentVersion>{ newCv });
+        insert cvDecision.getRecords();
+        Id savedCvId = cvDecision.getRecords()[0].Id;
+
+        Id newDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :savedCvId WITH SYSTEM_MODE].ContentDocumentId;
+
         if (String.isNotBlank(relatedRecordId)) {
             ContentDocumentLink cdl = new ContentDocumentLink();
             cdl.ContentDocumentId = newDocId;
             cdl.LinkedEntityId = relatedRecordId;
             cdl.ShareType = 'V';
             cdl.Visibility = 'AllUsers';
-            insert cdl; 
+            SObjectAccessDecision cdlDecision = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentDocumentLink>{ cdl });
+            insert cdlDecision.getRecords();
         }
 
-        return newCv.Id;
+        return savedCvId;
     }
 
     /**

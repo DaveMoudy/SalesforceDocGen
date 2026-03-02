@@ -107,7 +107,6 @@
         <members>filesaver</members>
         <members>html2pdf</members>
         <members>jszip</members>
-        <members>mammoth</members>
         <name>StaticResource</name>
     </types>
     <types>

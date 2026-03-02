@@ -57,7 +57,13 @@
             // Store the LWC parent origin from the first message received.
             // VF pages run on a different domain (visualforce.com) than LWC
             // (lightning.force.com), so we capture the sender origin dynamically.
-            var parentOrigin = '*';
+            var parentOrigin = null;
+
+            // Validate that a message origin belongs to a Salesforce domain
+            function isSalesforceOrigin(origin) {
+                if (!origin) return false;
+                return /\.(lightning\.force|salesforce|visualforce|force)\.com$/.test(origin);
+            }
 
             // Wait for all images in container to finish loading
             function waitForImages(container) {
@@ -86,6 +92,9 @@
             window.addEventListener('message', async function(event) {
                 var data = event.data;
                 if (!data || data.type !== 'generate') return;
+
+                // Validate sender is a Salesforce domain
+                if (!isSalesforceOrigin(event.origin)) return;
 
                 // Capture the LWC origin for reply messages
                 parentOrigin = event.origin;
@@ -156,10 +165,12 @@
             });
 
             function sendError(msg) {
+                if (!parentOrigin) return;
                 window.parent.postMessage({ type: 'docgen_error', message: msg }, parentOrigin);
             }
 
             function sendSuccess(blob, fileName) {
+                if (!parentOrigin) return;
                 window.parent.postMessage({
                     type: 'docgen_success',
                     blob: blob,

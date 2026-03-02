@@ -98,7 +98,7 @@ export default class DocGenRunner extends LightningElement {
 
             if (isPDF) {
                 // Send processed DOCX to PDF Engine iframe
-                // Use '*' for targetOrigin because VF pages run on a different domain
+                // VF pages run on a different domain (*.visualforce.com) — origin validated on receive side
                 this.showToast('Info', 'Generating PDF...', 'info');
                 const binaryString = atob(base64Data);
                 const bytes = new Uint8Array(binaryString.length);
@@ -177,6 +177,8 @@ export default class DocGenRunner extends LightningElement {
 
     handleMessage = async (event) => {
         if (!event.data || !event.data.type) return;
+        // Validate that the message comes from a Salesforce domain
+        if (!event.origin || !/\.(lightning\.force|salesforce|visualforce|force)\.com$/.test(event.origin)) return;
         if (event.data.type === 'docgen_success') {
             if (this._pdfTimeout) { clearTimeout(this._pdfTimeout); this._pdfTimeout = null; }
             if (this.outputMode === 'save' && event.data.blob) {
