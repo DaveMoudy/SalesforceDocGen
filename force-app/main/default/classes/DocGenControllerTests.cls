@@ -275,31 +275,6 @@ private class DocGenControllerTests {
     }
 
     // -----------------------------------------------------------------------
-    // saveTempHtml
-    // -----------------------------------------------------------------------
-    @isTest
-    static void testSaveTempHtml() {
-        String htmlContent = '<html><body><h1>Hello World</h1></body></html>';
-        String fileName = 'docgen_temp_preview';
-
-        Test.startTest();
-        String contentDocId = DocGenController.saveTempHtml(htmlContent, fileName);
-        Test.stopTest();
-
-        System.assertNotEquals(null, contentDocId, 'Should return a ContentDocument Id');
-
-        List<ContentVersion> versions = [
-            SELECT Title, PathOnClient, Description FROM ContentVersion
-            WHERE ContentDocumentId = :contentDocId
-        ];
-        System.assertEquals(1, versions.size(), 'Should have one ContentVersion');
-        System.assertEquals(fileName, versions[0].Title, 'Title should match');
-        System.assert(versions[0].PathOnClient.endsWith('.html'), 'PathOnClient should end with .html');
-        System.assertEquals('Temp DocGen HTML for PDF Rendering', versions[0].Description,
-            'Description should indicate temp HTML');
-    }
-
-    // -----------------------------------------------------------------------
     // getObjectOptions (Schema)
     // -----------------------------------------------------------------------
     @isTest

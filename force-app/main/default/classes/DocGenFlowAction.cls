@@ -32,10 +32,6 @@ public with sharing class DocGenFlowAction {
             }
             responses.add(res);
         }
-        
-        // Flush collected PDF rendition jobs
-        // Direct enqueuing preserves the user's auth context for loopback callouts
-        DocGenRenditionService.enqueueRenditions(true);
 
         return responses;
     }
