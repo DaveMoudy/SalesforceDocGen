@@ -1,15 +1,15 @@
 .signature-container {
     max-width: 600px;
     margin: 0 auto;
-    background: #ffffff;
-    border-radius: 8px;
+    background: var(--lwc-colorBackground, #ffffff);
+    border-radius: var(--lwc-borderRadiusMedium, 8px);
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .canvas-wrapper {
     border: 2px dashed #cbd5e1;
-    border-radius: 8px;
-    background-color: #f8fafc;
+    border-radius: var(--lwc-borderRadiusMedium, 8px);
+    background-color: var(--lwc-colorBackgroundStencil, #f8fafc);
     touch-action: none; /* Prevents scrolling while signing on mobile */
 }
 

@@ -3,12 +3,12 @@
     body * {
         visibility: hidden;
     }
-    
+
     /* Only show the preview container and its children */
     .debug-container, .debug-container * {
         visibility: visible;
     }
-    
+
     /* Position the preview container at the top left */
     .debug-container {
         position: absolute;
@@ -28,10 +28,10 @@
 
 /* UI Styling for Preview Box */
 .debug-container {
-    background: white;
-    padding: 2rem;
-    border: 1px solid #c9c9c9;
+    background: var(--lwc-colorBackground, white);
+    padding: var(--lwc-spacingMedium, 2rem);
+    border: var(--lwc-borderWidthThin, 1px) solid var(--lwc-colorBorder, #c9c9c9);
     min-height: 200px;
-    margin-top: 1rem;
+    margin-top: var(--lwc-spacingSmall, 1rem);
     box-shadow: 0 2px 4px 0 rgba(0,0,0,0.16);
 }
