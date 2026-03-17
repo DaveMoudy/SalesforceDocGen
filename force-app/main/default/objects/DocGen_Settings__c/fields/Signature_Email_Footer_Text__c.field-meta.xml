@@ -3,8 +3,7 @@
     <fullName>Signature_Email_Footer_Text__c</fullName>
     <description>Custom footer text displayed at the bottom of signature request emails. Supports plain text. Example: "© 2026 Acme Corp. All rights reserved."</description>
     <label>Signature Email Footer Text</label>
-    <length>1000</length>
+    <length>255</length>
     <required>false</required>
-    <type>LongTextArea</type>
-    <visibleLines>3</visibleLines>
+    <type>Text</type>
 </CustomField>

@@ -518,9 +518,9 @@ public with sharing class DocGenHtmlRenderer {
             return xml.substring(start, tagEnd + 1);
         }
 
-        Integer end = findClosingTag(xml, start, tagName);
-        if (end == -1) return xml.substring(start, tagEnd + 1);
-        return xml.substring(start, end);
+        Integer endPos = findClosingTag(xml, start, tagName);
+        if (endPos == -1) return xml.substring(start, tagEnd + 1);
+        return xml.substring(start, endPos);
     }
 
     /**
