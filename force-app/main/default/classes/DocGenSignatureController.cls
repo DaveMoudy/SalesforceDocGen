@@ -101,10 +101,10 @@ public without sharing class DocGenSignatureController {
             return res;
         }
 
-        // Update signer status to Viewed
+        // Update signer status to Viewed (SYSTEM_MODE for guest user CRUD bypass)
         if (signer.Status__c == 'Pending') {
             signer.Status__c = 'Viewed';
-            update signer;
+            Database.update(signer, false, AccessLevel.SYSTEM_MODE);
         }
 
         res.isValid = true;
@@ -152,7 +152,7 @@ public without sharing class DocGenSignatureController {
 
         if (req.Status__c == 'Sent') {
             req.Status__c = 'Viewed';
-            update req;
+            Database.update(req, false, AccessLevel.SYSTEM_MODE);
         }
 
         res.isValid = true;
@@ -187,9 +187,8 @@ public without sharing class DocGenSignatureController {
         cd.PreferencesAllowViewInBrowser = true;
         cd.PreferencesLinkLatestVersion = true;
         cd.PreferencesExpires = false;
-        SObjectAccessDecision cdDecision = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentDistribution>{ cd });
-        insert cdDecision.getRecords();
-        cd = new ContentDistribution(Id = cdDecision.getRecords()[0].Id);
+        Database.insert(new List<ContentDistribution>{ cd }, false, AccessLevel.SYSTEM_MODE);
+        cd = new ContentDistribution(Id = cd.Id);
         cd = [SELECT DistributionPublicUrl FROM ContentDistribution WHERE Id = :cd.Id WITH SYSTEM_MODE LIMIT 1];
         return cd.DistributionPublicUrl;
     }
@@ -304,10 +303,10 @@ public without sharing class DocGenSignatureController {
             throw new AuraHandledException('You have already signed this document.');
         }
 
-        // Store signature data and mark as signed
+        // Store signature data and mark as signed (SYSTEM_MODE for guest user CRUD bypass)
         signer.Signature_Data__c = base64Image;
         signer.Status__c = 'Signed';
-        update signer;
+        Database.update(signer, false, AccessLevel.SYSTEM_MODE);
 
         // Check if all signers are now complete
         List<DocGen_Signer__c> allSigners = [
@@ -324,10 +323,10 @@ public without sharing class DocGenSignatureController {
         result.remaining = remaining;
         result.isComplete = (remaining == 0);
 
-        // Update parent request status
+        // Update parent request status (SYSTEM_MODE for guest user CRUD bypass)
         DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = signer.Signature_Request__c);
         parentReq.Status__c = 'In Progress';
-        update parentReq;
+        Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
 
         return result;
     }
@@ -410,12 +409,12 @@ public without sharing class DocGenSignatureController {
                 audit.User_Agent__c = 'Blob.toPdf() - Server-Side PDF Generation';
                 audits.add(audit);
             }
-            insert audits;
+            Database.insert(audits, false, AccessLevel.SYSTEM_MODE);
 
             // Mark parent request as fully signed
             DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = requestId);
             parentReq.Status__c = 'Signed';
-            update parentReq;
+            Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
 
             // Clear signature data from signer records
             List<DocGen_Signer__c> toClean = new List<DocGen_Signer__c>();
@@ -423,7 +422,7 @@ public without sharing class DocGenSignatureController {
                 s.Signature_Data__c = null;
                 toClean.add(s);
             }
-            update toClean;
+            Database.update(toClean, false, AccessLevel.SYSTEM_MODE);
 
             return new Map<String, String>{
                 'status' => 'complete',
@@ -461,9 +460,9 @@ public without sharing class DocGenSignatureController {
             // Save PDF to record
             DocGenController.saveGeneratedDocument(req.Related_Record_Id__c, fileName, base64Pdf, 'pdf');
 
-            // Update request status
+            // Update request status (SYSTEM_MODE for guest user CRUD bypass)
             req.Status__c = 'Signed';
-            update req;
+            Database.update(req, false, AccessLevel.SYSTEM_MODE);
 
             // Create audit trail
             String pdfHash = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', pdfBlob));
@@ -475,7 +474,7 @@ public without sharing class DocGenSignatureController {
             audit.Document_Hash_SHA256__c = pdfHash;
             audit.IP_Address__c = 'Server-Side';
             audit.User_Agent__c = 'Blob.toPdf() - Server-Side PDF Generation';
-            insert audit;
+            Database.insert(new List<DocGen_Signature_Audit__c>{ audit }, false, AccessLevel.SYSTEM_MODE);
 
             return new Map<String, String>{
                 'status' => 'complete',
