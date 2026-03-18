@@ -1879,7 +1879,6 @@ private class DocGenControllerTests {
 
   @isTest
   static void testGenerateDocumentDataForClient_returnsPayload() {
-    createTestFile(); // attaches a file to the test template
     DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
     Account acc = [
       SELECT Id
@@ -1887,6 +1886,52 @@ private class DocGenControllerTests {
       WHERE Name = 'Controller Test Account'
       LIMIT 1
     ];
+
+    // Attach a minimal valid DOCX ZIP to the template
+    Compression.ZipWriter zw = new Compression.ZipWriter();
+    zw.addEntry(
+      '[Content_Types].xml',
+      Blob.valueOf(
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+          '<Default Extension="xml" ContentType="application/xml"/>' +
+          '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+          '</Types>'
+      )
+    );
+    zw.addEntry(
+      'word/_rels/document.xml.rels',
+      Blob.valueOf(
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+      )
+    );
+    zw.addEntry(
+      'word/document.xml',
+      Blob.valueOf(
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+          '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>'
+      )
+    );
+    ContentVersion cv = new ContentVersion(
+      Title = 'TestClientDocx',
+      PathOnClient = 'TestClientDocx.docx',
+      VersionData = zw.getArchive()
+    );
+    insert cv;
+    Id conDocId = [
+      SELECT ContentDocumentId
+      FROM ContentVersion
+      WHERE Id = :cv.Id
+    ]
+    .ContentDocumentId;
+    insert new ContentDocumentLink(
+      LinkedEntityId = tpl.Id,
+      ContentDocumentId = conDocId,
+      ShareType = 'V'
+    );
 
     Test.startTest();
     Map<String, Object> result = DocGenController.generateDocumentDataForClient(
