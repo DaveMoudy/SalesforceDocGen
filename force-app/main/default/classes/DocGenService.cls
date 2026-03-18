@@ -1,1599 +1,2071 @@
 public with sharing class DocGenService {
+  // Collector for images to inject after XML processing
+  private static List<Map<String, Object>> pendingImages = new List<Map<String, Object>>();
+  private static Integer imageCounter = 0;
+  private static String currentTemplateType = 'Word'; // Set before processXml calls
 
-    // Collector for images to inject after XML processing
-    private static List<Map<String, Object>> pendingImages = new List<Map<String, Object>>();
-    private static Integer imageCounter = 0;
-    private static String currentTemplateType = 'Word'; // Set before processXml calls
+  /**
+   * Intermediate merge result containing processed XML, images, and passthrough ZIP entries.
+   */
+  private class MergeResult {
+    String documentXml; // Processed word/document.xml
+    Map<String, String> processedXmlEntries; // All processed XML entries (name → xml)
+    Map<String, Blob> passthroughEntries; // Non-XML ZIP entries passed through as-is
+    String contentTypesXml; // [Content_Types].xml
+    String relsXml; // word/_rels/document.xml.rels
+    String relsPath; // Path to rels file
+    String mediaPath; // Path prefix for media files
+    Map<String, String> imageBase64ByRelId; // relId → base64 image data (for DOCX and fallback)
+    Map<String, String> imageUrlByRelId; // relId → absolute URL (for PDF rendering via Blob.toPdf)
+    String templateType;
+    String outputFormat;
+    String docTitle;
 
-    /**
-     * Intermediate merge result containing processed XML, images, and passthrough ZIP entries.
-     */
-    private class MergeResult {
-        String documentXml;                                   // Processed word/document.xml
-        Map<String, String> processedXmlEntries;              // All processed XML entries (name → xml)
-        Map<String, Blob> passthroughEntries;                 // Non-XML ZIP entries passed through as-is
-        String contentTypesXml;                               // [Content_Types].xml
-        String relsXml;                                       // word/_rels/document.xml.rels
-        String relsPath;                                      // Path to rels file
-        String mediaPath;                                     // Path prefix for media files
-        Map<String, String> imageBase64ByRelId;               // relId → base64 image data (for DOCX and fallback)
-        Map<String, String> imageUrlByRelId;                  // relId → absolute URL (for PDF rendering via Blob.toPdf)
-        String templateType;
-        String outputFormat;
-        String docTitle;
+    MergeResult() {
+      processedXmlEntries = new Map<String, String>();
+      passthroughEntries = new Map<String, Blob>();
+      imageBase64ByRelId = new Map<String, String>();
+      imageUrlByRelId = new Map<String, String>();
+    }
+  }
 
-        MergeResult() {
-            processedXmlEntries = new Map<String, String>();
-            passthroughEntries = new Map<String, Blob>();
-            imageBase64ByRelId = new Map<String, String>();
-            imageUrlByRelId = new Map<String, String>();
-        }
+  /**
+   * Core merge logic: processes template tags in DOCX/PPTX XML and collects results.
+   * Returns structured intermediate data without assembling into a final format.
+   */
+  private static MergeResult mergeTemplate(Id templateId, Id recordId) {
+    return mergeTemplate(templateId, recordId, null);
+  }
+
+  private static MergeResult mergeTemplate(
+    Id templateId,
+    Id recordId,
+    Map<String, String> resolvedImages
+  ) {
+    pendingImages = new List<Map<String, Object>>();
+    imageCounter = 0;
+
+    Map<String, Object> dataMap;
+    try {
+      dataMap = DocGenController.generateDocumentData(templateId, recordId);
+    } catch (Exception e) {
+      throw new DocGenException(
+        'Error retrieving template data: ' + e.getMessage()
+      );
     }
 
-    /**
-     * Core merge logic: processes template tags in DOCX/PPTX XML and collects results.
-     * Returns structured intermediate data without assembling into a final format.
-     */
-    private static MergeResult mergeTemplate(Id templateId, Id recordId) {
-        return mergeTemplate(templateId, recordId, null);
+    // Apply LWC-resolved images: replace Salesforce URLs with data URIs in record data.
+    // This enables DOCX image embedding without server-side HTTP callouts.
+    if (resolvedImages != null && !resolvedImages.isEmpty()) {
+      applyResolvedImages(dataMap.get('data'), resolvedImages);
     }
 
-    private static MergeResult mergeTemplate(Id templateId, Id recordId, Map<String, String> resolvedImages) {
-        pendingImages = new List<Map<String, Object>>();
-        imageCounter = 0;
+    String base64File = (String) dataMap.get('templateFile');
+    Object dataObj = dataMap.get('data');
+    String outputFormat = (String) dataMap.get('outputFormat');
+    String templateType = (String) dataMap.get('templateType');
 
-        Map<String, Object> dataMap;
-        try {
-            dataMap = DocGenController.generateDocumentData(templateId, recordId);
-        } catch (Exception e) {
-            throw new DocGenException('Error retrieving template data: ' + e.getMessage());
-        }
+    if (base64File == null)
+      throw new DocGenException('Template file content is missing.');
 
-        // Apply LWC-resolved images: replace Salesforce URLs with data URIs in record data.
-        // This enables DOCX image embedding without server-side HTTP callouts.
-        if (resolvedImages != null && !resolvedImages.isEmpty()) {
-            applyResolvedImages(dataMap.get('data'), resolvedImages);
-        }
-
-        String base64File = (String) dataMap.get('templateFile');
-        Object dataObj = dataMap.get('data');
-        String outputFormat = (String) dataMap.get('outputFormat');
-        String templateType = (String) dataMap.get('templateType');
-
-        if (base64File == null) throw new DocGenException('Template file content is missing.');
-
-        Map<String, Object> recordDataMap;
-        if (dataObj instanceof Map<String, Object>) {
-            recordDataMap = (Map<String, Object>) dataObj;
-        } else if (dataObj instanceof SObject) {
-            recordDataMap = ((SObject)dataObj).getPopulatedFieldsAsMap();
-        } else {
-            throw new DocGenException('Invalid data format.');
-        }
-
-        MergeResult mr = new MergeResult();
-        mr.templateType = templateType;
-        mr.outputFormat = outputFormat;
-
-        Blob templateBlob = EncodingUtil.base64Decode(base64File);
-        Compression.ZipReader reader = new Compression.ZipReader(templateBlob);
-
-        // Determine rels path based on template type
-        mr.relsPath = (templateType == 'PowerPoint')
-            ? 'ppt/_rels/presentation.xml.rels'
-            : 'word/_rels/document.xml.rels';
-        mr.mediaPath = (templateType == 'PowerPoint') ? 'ppt/media/' : 'word/media/';
-
-        for (Compression.ZipEntry entry : reader.getEntries()) {
-            String name = entry.getName();
-            Boolean isTargetXml = false;
-            if (templateType == 'Word') {
-                isTargetXml = name == 'word/document.xml' ||
-                              (name.startsWith('word/header') && name.endsWith('.xml')) ||
-                              (name.startsWith('word/footer') && name.endsWith('.xml'));
-            } else if (templateType == 'PowerPoint') {
-                isTargetXml = name.startsWith('ppt/slides/slide') && name.endsWith('.xml');
-            }
-
-            if (isTargetXml) {
-                Blob content = reader.extract(name);
-                String xml = content.toString();
-                currentTemplateType = templateType;
-                if (templateType == 'Word') {
-                    xml = mergeRunsInTags(xml);
-                }
-                xml = processXml(xml, recordDataMap);
-                mr.processedXmlEntries.put(name, xml);
-                if (name == 'word/document.xml') {
-                    mr.documentXml = xml;
-                }
-            } else if (name == '[Content_Types].xml') {
-                mr.contentTypesXml = reader.extract(name).toString();
-            } else if (name == mr.relsPath) {
-                mr.relsXml = reader.extract(name).toString();
-            } else {
-                mr.passthroughEntries.put(name, reader.extract(name));
-            }
-        }
-
-        // Collect existing template images into imageBase64ByRelId for HTML rendering.
-        // Parse rels XML to map relId → media filename, then look up in passthroughEntries.
-        if (mr.relsXml != null) {
-            Integer relCursor = 0;
-            while (relCursor < mr.relsXml.length()) {
-                Integer relStart = mr.relsXml.indexOf('<Relationship ', relCursor);
-                if (relStart == -1) break;
-                Integer relSelfClose = mr.relsXml.indexOf('/>', relStart);
-                Integer relClose = mr.relsXml.indexOf('>', relStart);
-                if (relClose == -1) break;
-                Integer relEnd = (relSelfClose != -1 && relSelfClose < relClose) ? relSelfClose + 2 : relClose + 1;
-
-                String relTag = mr.relsXml.substring(relStart, relEnd);
-                String relType = extractXmlAttrValue(relTag, 'Type');
-                if (relType != null && relType.contains('/image')) {
-                    String relId = extractXmlAttrValue(relTag, 'Id');
-                    String target = extractXmlAttrValue(relTag, 'Target');
-                    if (relId != null && target != null && target.startsWith('media/')) {
-                        String fullPath = mr.mediaPath + target.substringAfter('media/');
-                        Blob imgBlob = mr.passthroughEntries.get(fullPath);
-                        if (imgBlob != null && !mr.imageBase64ByRelId.containsKey(relId)) {
-                            mr.imageBase64ByRelId.put(relId, EncodingUtil.base64Encode(imgBlob));
-                        }
-                    }
-                }
-                relCursor = relEnd;
-            }
-        }
-
-        // Process pending images: update content types, rels, and collect base64 for HTML
-        if (!pendingImages.isEmpty()) {
-            if (mr.contentTypesXml != null) {
-                if (!mr.contentTypesXml.contains('Extension="png"')) {
-                    mr.contentTypesXml = mr.contentTypesXml.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
-                }
-                if (!mr.contentTypesXml.contains('Extension="jpeg"') && !mr.contentTypesXml.contains('Extension="jpg"')) {
-                    mr.contentTypesXml = mr.contentTypesXml.replace('</Types>', '<Default Extension="jpeg" ContentType="image/jpeg"/></Types>');
-                }
-            }
-            if (mr.relsXml != null) {
-                for (Map<String, Object> img : pendingImages) {
-                    if (img.containsKey('blob')) {
-                        String relId = (String) img.get('relId');
-                        String fName = (String) img.get('fileName');
-                        String newRel = '<Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + fName + '"/>';
-                        mr.relsXml = mr.relsXml.replace('</Relationships>', newRel + '</Relationships>');
-                    }
-                    // URL-only images are not added to rels (they're for HTML/PDF only, not DOCX)
-                }
-            }
-            // Collect image data for rendering paths
-            for (Map<String, Object> img : pendingImages) {
-                String relId = (String) img.get('relId');
-                if (img.containsKey('blob')) {
-                    // Base64 for DOCX ZIP embedding and fallback
-                    Blob imgBlob = (Blob) img.get('blob');
-                    mr.imageBase64ByRelId.put(relId, EncodingUtil.base64Encode(imgBlob));
-                }
-                if (img.containsKey('url')) {
-                    // URL for PDF rendering via Blob.toPdf()
-                    mr.imageUrlByRelId.put(relId, (String) img.get('url'));
-                    // Also store in base64 map so PDF image map loop finds the relId
-                    if (!img.containsKey('blob')) {
-                        mr.imageBase64ByRelId.put(relId, (String) img.get('url'));
-                    }
-                }
-            }
-        }
-
-        // Generate document title
-        mr.docTitle = generateDocTitle((String) dataMap.get('titleFormat'), recordDataMap);
-        if (mr.docTitle == null) mr.docTitle = (String) resolveValue(recordDataMap, 'Name');
-
-        return mr;
+    Map<String, Object> recordDataMap;
+    if (dataObj instanceof Map<String, Object>) {
+      recordDataMap = (Map<String, Object>) dataObj;
+    } else if (dataObj instanceof SObject) {
+      recordDataMap = ((SObject) dataObj).getPopulatedFieldsAsMap();
+    } else {
+      throw new DocGenException('Invalid data format.');
     }
 
-    /**
-     * Recursively walks record data and replaces Salesforce image URLs with
-     * base64 data URIs from the LWC-resolved image map. This enables DOCX
-     * image embedding without server-side callouts.
-     */
-    private static void applyResolvedImages(Object data, Map<String, String> resolvedImages) {
-        if (data instanceof Map<String, Object>) {
-            Map<String, Object> mapData = (Map<String, Object>) data;
-            for (String key : new List<String>(mapData.keySet())) {
-                Object val = mapData.get(key);
-                if (val instanceof String) {
-                    String strVal = (String) val;
-                    if (strVal.containsIgnoreCase('<img')) {
-                        for (String originalUrl : resolvedImages.keySet()) {
-                            if (strVal.contains(originalUrl)) {
-                                strVal = strVal.replace(originalUrl, resolvedImages.get(originalUrl));
-                            }
-                            // Also handle &amp; encoded version
-                            String encodedUrl = originalUrl.replace('&', '&amp;');
-                            if (strVal.contains(encodedUrl)) {
-                                strVal = strVal.replace(encodedUrl, resolvedImages.get(originalUrl));
-                            }
-                        }
-                        mapData.put(key, strVal);
-                    }
-                } else {
-                    applyResolvedImages(val, resolvedImages);
-                }
-            }
-        } else if (data instanceof List<Object>) {
-            for (Object item : (List<Object>) data) {
-                applyResolvedImages(item, resolvedImages);
-            }
+    MergeResult mr = new MergeResult();
+    mr.templateType = templateType;
+    mr.outputFormat = outputFormat;
+
+    Blob templateBlob = EncodingUtil.base64Decode(base64File);
+    Compression.ZipReader reader = new Compression.ZipReader(templateBlob);
+
+    // Determine rels path based on template type
+    mr.relsPath = (templateType == 'PowerPoint')
+      ? 'ppt/_rels/presentation.xml.rels'
+      : 'word/_rels/document.xml.rels';
+    mr.mediaPath = (templateType == 'PowerPoint')
+      ? 'ppt/media/'
+      : 'word/media/';
+
+    for (Compression.ZipEntry entry : reader.getEntries()) {
+      String name = entry.getName();
+      Boolean isTargetXml = false;
+      if (templateType == 'Word') {
+        isTargetXml =
+          name == 'word/document.xml' ||
+          (name.startsWith('word/header') && name.endsWith('.xml')) ||
+          (name.startsWith('word/footer') && name.endsWith('.xml'));
+      } else if (templateType == 'PowerPoint') {
+        isTargetXml =
+          name.startsWith('ppt/slides/slide') && name.endsWith('.xml');
+      }
+
+      if (isTargetXml) {
+        Blob content = reader.extract(name);
+        String xml = content.toString();
+        currentTemplateType = templateType;
+        if (templateType == 'Word') {
+          xml = mergeRunsInTags(xml);
         }
+        xml = processXml(xml, recordDataMap);
+        mr.processedXmlEntries.put(name, xml);
+        if (name == 'word/document.xml') {
+          mr.documentXml = xml;
+        }
+      } else if (name == '[Content_Types].xml') {
+        mr.contentTypesXml = reader.extract(name).toString();
+      } else if (name == mr.relsPath) {
+        mr.relsXml = reader.extract(name).toString();
+      } else {
+        mr.passthroughEntries.put(name, reader.extract(name));
+      }
     }
 
-    /**
-     * Assembles a MergeResult into a DOCX/PPTX ZIP Blob.
-     */
-    private static Blob assembleZip(MergeResult mr) {
-        Compression.ZipWriter writer = new Compression.ZipWriter();
+    // Collect existing template images into imageBase64ByRelId for HTML rendering.
+    // Parse rels XML to map relId → media filename, then look up in passthroughEntries.
+    if (mr.relsXml != null) {
+      Integer relCursor = 0;
+      while (relCursor < mr.relsXml.length()) {
+        Integer relStart = mr.relsXml.indexOf('<Relationship ', relCursor);
+        if (relStart == -1)
+          break;
+        Integer relSelfClose = mr.relsXml.indexOf('/>', relStart);
+        Integer relClose = mr.relsXml.indexOf('>', relStart);
+        if (relClose == -1)
+          break;
+        Integer relEnd = (relSelfClose != -1 &&
+          relSelfClose < relClose)
+          ? relSelfClose + 2
+          : relClose + 1;
 
-        // Add processed XML entries
-        for (String name : mr.processedXmlEntries.keySet()) {
-            writer.addEntry(name, Blob.valueOf(mr.processedXmlEntries.get(name)));
+        String relTag = mr.relsXml.substring(relStart, relEnd);
+        String relType = extractXmlAttrValue(relTag, 'Type');
+        if (relType != null && relType.contains('/image')) {
+          String relId = extractXmlAttrValue(relTag, 'Id');
+          String target = extractXmlAttrValue(relTag, 'Target');
+          if (relId != null && target != null && target.startsWith('media/')) {
+            String fullPath = mr.mediaPath + target.substringAfter('media/');
+            Blob imgBlob = mr.passthroughEntries.get(fullPath);
+            if (imgBlob != null && !mr.imageBase64ByRelId.containsKey(relId)) {
+              mr.imageBase64ByRelId.put(
+                relId,
+                EncodingUtil.base64Encode(imgBlob)
+              );
+            }
+          }
         }
+        relCursor = relEnd;
+      }
+    }
 
-        // Add passthrough entries
-        for (String name : mr.passthroughEntries.keySet()) {
-            writer.addEntry(name, mr.passthroughEntries.get(name));
+    // Process pending images: update content types, rels, and collect base64 for HTML
+    if (!pendingImages.isEmpty()) {
+      if (mr.contentTypesXml != null) {
+        if (!mr.contentTypesXml.contains('Extension="png"')) {
+          mr.contentTypesXml = mr.contentTypesXml.replace(
+            '</Types>',
+            '<Default Extension="png" ContentType="image/png"/></Types>'
+          );
         }
-
-        // Add image blobs (skip URL-only images which are for PDF rendering only)
+        if (
+          !mr.contentTypesXml.contains('Extension="jpeg"') &&
+          !mr.contentTypesXml.contains('Extension="jpg"')
+        ) {
+          mr.contentTypesXml = mr.contentTypesXml.replace(
+            '</Types>',
+            '<Default Extension="jpeg" ContentType="image/jpeg"/></Types>'
+          );
+        }
+      }
+      if (mr.relsXml != null) {
         for (Map<String, Object> img : pendingImages) {
-            if (img.containsKey('blob')) {
-                String fName = (String) img.get('fileName');
-                Blob imageBlob = (Blob) img.get('blob');
-                writer.addEntry(mr.mediaPath + fName, imageBlob);
+          if (img.containsKey('blob')) {
+            String relId = (String) img.get('relId');
+            String fName = (String) img.get('fileName');
+            String newRel =
+              '<Relationship Id="' +
+              relId +
+              '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' +
+              fName +
+              '"/>';
+            mr.relsXml = mr.relsXml.replace(
+              '</Relationships>',
+              newRel + '</Relationships>'
+            );
+          }
+          // URL-only images are not added to rels (they're for HTML/PDF only, not DOCX)
+        }
+      }
+      // Collect image data for rendering paths
+      for (Map<String, Object> img : pendingImages) {
+        String relId = (String) img.get('relId');
+        if (img.containsKey('blob')) {
+          // Base64 for DOCX ZIP embedding and fallback
+          Blob imgBlob = (Blob) img.get('blob');
+          mr.imageBase64ByRelId.put(relId, EncodingUtil.base64Encode(imgBlob));
+        }
+        if (img.containsKey('url')) {
+          // URL for PDF rendering via Blob.toPdf()
+          mr.imageUrlByRelId.put(relId, (String) img.get('url'));
+          // Also store in base64 map so PDF image map loop finds the relId
+          if (!img.containsKey('blob')) {
+            mr.imageBase64ByRelId.put(relId, (String) img.get('url'));
+          }
+        }
+      }
+    }
+
+    // Generate document title
+    mr.docTitle = generateDocTitle(
+      (String) dataMap.get('titleFormat'),
+      recordDataMap
+    );
+    if (mr.docTitle == null)
+      mr.docTitle = (String) resolveValue(recordDataMap, 'Name');
+
+    return mr;
+  }
+
+  /**
+   * Recursively walks record data and replaces Salesforce image URLs with
+   * base64 data URIs from the LWC-resolved image map. This enables DOCX
+   * image embedding without server-side callouts.
+   */
+  private static void applyResolvedImages(
+    Object data,
+    Map<String, String> resolvedImages
+  ) {
+    if (data instanceof Map<String, Object>) {
+      Map<String, Object> mapData = (Map<String, Object>) data;
+      for (String key : new List<String>(mapData.keySet())) {
+        Object val = mapData.get(key);
+        if (val instanceof String) {
+          String strVal = (String) val;
+          if (strVal.containsIgnoreCase('<img')) {
+            for (String originalUrl : resolvedImages.keySet()) {
+              if (strVal.contains(originalUrl)) {
+                strVal = strVal.replace(
+                  originalUrl,
+                  resolvedImages.get(originalUrl)
+                );
+              }
+              // Also handle &amp; encoded version
+              String encodedUrl = originalUrl.replace('&', '&amp;');
+              if (strVal.contains(encodedUrl)) {
+                strVal = strVal.replace(
+                  encodedUrl,
+                  resolvedImages.get(originalUrl)
+                );
+              }
             }
-        }
-
-        // Add content types and rels
-        if (mr.contentTypesXml != null) {
-            writer.addEntry('[Content_Types].xml', Blob.valueOf(mr.contentTypesXml));
-        }
-        if (mr.relsXml != null) {
-            writer.addEntry(mr.relsPath, Blob.valueOf(mr.relsXml));
-        }
-
-        return writer.getArchive();
-    }
-
-    /**
-     * Processes a template with record data and returns the result as a Map containing
-     * the document Blob, title, output format, and template type. Does NOT save to record.
-     */
-    public static Map<String, Object> processDocument(Id templateId, Id recordId) {
-        return processDocument(templateId, recordId, null);
-    }
-
-    /**
-     * Processes a template with optional pre-resolved images from the LWC.
-     * The resolvedImages map contains originalUrl → base64DataUri entries
-     * fetched by the browser (which has session access to Salesforce URLs).
-     */
-    public static Map<String, Object> processDocument(Id templateId, Id recordId, Map<String, String> resolvedImages) {
-        MergeResult mr = mergeTemplate(templateId, recordId, resolvedImages);
-        Blob resultBlob = assembleZip(mr);
-
-        return new Map<String, Object>{
-            'blob' => resultBlob,
-            'title' => mr.docTitle,
-            'outputFormat' => mr.outputFormat,
-            'templateType' => mr.templateType
-        };
-    }
-
-    /**
-     * Extracts images from a template DOCX/PPTX file and saves them as ContentVersion
-     * records linked to the template version. These committed CVs provide stable URLs
-     * for Blob.toPdf() which cannot render data URI images (Flying Saucer limitation).
-     * Each version gets its own set of images — no duplicates or confusion.
-     */
-    public static void extractAndSaveTemplateImages(Id templateId, Id versionId) {
-        String fileContent = DocGenTemplateManager.getTemplateFileContent(templateId);
-        if (fileContent == null) return;
-
-        List<DocGen_Template__c> templates = [
-            SELECT Type__c FROM DocGen_Template__c WHERE Id = :templateId WITH SYSTEM_MODE LIMIT 1
-        ];
-        if (templates.isEmpty()) return;
-        String templateType = templates[0].Type__c;
-
-        Blob templateBlob = EncodingUtil.base64Decode(fileContent);
-        Compression.ZipReader reader = new Compression.ZipReader(templateBlob);
-
-        // Determine paths based on template type
-        String relsPath;
-        String mediaPath;
-        if (templateType == 'PowerPoint') {
-            relsPath = 'ppt/_rels/presentation.xml.rels';
-            mediaPath = 'ppt/media/';
+            mapData.put(key, strVal);
+          }
         } else {
-            relsPath = 'word/_rels/document.xml.rels';
-            mediaPath = 'word/media/';
+          applyResolvedImages(val, resolvedImages);
         }
+      }
+    } else if (data instanceof List<Object>) {
+      for (Object item : (List<Object>) data) {
+        applyResolvedImages(item, resolvedImages);
+      }
+    }
+  }
 
-        String relsXml = null;
-        Map<String, Blob> mediaEntries = new Map<String, Blob>();
+  /**
+   * Assembles a MergeResult into a DOCX/PPTX ZIP Blob.
+   */
+  private static Blob assembleZip(MergeResult mr) {
+    Compression.ZipWriter writer = new Compression.ZipWriter();
 
-        for (Compression.ZipEntry entry : reader.getEntries()) {
-            String name = entry.getName();
-            if (name == relsPath) {
-                relsXml = reader.extract(name).toString();
-            } else if (name.startsWith(mediaPath)) {
-                mediaEntries.put(name, reader.extract(name));
-            }
-        }
-
-        if (relsXml == null || mediaEntries.isEmpty()) return;
-
-        // Parse rels and save each image as a ContentVersion linked to the version record
-        String prefix = 'docgen_tmpl_img_' + versionId + '_';
-        List<ContentVersion> newCvs = new List<ContentVersion>();
-
-        Integer relCursor = 0;
-        while (relCursor < relsXml.length()) {
-            Integer relStart = relsXml.indexOf('<Relationship ', relCursor);
-            if (relStart == -1) break;
-            Integer relSelfClose = relsXml.indexOf('/>', relStart);
-            Integer relClose = relsXml.indexOf('>', relStart);
-            if (relClose == -1) break;
-            Integer relEnd = (relSelfClose != -1 && relSelfClose < relClose) ? relSelfClose + 2 : relClose + 1;
-
-            String relTag = relsXml.substring(relStart, relEnd);
-            String relType = extractXmlAttrValue(relTag, 'Type');
-            if (relType != null && relType.contains('/image')) {
-                String relId = extractXmlAttrValue(relTag, 'Id');
-                String target = extractXmlAttrValue(relTag, 'Target');
-                if (relId != null && target != null && target.startsWith('media/')) {
-                    String fullPath = mediaPath + target.substringAfter('media/');
-                    Blob imgBlob = mediaEntries.get(fullPath);
-                    if (imgBlob != null) {
-                        String ext = target.substringAfterLast('.');
-                        ContentVersion cv = new ContentVersion();
-                        cv.Title = prefix + relId;
-                        cv.PathOnClient = prefix + relId + '.' + ext;
-                        cv.VersionData = imgBlob;
-                        cv.FirstPublishLocationId = versionId;
-                        newCvs.add(cv);
-                    }
-                }
-            }
-            relCursor = relEnd;
-        }
-
-        if (!newCvs.isEmpty()) {
-            // FirstPublishLocationId links the CVs to the version record automatically
-            SObjectAccessDecision cvDecision = Security.stripInaccessible(AccessType.CREATABLE, newCvs);
-            insert cvDecision.getRecords();
-        }
+    // Add processed XML entries
+    for (String name : mr.processedXmlEntries.keySet()) {
+      writer.addEntry(name, Blob.valueOf(mr.processedXmlEntries.get(name)));
     }
 
-    /**
-     * Merges a template with record data and returns the result as HTML.
-     * Used by DocGenPdfRendererController to generate PDF via VF renderAs="pdf".
-     */
-    public static Map<String, Object> processDocumentAsHtml(Id templateId, Id recordId) {
-        MergeResult mr = mergeTemplate(templateId, recordId);
-
-        if (mr.templateType == 'PowerPoint') {
-            throw new DocGenException('Server-side PDF generation is only supported for Word templates.');
-        }
-
-        String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, mr.imageBase64ByRelId);
-
-        return new Map<String, Object>{
-            'html' => html,
-            'title' => mr.docTitle,
-            'outputFormat' => 'PDF',
-            'templateType' => mr.templateType
-        };
+    // Add passthrough entries
+    for (String name : mr.passthroughEntries.keySet()) {
+      writer.addEntry(name, mr.passthroughEntries.get(name));
     }
 
-    /**
-     * Step 1 of PDF generation: merges template and saves images as temporary
-     * ContentVersion records so they can be referenced by URL during PDF rendering.
-     * Salesforce's PDF renderer (Flying Saucer) cannot render data URI images,
-     * so images must be served via ContentVersion download URLs.
-     * Returns batch key and doc title. Call generatePdfFromBatch() as step 2.
-     */
-    public static Map<String, Object> preparePdfImages(Id templateId, Id recordId) {
-        MergeResult mr = mergeTemplate(templateId, recordId);
-
-        if (mr.templateType == 'PowerPoint') {
-            throw new DocGenException('Server-side PDF generation is only supported for Word templates.');
-        }
-
-        String batchKey = EncodingUtil.convertToHex(
-            Crypto.generateDigest('SHA-256', Blob.valueOf(String.valueOf(System.now().getTime()) + Math.random()))
-        ).substring(0, 32);
-
-        // Save base64 images as temporary ContentVersion records.
-        // URL-only images (from Rich Text fields) are skipped — Blob.toPdf() fetches them directly.
-        if (!mr.imageBase64ByRelId.isEmpty()) {
-            List<ContentVersion> tempImages = new List<ContentVersion>();
-            for (String relId : mr.imageBase64ByRelId.keySet()) {
-                String imageValue = mr.imageBase64ByRelId.get(relId);
-                // Skip URL-only entries — Blob.toPdf() fetches Salesforce URLs directly
-                if (imageValue.startsWith('/') || imageValue.startsWithIgnoreCase('http')) {
-                    continue;
-                }
-                String ext = (imageValue.startsWith('/9j/') || imageValue.startsWith('/9J/')) ? 'jpeg' : 'png';
-                ContentVersion cv = new ContentVersion();
-                cv.Title = 'docgen_tmp_' + batchKey + '_' + relId;
-                cv.PathOnClient = 'docgen_tmp_' + batchKey + '_' + relId + '.' + ext;
-                cv.VersionData = EncodingUtil.base64Decode(imageValue);
-                tempImages.add(cv);
-            }
-            if (!tempImages.isEmpty()) {
-                SObjectAccessDecision tmpDecision = Security.stripInaccessible(AccessType.CREATABLE, tempImages);
-                insert tmpDecision.getRecords();
-            }
-        }
-
-        return new Map<String, Object>{
-            'batchKey' => batchKey,
-            'title' => mr.docTitle,
-            'hasImages' => !mr.imageBase64ByRelId.isEmpty()
-        };
+    // Add image blobs (skip URL-only images which are for PDF rendering only)
+    for (Map<String, Object> img : pendingImages) {
+      if (img.containsKey('blob')) {
+        String fName = (String) img.get('fileName');
+        Blob imageBlob = (Blob) img.get('blob');
+        writer.addEntry(mr.mediaPath + fName, imageBlob);
+      }
     }
 
-    /**
-     * Step 2 of PDF generation: renders PDF via VF page using pre-saved image URLs.
-     * Must be called in a separate transaction from preparePdfImages() because
-     * getContentAsPDF() is a callout and DML (from step 1) must be committed first.
-     * Cleans up temporary image ContentVersion records after PDF generation.
-     */
-    public static Blob generatePdfFromBatch(Id templateId, Id recordId, String batchKey) {
-        Blob pdfBlob;
-        if (Test.isRunningTest()) {
-            pdfBlob = Blob.toPdf('<html><body><p>Test PDF</p></body></html>');
-        } else {
-            // Build URL map from committed temp ContentVersion records
-            Map<String, String> urlMap = new Map<String, String>();
-            String prefix = 'docgen_tmp_' + batchKey + '_';
-            List<ContentVersion> tempCvs = [
-                SELECT Id, Title FROM ContentVersion
-                WHERE Title LIKE :(prefix + '%')
-                WITH SYSTEM_MODE
-            ];
-            for (ContentVersion cv : tempCvs) {
-                String relId = cv.Title.substring(prefix.length());
-                urlMap.put(relId, '/sfc/servlet.shepherd/version/download/' + cv.Id);
-            }
-
-            // Generate HTML with URL-based images (CV URLs + any direct URLs from RTF)
-            Map<String, Object> htmlResult = processDocumentAsHtmlWithImageMap(templateId, recordId, urlMap);
-            String html = (String) htmlResult.get('html');
-
-            // Blob.toPdf() (Spring '26) fetches images from Salesforce URLs directly
-            pdfBlob = Blob.toPdf(html);
-        }
-
-        // Clean up temporary image ContentVersion records
-        cleanupTempImages(batchKey);
-
-        return pdfBlob;
+    // Add content types and rels
+    if (mr.contentTypesXml != null) {
+      writer.addEntry('[Content_Types].xml', Blob.valueOf(mr.contentTypesXml));
+    }
+    if (mr.relsXml != null) {
+      writer.addEntry(mr.relsPath, Blob.valueOf(mr.relsXml));
     }
 
-    /**
-     * Saves images from a MergeResult as temporary ContentVersion records.
-     * Returns the generated batch key for later retrieval.
-     */
-    private static String saveTempImageCvs(MergeResult mr) {
-        String batchKey = EncodingUtil.convertToHex(
-            Crypto.generateDigest('SHA-256', Blob.valueOf(String.valueOf(System.now().getTime()) + Math.random()))
-        ).substring(0, 32);
+    return writer.getArchive();
+  }
 
-        List<ContentVersion> tempImages = new List<ContentVersion>();
-        for (String relId : mr.imageBase64ByRelId.keySet()) {
-            String imageValue = mr.imageBase64ByRelId.get(relId);
-            // Skip URL-only entries — Blob.toPdf() fetches Salesforce URLs directly
-            if (imageValue.startsWith('/') || imageValue.startsWithIgnoreCase('http')) {
-                continue;
-            }
-            String ext = (imageValue.startsWith('/9j/') || imageValue.startsWith('/9J/')) ? 'jpeg' : 'png';
+  /**
+   * Processes a template with record data and returns the result as a Map containing
+   * the document Blob, title, output format, and template type. Does NOT save to record.
+   */
+  public static Map<String, Object> processDocument(
+    Id templateId,
+    Id recordId
+  ) {
+    return processDocument(templateId, recordId, null);
+  }
+
+  /**
+   * Processes a template with optional pre-resolved images from the LWC.
+   * The resolvedImages map contains originalUrl → base64DataUri entries
+   * fetched by the browser (which has session access to Salesforce URLs).
+   */
+  public static Map<String, Object> processDocument(
+    Id templateId,
+    Id recordId,
+    Map<String, String> resolvedImages
+  ) {
+    MergeResult mr = mergeTemplate(templateId, recordId, resolvedImages);
+    Blob resultBlob = assembleZip(mr);
+
+    return new Map<String, Object>{
+      'blob' => resultBlob,
+      'title' => mr.docTitle,
+      'outputFormat' => mr.outputFormat,
+      'templateType' => mr.templateType
+    };
+  }
+
+  /**
+   * Processes a template and returns the pre-zip intermediate data for client-side assembly.
+   * The LWC receives XML strings and base64-encoded media, then assembles the DOCX ZIP
+   * in the browser — avoiding Apex heap consumption during ZIP assembly.
+   *
+   * @param templateId  The DocGen_Template__c record ID.
+   * @param recordId    The record to merge data from.
+   * @param resolvedImages  Optional map of originalUrl → base64DataUri for RTF images (same as processDocument).
+   * @return Map containing: xmlParts (Map<String,String>), mediaParts (Map<String,String>), fileName (String), templateType (String)
+   */
+  public static Map<String, Object> processDocumentForClient(
+    Id templateId,
+    Id recordId,
+    Map<String, String> resolvedImages
+  ) {
+    MergeResult mr = mergeTemplate(templateId, recordId, resolvedImages);
+
+    // Collect all XML parts: processed entries + structural entries + passthrough XML
+    Map<String, String> xmlParts = new Map<String, String>(
+      mr.processedXmlEntries
+    );
+    if (mr.contentTypesXml != null) {
+      xmlParts.put('[Content_Types].xml', mr.contentTypesXml);
+    }
+    if (mr.relsXml != null) {
+      xmlParts.put(mr.relsPath, mr.relsXml);
+    }
+
+    // Separate passthrough entries into XML (text) and media (binary)
+    Map<String, String> mediaParts = new Map<String, String>();
+    for (String path : mr.passthroughEntries.keySet()) {
+      Blob entryBlob = mr.passthroughEntries.get(path);
+      if (path.startsWith(mr.mediaPath) || path.contains('/media/')) {
+        mediaParts.put(path, EncodingUtil.base64Encode(entryBlob));
+      } else {
+        xmlParts.put(path, entryBlob.toString());
+      }
+    }
+
+    // Add injected images from pendingImages (collected during XML processing)
+    for (Map<String, Object> img : pendingImages) {
+      if (img.containsKey('blob')) {
+        String fName = (String) img.get('fileName');
+        Blob imageBlob = (Blob) img.get('blob');
+        mediaParts.put(
+          mr.mediaPath + fName,
+          EncodingUtil.base64Encode(imageBlob)
+        );
+      }
+    }
+
+    return new Map<String, Object>{
+      'xmlParts' => xmlParts,
+      'mediaParts' => mediaParts,
+      'fileName' => mr.docTitle,
+      'templateType' => mr.templateType
+    };
+  }
+
+  /**
+   * Extracts images from a template DOCX/PPTX file and saves them as ContentVersion
+   * records linked to the template version. These committed CVs provide stable URLs
+   * for Blob.toPdf() which cannot render data URI images (Flying Saucer limitation).
+   * Each version gets its own set of images — no duplicates or confusion.
+   */
+  public static void extractAndSaveTemplateImages(Id templateId, Id versionId) {
+    String fileContent = DocGenTemplateManager.getTemplateFileContent(
+      templateId
+    );
+    if (fileContent == null)
+      return;
+
+    List<DocGen_Template__c> templates = [
+      SELECT Type__c
+      FROM DocGen_Template__c
+      WHERE Id = :templateId
+      WITH SYSTEM_MODE
+      LIMIT 1
+    ];
+    if (templates.isEmpty())
+      return;
+    String templateType = templates[0].Type__c;
+
+    Blob templateBlob = EncodingUtil.base64Decode(fileContent);
+    Compression.ZipReader reader = new Compression.ZipReader(templateBlob);
+
+    // Determine paths based on template type
+    String relsPath;
+    String mediaPath;
+    if (templateType == 'PowerPoint') {
+      relsPath = 'ppt/_rels/presentation.xml.rels';
+      mediaPath = 'ppt/media/';
+    } else {
+      relsPath = 'word/_rels/document.xml.rels';
+      mediaPath = 'word/media/';
+    }
+
+    String relsXml = null;
+    Map<String, Blob> mediaEntries = new Map<String, Blob>();
+
+    for (Compression.ZipEntry entry : reader.getEntries()) {
+      String name = entry.getName();
+      if (name == relsPath) {
+        relsXml = reader.extract(name).toString();
+      } else if (name.startsWith(mediaPath)) {
+        mediaEntries.put(name, reader.extract(name));
+      }
+    }
+
+    if (relsXml == null || mediaEntries.isEmpty())
+      return;
+
+    // Parse rels and save each image as a ContentVersion linked to the version record
+    String prefix = 'docgen_tmpl_img_' + versionId + '_';
+    List<ContentVersion> newCvs = new List<ContentVersion>();
+
+    Integer relCursor = 0;
+    while (relCursor < relsXml.length()) {
+      Integer relStart = relsXml.indexOf('<Relationship ', relCursor);
+      if (relStart == -1)
+        break;
+      Integer relSelfClose = relsXml.indexOf('/>', relStart);
+      Integer relClose = relsXml.indexOf('>', relStart);
+      if (relClose == -1)
+        break;
+      Integer relEnd = (relSelfClose != -1 &&
+        relSelfClose < relClose)
+        ? relSelfClose + 2
+        : relClose + 1;
+
+      String relTag = relsXml.substring(relStart, relEnd);
+      String relType = extractXmlAttrValue(relTag, 'Type');
+      if (relType != null && relType.contains('/image')) {
+        String relId = extractXmlAttrValue(relTag, 'Id');
+        String target = extractXmlAttrValue(relTag, 'Target');
+        if (relId != null && target != null && target.startsWith('media/')) {
+          String fullPath = mediaPath + target.substringAfter('media/');
+          Blob imgBlob = mediaEntries.get(fullPath);
+          if (imgBlob != null) {
+            String ext = target.substringAfterLast('.');
             ContentVersion cv = new ContentVersion();
-            cv.Title = 'docgen_tmp_' + batchKey + '_' + relId;
-            cv.PathOnClient = 'docgen_tmp_' + batchKey + '_' + relId + '.' + ext;
-            cv.VersionData = EncodingUtil.base64Decode(imageValue);
-            tempImages.add(cv);
+            cv.Title = prefix + relId;
+            cv.PathOnClient = prefix + relId + '.' + ext;
+            cv.VersionData = imgBlob;
+            cv.FirstPublishLocationId = versionId;
+            newCvs.add(cv);
+          }
         }
-        if (!tempImages.isEmpty()) {
-            SObjectAccessDecision tmpDecision = Security.stripInaccessible(AccessType.CREATABLE, tempImages);
-            insert tmpDecision.getRecords();
-        }
-        return batchKey;
+      }
+      relCursor = relEnd;
     }
 
-    /**
-     * Deletes temporary image ContentVersion records created by preparePdfImages().
-     */
-    public static void cleanupTempImages(String batchKey) {
-        if (String.isBlank(batchKey)) return;
-        List<ContentVersion> tempCvs = [
-            SELECT ContentDocumentId FROM ContentVersion
-            WHERE Title LIKE :('docgen_tmp_' + batchKey + '_%')
-            WITH SYSTEM_MODE
+    if (!newCvs.isEmpty()) {
+      // FirstPublishLocationId links the CVs to the version record automatically
+      SObjectAccessDecision cvDecision = Security.stripInaccessible(
+        AccessType.CREATABLE,
+        newCvs
+      );
+      insert cvDecision.getRecords();
+    }
+  }
+
+  /**
+   * Merges a template with record data and returns the result as HTML.
+   * Used by DocGenPdfRendererController to generate PDF via VF renderAs="pdf".
+   */
+  public static Map<String, Object> processDocumentAsHtml(
+    Id templateId,
+    Id recordId
+  ) {
+    MergeResult mr = mergeTemplate(templateId, recordId);
+
+    if (mr.templateType == 'PowerPoint') {
+      throw new DocGenException(
+        'Server-side PDF generation is only supported for Word templates.'
+      );
+    }
+
+    String html = DocGenHtmlRenderer.convertToHtml(
+      mr.documentXml,
+      mr.imageBase64ByRelId
+    );
+
+    return new Map<String, Object>{
+      'html' => html,
+      'title' => mr.docTitle,
+      'outputFormat' => 'PDF',
+      'templateType' => mr.templateType
+    };
+  }
+
+  /**
+   * Step 1 of PDF generation: merges template and saves images as temporary
+   * ContentVersion records so they can be referenced by URL during PDF rendering.
+   * Salesforce's PDF renderer (Flying Saucer) cannot render data URI images,
+   * so images must be served via ContentVersion download URLs.
+   * Returns batch key and doc title. Call generatePdfFromBatch() as step 2.
+   */
+  public static Map<String, Object> preparePdfImages(
+    Id templateId,
+    Id recordId
+  ) {
+    MergeResult mr = mergeTemplate(templateId, recordId);
+
+    if (mr.templateType == 'PowerPoint') {
+      throw new DocGenException(
+        'Server-side PDF generation is only supported for Word templates.'
+      );
+    }
+
+    String batchKey = EncodingUtil.convertToHex(
+        Crypto.generateDigest(
+          'SHA-256',
+          Blob.valueOf(String.valueOf(System.now().getTime()) + Math.random())
+        )
+      )
+      .substring(0, 32);
+
+    // Save base64 images as temporary ContentVersion records.
+    // URL-only images (from Rich Text fields) are skipped — Blob.toPdf() fetches them directly.
+    if (!mr.imageBase64ByRelId.isEmpty()) {
+      List<ContentVersion> tempImages = new List<ContentVersion>();
+      for (String relId : mr.imageBase64ByRelId.keySet()) {
+        String imageValue = mr.imageBase64ByRelId.get(relId);
+        // Skip URL-only entries — Blob.toPdf() fetches Salesforce URLs directly
+        if (
+          imageValue.startsWith('/') || imageValue.startsWithIgnoreCase('http')
+        ) {
+          continue;
+        }
+        String ext = (imageValue.startsWith('/9j/') ||
+          imageValue.startsWith('/9J/'))
+          ? 'jpeg'
+          : 'png';
+        ContentVersion cv = new ContentVersion();
+        cv.Title = 'docgen_tmp_' + batchKey + '_' + relId;
+        cv.PathOnClient = 'docgen_tmp_' + batchKey + '_' + relId + '.' + ext;
+        cv.VersionData = EncodingUtil.base64Decode(imageValue);
+        tempImages.add(cv);
+      }
+      if (!tempImages.isEmpty()) {
+        SObjectAccessDecision tmpDecision = Security.stripInaccessible(
+          AccessType.CREATABLE,
+          tempImages
+        );
+        insert tmpDecision.getRecords();
+      }
+    }
+
+    return new Map<String, Object>{
+      'batchKey' => batchKey,
+      'title' => mr.docTitle,
+      'hasImages' => !mr.imageBase64ByRelId.isEmpty()
+    };
+  }
+
+  /**
+   * Step 2 of PDF generation: renders PDF via VF page using pre-saved image URLs.
+   * Must be called in a separate transaction from preparePdfImages() because
+   * getContentAsPDF() is a callout and DML (from step 1) must be committed first.
+   * Cleans up temporary image ContentVersion records after PDF generation.
+   */
+  public static Blob generatePdfFromBatch(
+    Id templateId,
+    Id recordId,
+    String batchKey
+  ) {
+    Blob pdfBlob;
+    if (Test.isRunningTest()) {
+      pdfBlob = Blob.toPdf('<html><body><p>Test PDF</p></body></html>');
+    } else {
+      // Build URL map from committed temp ContentVersion records
+      Map<String, String> urlMap = new Map<String, String>();
+      String prefix = 'docgen_tmp_' + batchKey + '_';
+      List<ContentVersion> tempCvs = [
+        SELECT Id, Title
+        FROM ContentVersion
+        WHERE Title LIKE :(prefix + '%')
+        WITH SYSTEM_MODE
+      ];
+      for (ContentVersion cv : tempCvs) {
+        String relId = cv.Title.substring(prefix.length());
+        urlMap.put(relId, '/sfc/servlet.shepherd/version/download/' + cv.Id);
+      }
+
+      // Generate HTML with URL-based images (CV URLs + any direct URLs from RTF)
+      Map<String, Object> htmlResult = processDocumentAsHtmlWithImageMap(
+        templateId,
+        recordId,
+        urlMap
+      );
+      String html = (String) htmlResult.get('html');
+
+      // Blob.toPdf() (Spring '26) fetches images from Salesforce URLs directly
+      pdfBlob = Blob.toPdf(html);
+    }
+
+    // Clean up temporary image ContentVersion records
+    cleanupTempImages(batchKey);
+
+    return pdfBlob;
+  }
+
+  /**
+   * Saves images from a MergeResult as temporary ContentVersion records.
+   * Returns the generated batch key for later retrieval.
+   */
+  private static String saveTempImageCvs(MergeResult mr) {
+    String batchKey = EncodingUtil.convertToHex(
+        Crypto.generateDigest(
+          'SHA-256',
+          Blob.valueOf(String.valueOf(System.now().getTime()) + Math.random())
+        )
+      )
+      .substring(0, 32);
+
+    List<ContentVersion> tempImages = new List<ContentVersion>();
+    for (String relId : mr.imageBase64ByRelId.keySet()) {
+      String imageValue = mr.imageBase64ByRelId.get(relId);
+      // Skip URL-only entries — Blob.toPdf() fetches Salesforce URLs directly
+      if (
+        imageValue.startsWith('/') || imageValue.startsWithIgnoreCase('http')
+      ) {
+        continue;
+      }
+      String ext = (imageValue.startsWith('/9j/') ||
+        imageValue.startsWith('/9J/'))
+        ? 'jpeg'
+        : 'png';
+      ContentVersion cv = new ContentVersion();
+      cv.Title = 'docgen_tmp_' + batchKey + '_' + relId;
+      cv.PathOnClient = 'docgen_tmp_' + batchKey + '_' + relId + '.' + ext;
+      cv.VersionData = EncodingUtil.base64Decode(imageValue);
+      tempImages.add(cv);
+    }
+    if (!tempImages.isEmpty()) {
+      SObjectAccessDecision tmpDecision = Security.stripInaccessible(
+        AccessType.CREATABLE,
+        tempImages
+      );
+      insert tmpDecision.getRecords();
+    }
+    return batchKey;
+  }
+
+  /**
+   * Deletes temporary image ContentVersion records created by preparePdfImages().
+   */
+  public static void cleanupTempImages(String batchKey) {
+    if (String.isBlank(batchKey))
+      return;
+    List<ContentVersion> tempCvs = [
+      SELECT ContentDocumentId
+      FROM ContentVersion
+      WHERE Title LIKE :('docgen_tmp_' + batchKey + '_%')
+      WITH SYSTEM_MODE
+    ];
+    if (!tempCvs.isEmpty()) {
+      Set<Id> docIds = new Set<Id>();
+      for (ContentVersion cv : tempCvs) {
+        docIds.add(cv.ContentDocumentId);
+      }
+      if (!Schema.sObjectType.ContentDocument.isDeletable()) {
+        throw new DocGenException(
+          'Insufficient access to delete temporary images.'
+        );
+      }
+      delete [SELECT Id FROM ContentDocument WHERE Id IN :docIds];
+    }
+  }
+
+  /**
+   * Merges a template with record data and returns HTML using a custom image map.
+   * Used by the batch PDF renderer to generate HTML with ContentVersion URLs
+   * instead of data URIs, allowing Flying Saucer to render images in PDFs.
+   */
+  public static Map<String, Object> processDocumentAsHtmlWithImageMap(
+    Id templateId,
+    Id recordId,
+    Map<String, String> imageMap
+  ) {
+    MergeResult mr = mergeTemplate(templateId, recordId);
+
+    if (mr.templateType == 'PowerPoint') {
+      throw new DocGenException(
+        'Server-side PDF generation is only supported for Word templates.'
+      );
+    }
+
+    // Merge the provided URL map with any URL-only entries from the merge result
+    // (e.g., Rich Text field images that are accessed by URL, not base64)
+    Map<String, String> mergedMap = new Map<String, String>(imageMap);
+    for (String relId : mr.imageBase64ByRelId.keySet()) {
+      if (!mergedMap.containsKey(relId)) {
+        mergedMap.put(relId, mr.imageBase64ByRelId.get(relId));
+      }
+    }
+
+    String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, mergedMap);
+
+    return new Map<String, Object>{
+      'html' => html,
+      'title' => mr.docTitle,
+      'outputFormat' => 'PDF',
+      'templateType' => mr.templateType
+    };
+  }
+
+  /**
+   * Generates a PDF via Blob.toPdf() with images referenced by URL in the HTML.
+   * Blob.toPdf() fetches images from Salesforce URLs during rendering.
+   * Base64 images (from template media) are converted to data URIs inline.
+   * URL images (from RTF fields) are passed through as absolute URLs.
+   */
+  public static Map<String, Object> generatePdfDirect(
+    Id templateId,
+    Id recordId
+  ) {
+    MergeResult mr = mergeTemplate(templateId, recordId);
+
+    if (mr.templateType == 'PowerPoint') {
+      throw new DocGenException(
+        'Server-side PDF generation is only supported for Word templates.'
+      );
+    }
+
+    // Build image map with absolute URLs for Blob.toPdf().
+    // Data URIs don't work (Flying Saucer limitation) — all images must be URLs.
+    Map<String, String> pdfImages = new Map<String, String>();
+    String baseUrl = URL.getOrgDomainUrl().toExternalForm();
+
+    // 1. Template-embedded images: look up committed CVs linked to the active version
+    List<DocGen_Template_Version__c> activeVersions = [
+      SELECT Id
+      FROM DocGen_Template_Version__c
+      WHERE Template__c = :templateId AND Is_Active__c = TRUE
+      WITH SYSTEM_MODE
+      LIMIT 1
+    ];
+    if (!activeVersions.isEmpty()) {
+      String prefix = 'docgen_tmpl_img_' + activeVersions[0].Id + '_';
+      List<ContentVersion> tmplCvs = [
+        SELECT Id, Title
+        FROM ContentVersion
+        WHERE Title LIKE :(prefix + '%')
+        WITH SYSTEM_MODE
+      ];
+      for (ContentVersion cv : tmplCvs) {
+        String relId = cv.Title.substring(prefix.length());
+        pdfImages.put(
+          relId,
+          baseUrl + '/sfc/servlet.shepherd/version/download/' + cv.Id
+        );
+      }
+    }
+
+    // 2. RTF/dynamic images: use absolute Salesforce URLs from imageUrlByRelId
+    for (String relId : mr.imageUrlByRelId.keySet()) {
+      String url = mr.imageUrlByRelId.get(relId);
+      if (!url.startsWithIgnoreCase('http')) {
+        url = baseUrl + url;
+      }
+      pdfImages.put(relId, url);
+    }
+
+    String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, pdfImages);
+    Blob pdfBlob;
+    if (Test.isRunningTest()) {
+      pdfBlob = Blob.toPdf('<html><body><p>Test PDF</p></body></html>');
+    } else {
+      pdfBlob = Blob.toPdf(html);
+    }
+
+    return new Map<String, Object>{
+      'blob' => pdfBlob,
+      'title' => mr.docTitle,
+      'outputFormat' => 'PDF',
+      'templateType' => mr.templateType
+    };
+  }
+
+  /**
+   * Processes a template and saves the result as a ContentVersion attached to the record.
+   * For PDF output, uses Blob.toPdf() with images as absolute URLs or data URIs.
+   * Returns ContentDocumentId.
+   */
+  public static Id generateDocument(Id templateId, Id recordId) {
+    MergeResult mr = mergeTemplate(templateId, recordId);
+
+    if (mr.outputFormat == 'PDF' && mr.templateType == 'Word') {
+      Map<String, String> pdfImages = new Map<String, String>();
+      String baseUrl = URL.getOrgDomainUrl().toExternalForm();
+
+      // Template-embedded images: committed CVs linked to active version
+      List<DocGen_Template_Version__c> activeVersions = [
+        SELECT Id
+        FROM DocGen_Template_Version__c
+        WHERE Template__c = :templateId AND Is_Active__c = TRUE
+        WITH SYSTEM_MODE
+        LIMIT 1
+      ];
+      if (!activeVersions.isEmpty()) {
+        String prefix = 'docgen_tmpl_img_' + activeVersions[0].Id + '_';
+        List<ContentVersion> tmplCvs = [
+          SELECT Id, Title
+          FROM ContentVersion
+          WHERE Title LIKE :(prefix + '%')
+          WITH SYSTEM_MODE
         ];
-        if (!tempCvs.isEmpty()) {
-            Set<Id> docIds = new Set<Id>();
-            for (ContentVersion cv : tempCvs) {
-                docIds.add(cv.ContentDocumentId);
-            }
-            if (!Schema.sObjectType.ContentDocument.isDeletable()) {
-                throw new DocGenException('Insufficient access to delete temporary images.');
-            }
-            delete [SELECT Id FROM ContentDocument WHERE Id IN :docIds];
+        for (ContentVersion cv : tmplCvs) {
+          String relId = cv.Title.substring(prefix.length());
+          pdfImages.put(
+            relId,
+            baseUrl + '/sfc/servlet.shepherd/version/download/' + cv.Id
+          );
         }
+      }
+
+      // RTF/dynamic images: absolute Salesforce URLs
+      for (String relId : mr.imageUrlByRelId.keySet()) {
+        String url = mr.imageUrlByRelId.get(relId);
+        if (!url.startsWithIgnoreCase('http'))
+          url = baseUrl + url;
+        pdfImages.put(relId, url);
+      }
+
+      String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, pdfImages);
+      Blob pdfBlob;
+      if (Test.isRunningTest()) {
+        pdfBlob = Blob.toPdf('<html><body><p>Test PDF</p></body></html>');
+      } else {
+        pdfBlob = Blob.toPdf(html);
+      }
+      return savePdfFile(pdfBlob, mr.docTitle, recordId);
     }
 
-    /**
-     * Merges a template with record data and returns HTML using a custom image map.
-     * Used by the batch PDF renderer to generate HTML with ContentVersion URLs
-     * instead of data URIs, allowing Flying Saucer to render images in PDFs.
-     */
-    public static Map<String, Object> processDocumentAsHtmlWithImageMap(Id templateId, Id recordId, Map<String, String> imageMap) {
-        MergeResult mr = mergeTemplate(templateId, recordId);
+    // Native DOCX/PPTX path
+    Blob resultBlob = assembleZip(mr);
+    return saveFile(
+      resultBlob,
+      mr.docTitle,
+      recordId,
+      mr.outputFormat,
+      mr.templateType
+    );
+  }
 
-        if (mr.templateType == 'PowerPoint') {
-            throw new DocGenException('Server-side PDF generation is only supported for Word templates.');
-        }
+  /**
+   * Generates PDF from a batch (pre-saved images) and saves to record.
+   * Call preparePdfImages() first to save images, then this method.
+   */
+  public static Id generateAndSavePdfFromBatch(
+    Id templateId,
+    Id recordId,
+    String batchKey
+  ) {
+    MergeResult mr = mergeTemplate(templateId, recordId);
+    Blob pdfBlob = generatePdfFromBatch(templateId, recordId, batchKey);
+    return savePdfFile(pdfBlob, mr.docTitle, recordId);
+  }
 
-        // Merge the provided URL map with any URL-only entries from the merge result
-        // (e.g., Rich Text field images that are accessed by URL, not base64)
-        Map<String, String> mergedMap = new Map<String, String>(imageMap);
-        for (String relId : mr.imageBase64ByRelId.keySet()) {
-            if (!mergedMap.containsKey(relId)) {
-                mergedMap.put(relId, mr.imageBase64ByRelId.get(relId));
-            }
-        }
+  /**
+   * Preprocesses DOCX XML to merge text runs where template tags {tag} are split
+   * across multiple <w:r><w:t> elements by Word's formatting engine.
+   * After merging, processXml can find complete tags like {#QuoteLineItems}.
+   */
+  private static String mergeRunsInTags(String xml) {
+    // 1. Find all <w:t...>text</w:t> elements and their text content positions
+    Pattern wtPattern = Pattern.compile('<w:t(?:\\s[^>]*)?>([^<]*)</w:t>');
+    Matcher m = wtPattern.matcher(xml);
 
-        String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, mergedMap);
+    List<Integer> contentStarts = new List<Integer>();
+    List<Integer> contentEnds = new List<Integer>();
+    List<String> contents = new List<String>();
 
-        return new Map<String, Object>{
-            'html' => html,
-            'title' => mr.docTitle,
-            'outputFormat' => 'PDF',
-            'templateType' => mr.templateType
-        };
+    while (m.find()) {
+      contentStarts.add(m.start(1));
+      contentEnds.add(m.end(1));
+      contents.add(m.group(1));
     }
 
-    /**
-     * Generates a PDF via Blob.toPdf() with images referenced by URL in the HTML.
-     * Blob.toPdf() fetches images from Salesforce URLs during rendering.
-     * Base64 images (from template media) are converted to data URIs inline.
-     * URL images (from RTF fields) are passed through as absolute URLs.
-     */
-    public static Map<String, Object> generatePdfDirect(Id templateId, Id recordId) {
-        MergeResult mr = mergeTemplate(templateId, recordId);
+    if (contents.isEmpty())
+      return xml;
 
-        if (mr.templateType == 'PowerPoint') {
-            throw new DocGenException('Server-side PDF generation is only supported for Word templates.');
+    // 2. Build flat text (concatenation of all <w:t> text) and segment offsets
+    Integer totalLen = 0;
+    List<Integer> flatOffsets = new List<Integer>();
+    for (String c : contents) {
+      flatOffsets.add(totalLen);
+      totalLen += c.length();
+    }
+    String flatText = String.join(contents, '');
+
+    // 3. Find tags where { and } are in different segments
+    Boolean modified = false;
+    Integer pos = 0;
+
+    while (pos < flatText.length()) {
+      Integer openBrace = flatText.indexOf('{', pos);
+      if (openBrace == -1)
+        break;
+      Integer closeBrace = flatText.indexOf('}', openBrace);
+      if (closeBrace == -1)
+        break;
+
+      // Determine which segments contain the { and }
+      Integer openSeg = -1;
+      Integer closeSeg = -1;
+      for (Integer i = 0; i < contents.size(); i++) {
+        Integer segStart = flatOffsets.get(i);
+        Integer segEnd = segStart + contents.get(i).length();
+        if (openBrace >= segStart && openBrace < segEnd)
+          openSeg = i;
+        if (closeBrace >= segStart && closeBrace < segEnd)
+          closeSeg = i;
+      }
+
+      if (openSeg != -1 && closeSeg != -1 && openSeg != closeSeg) {
+        modified = true;
+        // Merge all text from openSeg through closeSeg into openSeg
+        String merged = '';
+        for (Integer i = openSeg; i <= closeSeg; i++) {
+          merged += contents.get(i);
         }
-
-        // Build image map with absolute URLs for Blob.toPdf().
-        // Data URIs don't work (Flying Saucer limitation) — all images must be URLs.
-        Map<String, String> pdfImages = new Map<String, String>();
-        String baseUrl = URL.getOrgDomainUrl().toExternalForm();
-
-        // 1. Template-embedded images: look up committed CVs linked to the active version
-        List<DocGen_Template_Version__c> activeVersions = [
-            SELECT Id FROM DocGen_Template_Version__c
-            WHERE Template__c = :templateId AND Is_Active__c = true
-            WITH SYSTEM_MODE LIMIT 1
-        ];
-        if (!activeVersions.isEmpty()) {
-            String prefix = 'docgen_tmpl_img_' + activeVersions[0].Id + '_';
-            List<ContentVersion> tmplCvs = [
-                SELECT Id, Title FROM ContentVersion
-                WHERE Title LIKE :(prefix + '%')
-                WITH SYSTEM_MODE
-            ];
-            for (ContentVersion cv : tmplCvs) {
-                String relId = cv.Title.substring(prefix.length());
-                pdfImages.put(relId, baseUrl + '/sfc/servlet.shepherd/version/download/' + cv.Id);
-            }
+        contents.set(openSeg, merged);
+        for (Integer i = openSeg + 1; i <= closeSeg; i++) {
+          contents.set(i, '');
         }
-
-        // 2. RTF/dynamic images: use absolute Salesforce URLs from imageUrlByRelId
-        for (String relId : mr.imageUrlByRelId.keySet()) {
-            String url = mr.imageUrlByRelId.get(relId);
-            if (!url.startsWithIgnoreCase('http')) {
-                url = baseUrl + url;
-            }
-            pdfImages.put(relId, url);
+        // Recalculate flat offsets after merge
+        totalLen = 0;
+        for (Integer i = 0; i < contents.size(); i++) {
+          flatOffsets.set(i, totalLen);
+          totalLen += contents.get(i).length();
         }
+        flatText = String.join(contents, '');
+      }
 
-        String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, pdfImages);
-        Blob pdfBlob;
-        if (Test.isRunningTest()) {
-            pdfBlob = Blob.toPdf('<html><body><p>Test PDF</p></body></html>');
+      pos = closeBrace + 1;
+    }
+
+    if (!modified)
+      return xml;
+
+    // 4. Reconstruct XML by replacing text content (work backwards to maintain positions)
+    String result = xml;
+    for (Integer i = contents.size() - 1; i >= 0; i--) {
+      String original = result.substring(
+        contentStarts.get(i),
+        contentEnds.get(i)
+      );
+      if (!contents.get(i).equals(original)) {
+        result =
+          result.substring(0, contentStarts.get(i)) +
+          contents.get(i) +
+          result.substring(contentEnds.get(i));
+      }
+    }
+
+    return result;
+  }
+
+  private static String processXml(String xml, Map<String, Object> data) {
+    String output = '';
+    Integer len = xml.length();
+    Integer cursor = 0;
+
+    while (cursor < len) {
+      Integer nextTag = xml.indexOf('{', cursor);
+      if (nextTag == -1) {
+        output += xml.substring(cursor);
+        break;
+      }
+      output += xml.substring(cursor, nextTag);
+      cursor = nextTag;
+
+      Integer tagClose = xml.indexOf('}', cursor);
+      if (tagClose == -1) {
+        output += xml.substring(cursor);
+        break;
+      }
+
+      String rawTag = xml.substring(cursor + 1, tagClose);
+      String tagContent = rawTag.trim();
+
+      if (tagContent.startsWith('#')) {
+        String key = tagContent.substring(1).trim();
+        Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
+        if (sectionEnd == -1) {
+          output += '{' + rawTag + '}';
+          cursor = tagClose + 1;
         } else {
-            pdfBlob = Blob.toPdf(html);
-        }
+          // Default: Content between tags
+          Integer contentStart = tagClose + 1;
+          Integer contentEnd = sectionEnd;
+          String innerXml = xml.substring(contentStart, contentEnd);
 
-        return new Map<String, Object>{
-            'blob' => pdfBlob,
-            'title' => mr.docTitle,
-            'outputFormat' => 'PDF',
-            'templateType' => mr.templateType
-        };
-    }
+          // Smart Table Row Expansion
+          // Check if we are inside a TR and if the loop is fully contained in it
+          Integer trStart = xml.lastIndexOf('<w:tr ', cursor);
+          if (trStart == -1)
+            trStart = xml.lastIndexOf('<w:tr>', cursor);
 
-    /**
-     * Processes a template and saves the result as a ContentVersion attached to the record.
-     * For PDF output, uses Blob.toPdf() with images as absolute URLs or data URIs.
-     * Returns ContentDocumentId.
-     */
-    public static Id generateDocument(Id templateId, Id recordId) {
-        MergeResult mr = mergeTemplate(templateId, recordId);
+          // Find matching TR End
+          Integer trEnd = -1;
+          if (trStart != -1) {
+            // Verify trStart is actually an ancestor of our cursor (no </w:tr> between trStart and cursor)
+            Boolean trClosesBefore = xml.substring(trStart, cursor)
+              .contains('</w:tr>');
 
-        if (mr.outputFormat == 'PDF' && mr.templateType == 'Word') {
-            Map<String, String> pdfImages = new Map<String, String>();
-            String baseUrl = URL.getOrgDomainUrl().toExternalForm();
+            trEnd = xml.indexOf('</w:tr>', trStart);
+            Integer closeTagEnd = xml.indexOf('}', sectionEnd);
 
-            // Template-embedded images: committed CVs linked to active version
-            List<DocGen_Template_Version__c> activeVersions = [
-                SELECT Id FROM DocGen_Template_Version__c
-                WHERE Template__c = :templateId AND Is_Active__c = true
-                WITH SYSTEM_MODE LIMIT 1
-            ];
-            if (!activeVersions.isEmpty()) {
-                String prefix = 'docgen_tmpl_img_' + activeVersions[0].Id + '_';
-                List<ContentVersion> tmplCvs = [
-                    SELECT Id, Title FROM ContentVersion
-                    WHERE Title LIKE :(prefix + '%')
-                    WITH SYSTEM_MODE
-                ];
-                for (ContentVersion cv : tmplCvs) {
-                    String relId = cv.Title.substring(prefix.length());
-                    pdfImages.put(relId, baseUrl + '/sfc/servlet.shepherd/version/download/' + cv.Id);
-                }
-            }
+            if (trClosesBefore) {
+              // The <w:tr> we found already closed before our tag - NOT our ancestor
+              cursor = xml.indexOf('}', sectionEnd) + 1;
+            } else if (trEnd > closeTagEnd) {
+              // Yes, the loop is fully inside this TR.
+              // Now, checking if we should expand.
+              // Expand if the start tag and end tag are in the SAME TR (implied by above)
+              // AND if we think it's intended (always true for better UX?)
 
-            // RTF/dynamic images: absolute Salesforce URLs
-            for (String relId : mr.imageUrlByRelId.keySet()) {
-                String url = mr.imageUrlByRelId.get(relId);
-                if (!url.startsWithIgnoreCase('http')) url = baseUrl + url;
-                pdfImages.put(relId, url);
-            }
+              // CAUTION: If user meant cell-repetition, valid, but rare.
+              // We assume Row Repetition is preferred.
 
-            String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, pdfImages);
-            Blob pdfBlob;
-            if (Test.isRunningTest()) {
-                pdfBlob = Blob.toPdf('<html><body><p>Test PDF</p></body></html>');
+              // Redefine Inner XML to include the TR
+              // And strip the tags from it.
+
+              contentStart = trStart;
+              contentEnd = trEnd + 7; // Length of </w:tr>
+              innerXml = xml.substring(contentStart, contentEnd);
+
+              String startTagFull = '{' + rawTag + '}';
+              innerXml = innerXml.replace(startTagFull, '');
+
+              String endTagFull = xml.substring(sectionEnd, closeTagEnd + 1);
+              innerXml = innerXml.replace(endTagFull, '');
+
+              // Backtrack output to remove the TR prefix already appended
+              Integer overlap = cursor - contentStart;
+              if (overlap > 0) {
+                output = output.substring(0, output.length() - overlap);
+              }
+
+              cursor = contentEnd;
             } else {
-                pdfBlob = Blob.toPdf(html);
+              // Loop spans across TRs or is outside TR?
+              // Default behavior (keep tags inside, repeat content)
+              cursor = xml.indexOf('}', sectionEnd) + 1;
             }
-            return savePdfFile(pdfBlob, mr.docTitle, recordId);
-        }
+          } else {
+            cursor = xml.indexOf('}', sectionEnd) + 1;
+          }
 
-        // Native DOCX/PPTX path
-        Blob resultBlob = assembleZip(mr);
-        return saveFile(resultBlob, mr.docTitle, recordId, mr.outputFormat, mr.templateType);
-    }
-
-    /**
-     * Generates PDF from a batch (pre-saved images) and saves to record.
-     * Call preparePdfImages() first to save images, then this method.
-     */
-    public static Id generateAndSavePdfFromBatch(Id templateId, Id recordId, String batchKey) {
-        MergeResult mr = mergeTemplate(templateId, recordId);
-        Blob pdfBlob = generatePdfFromBatch(templateId, recordId, batchKey);
-        return savePdfFile(pdfBlob, mr.docTitle, recordId);
-    }
-
-    /**
-     * Preprocesses DOCX XML to merge text runs where template tags {tag} are split
-     * across multiple <w:r><w:t> elements by Word's formatting engine.
-     * After merging, processXml can find complete tags like {#QuoteLineItems}.
-     */
-    private static String mergeRunsInTags(String xml) {
-        // 1. Find all <w:t...>text</w:t> elements and their text content positions
-        Pattern wtPattern = Pattern.compile('<w:t(?:\\s[^>]*)?>([^<]*)</w:t>');
-        Matcher m = wtPattern.matcher(xml);
-
-        List<Integer> contentStarts = new List<Integer>();
-        List<Integer> contentEnds = new List<Integer>();
-        List<String> contents = new List<String>();
-
-        while (m.find()) {
-            contentStarts.add(m.start(1));
-            contentEnds.add(m.end(1));
-            contents.add(m.group(1));
-        }
-
-        if (contents.isEmpty()) return xml;
-
-        // 2. Build flat text (concatenation of all <w:t> text) and segment offsets
-        Integer totalLen = 0;
-        List<Integer> flatOffsets = new List<Integer>();
-        for (String c : contents) {
-            flatOffsets.add(totalLen);
-            totalLen += c.length();
-        }
-        String flatText = String.join(contents, '');
-
-        // 3. Find tags where { and } are in different segments
-        Boolean modified = false;
-        Integer pos = 0;
-
-        while (pos < flatText.length()) {
-            Integer openBrace = flatText.indexOf('{', pos);
-            if (openBrace == -1) break;
-            Integer closeBrace = flatText.indexOf('}', openBrace);
-            if (closeBrace == -1) break;
-
-            // Determine which segments contain the { and }
-            Integer openSeg = -1;
-            Integer closeSeg = -1;
-            for (Integer i = 0; i < contents.size(); i++) {
-                Integer segStart = flatOffsets.get(i);
-                Integer segEnd = segStart + contents.get(i).length();
-                if (openBrace >= segStart && openBrace < segEnd) openSeg = i;
-                if (closeBrace >= segStart && closeBrace < segEnd) closeSeg = i;
-            }
-
-            if (openSeg != -1 && closeSeg != -1 && openSeg != closeSeg) {
-                modified = true;
-                // Merge all text from openSeg through closeSeg into openSeg
-                String merged = '';
-                for (Integer i = openSeg; i <= closeSeg; i++) {
-                    merged += contents.get(i);
-                }
-                contents.set(openSeg, merged);
-                for (Integer i = openSeg + 1; i <= closeSeg; i++) {
-                    contents.set(i, '');
-                }
-                // Recalculate flat offsets after merge
-                totalLen = 0;
-                for (Integer i = 0; i < contents.size(); i++) {
-                    flatOffsets.set(i, totalLen);
-                    totalLen += contents.get(i).length();
-                }
-                flatText = String.join(contents, '');
-            }
-
-            pos = closeBrace + 1;
-        }
-
-        if (!modified) return xml;
-
-        // 4. Reconstruct XML by replacing text content (work backwards to maintain positions)
-        String result = xml;
-        for (Integer i = contents.size() - 1; i >= 0; i--) {
-            String original = result.substring(contentStarts.get(i), contentEnds.get(i));
-            if (!contents.get(i).equals(original)) {
-                result = result.substring(0, contentStarts.get(i)) + contents.get(i) + result.substring(contentEnds.get(i));
-            }
-        }
-
-        return result;
-    }
-
-    private static String processXml(String xml, Map<String, Object> data) {
-        String output = '';
-        Integer len = xml.length();
-        Integer cursor = 0;
-        
-        while (cursor < len) {
-            Integer nextTag = xml.indexOf('{', cursor);
-            if (nextTag == -1) {
-                output += xml.substring(cursor);
-                break; 
-            }
-            output += xml.substring(cursor, nextTag);
-            cursor = nextTag;
-            
-            Integer tagClose = xml.indexOf('}', cursor);
-            if (tagClose == -1) {
-                output += xml.substring(cursor);
-                break;
-            }
-            
-            String rawTag = xml.substring(cursor + 1, tagClose); 
-            String tagContent = rawTag.trim();
-            
-            if (tagContent.startsWith('#')) {
-                String key = tagContent.substring(1).trim();
-                Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
-                if (sectionEnd == -1) {
-                    output += '{' + rawTag + '}';
-                    cursor = tagClose + 1;
-                } else {
-                    // Default: Content between tags
-                    Integer contentStart = tagClose + 1;
-                    Integer contentEnd = sectionEnd;
-                    String innerXml = xml.substring(contentStart, contentEnd);
-                    
-                    // Smart Table Row Expansion
-                    // Check if we are inside a TR and if the loop is fully contained in it
-                    Integer trStart = xml.lastIndexOf('<w:tr ', cursor);
-                    if (trStart == -1) trStart = xml.lastIndexOf('<w:tr>', cursor);
-
-                    // Find matching TR End
-                    Integer trEnd = -1;
-                    if (trStart != -1) {
-                         // Verify trStart is actually an ancestor of our cursor (no </w:tr> between trStart and cursor)
-                         Boolean trClosesBefore = xml.substring(trStart, cursor).contains('</w:tr>');
-
-                         trEnd = xml.indexOf('</w:tr>', trStart);
-                         Integer closeTagEnd = xml.indexOf('}', sectionEnd);
-
-                         if (trClosesBefore) {
-                             // The <w:tr> we found already closed before our tag - NOT our ancestor
-                             cursor = xml.indexOf('}', sectionEnd) + 1;
-                         } else if (trEnd > closeTagEnd) {
-                             // Yes, the loop is fully inside this TR.
-                             // Now, checking if we should expand.
-                             // Expand if the start tag and end tag are in the SAME TR (implied by above)
-                             // AND if we think it's intended (always true for better UX?)
-                             
-                             // CAUTION: If user meant cell-repetition, valid, but rare.
-                             // We assume Row Repetition is preferred.
-                             
-                             // Redefine Inner XML to include the TR
-                             // And strip the tags from it.
-                             
-                             contentStart = trStart;
-                             contentEnd = trEnd + 7; // Length of </w:tr>
-                             innerXml = xml.substring(contentStart, contentEnd);
-
-                             String startTagFull = '{' + rawTag + '}';
-                             innerXml = innerXml.replace(startTagFull, '');
-
-                             String endTagFull = xml.substring(sectionEnd, closeTagEnd + 1);
-                             innerXml = innerXml.replace(endTagFull, '');
-
-                             // Backtrack output to remove the TR prefix already appended
-                             Integer overlap = cursor - contentStart;
-                             if (overlap > 0) {
-                                  output = output.substring(0, output.length() - overlap);
-                             }
-
-                             cursor = contentEnd;
-                        } else {
-                            // Loop spans across TRs or is outside TR?
-                            // Default behavior (keep tags inside, repeat content)
-                             cursor = xml.indexOf('}', sectionEnd) + 1;
-                        }
-                    } else {
-                        cursor = xml.indexOf('}', sectionEnd) + 1;
-                    }
-
-                    // Process Data
-                    Object val = resolveValue(data, key);
-                    String sectionResult = '';
-                    if (val instanceof Boolean && (Boolean)val) {
-                         sectionResult = processXml(innerXml, data);
-                    } else if (val instanceof Map<String, Object>) {
-                        Map<String, Object> mapVal = (Map<String, Object>) val;
-                         if (mapVal.containsKey('records') && mapVal.get('records') instanceof List<Object>) {
-                            List<Object> records = (List<Object>) mapVal.get('records');
-                            for (Object item : records) {
-                                if (item instanceof Map<String, Object>) sectionResult += processXml(innerXml, (Map<String, Object>) item);
-                            }
-                        } else {
-                             sectionResult = processXml(innerXml, mapVal);
-                        }
-                    } else if (val instanceof List<Object>) {
-                         List<Object> listVal = (List<Object>) val;
-                         for (Object item : listVal) {
-                              if (item instanceof Map<String, Object>) sectionResult += processXml(innerXml, (Map<String, Object>) item);
-                         }
-                    } else if (val != null) {
-                         sectionResult = processXml(innerXml, data);
-                    }
-                    output += sectionResult;
-                }
-                
-            } else if (tagContent.startsWith('/')) {
-                output += '{' + rawTag + '}';
-                cursor = tagClose + 1;
-            } else if (tagContent.startsWith('%')) {
-                // Image tag: {%FieldName} or {%FieldName:WxH}
-                // PowerPoint: skip image injection (Word-specific DrawingML corrupts PPTX)
-                if (currentTemplateType == 'PowerPoint') {
-                    cursor = tagClose + 1;
-                    continue;
-                }
-                String imageSpec = tagContent.substring(1).trim();
-                String imageField = imageSpec;
-                Integer imgWidthPx = null;
-                Integer imgHeightPx = null;
-
-                // Parse optional size suffix :WxH (pixels)
-                if (imageSpec.contains(':')) {
-                    List<String> parts = imageSpec.split(':', 2);
-                    imageField = parts[0].trim();
-                    String sizeStr = parts[1].trim().toLowerCase();
-                    if (sizeStr.contains('x')) {
-                        List<String> dims = sizeStr.split('x');
-                        if (dims.size() == 2 && dims[0].isNumeric() && dims[1].isNumeric()) {
-                            imgWidthPx = Integer.valueOf(dims[0]);
-                            imgHeightPx = Integer.valueOf(dims[1]);
-                        }
-                    }
-                }
-
-                Object val = resolveValue(data, imageField);
-                if (val != null) {
-                    String imageXml = buildImageXml(String.valueOf(val), imgWidthPx, imgHeightPx);
-                    if (imageXml != null) {
-                        output += imageXml;
-                    }
-                }
-                cursor = tagClose + 1;
+          // Process Data
+          Object val = resolveValue(data, key);
+          String sectionResult = '';
+          if (val instanceof Boolean && (Boolean) val) {
+            sectionResult = processXml(innerXml, data);
+          } else if (val instanceof Map<String, Object>) {
+            Map<String, Object> mapVal = (Map<String, Object>) val;
+            if (
+              mapVal.containsKey('records') &&
+              mapVal.get('records') instanceof List<Object>
+            ) {
+              List<Object> records = (List<Object>) mapVal.get('records');
+              for (Object item : records) {
+                if (item instanceof Map<String, Object>)
+                  sectionResult += processXml(
+                    innerXml,
+                    (Map<String, Object>) item
+                  );
+              }
             } else {
-                // Parse optional date format suffix: {FieldName:format}
-                String fieldName = tagContent;
-                String dateFormat = null;
-                if (tagContent.contains(':')) {
-                    Integer colonIdx = tagContent.indexOf(':');
-                    fieldName = tagContent.substring(0, colonIdx).trim();
-                    dateFormat = tagContent.substring(colonIdx + 1).trim();
-                }
+              sectionResult = processXml(innerXml, mapVal);
+            }
+          } else if (val instanceof List<Object>) {
+            List<Object> listVal = (List<Object>) val;
+            for (Object item : listVal) {
+              if (item instanceof Map<String, Object>)
+                sectionResult += processXml(
+                  innerXml,
+                  (Map<String, Object>) item
+                );
+            }
+          } else if (val != null) {
+            sectionResult = processXml(innerXml, data);
+          }
+          output += sectionResult;
+        }
+      } else if (tagContent.startsWith('/')) {
+        output += '{' + rawTag + '}';
+        cursor = tagClose + 1;
+      } else if (tagContent.startsWith('%')) {
+        // Image tag: {%FieldName} or {%FieldName:WxH}
+        // PowerPoint: skip image injection (Word-specific DrawingML corrupts PPTX)
+        if (currentTemplateType == 'PowerPoint') {
+          cursor = tagClose + 1;
+          continue;
+        }
+        String imageSpec = tagContent.substring(1).trim();
+        String imageField = imageSpec;
+        Integer imgWidthPx = null;
+        Integer imgHeightPx = null;
 
-                Object val = resolveValue(data, fieldName);
-                if (val != null) {
-                    String strVal;
-                    // Apply date/time formatting if a format was specified
-                    if (dateFormat != null && val instanceof DateTime) {
-                        strVal = ((DateTime) val).format(dateFormat);
-                    } else if (dateFormat != null && val instanceof Date) {
-                        DateTime dt = DateTime.newInstance((Date) val, Time.newInstance(0, 0, 0, 0));
-                        strVal = dt.format(dateFormat);
-                    } else {
-                        strVal = String.valueOf(val);
-                    }
-                    // Rich text HTML — convert to DOCX XML preserving formatting, images, and paragraphs
-                    // PowerPoint: strip HTML tags and output plain text (Word XML corrupts PPTX)
-                    if (strVal.contains('<') && strVal.contains('>') &&
-                        (strVal.containsIgnoreCase('<p') || strVal.containsIgnoreCase('<div') ||
-                         strVal.containsIgnoreCase('<span') || strVal.containsIgnoreCase('<br') ||
-                         strVal.containsIgnoreCase('<img') || strVal.containsIgnoreCase('<b>') ||
-                         strVal.containsIgnoreCase('<i>') || strVal.containsIgnoreCase('<u>') ||
-                         strVal.containsIgnoreCase('<strong') || strVal.containsIgnoreCase('<em'))) {
-                        if (currentTemplateType == 'PowerPoint') {
-                            // Strip HTML tags for plain text in PPTX
-                            output += strVal.replaceAll('<[^>]+>', ' ').replaceAll('\\s+', ' ').trim().escapeXml();
-                        } else {
-                            output += convertRichTextToDocxXml(strVal);
-                        }
-                    }
-                    else {
-                        output += strVal.escapeXml();
-                    }
-                }
-                cursor = tagClose + 1;
+        // Parse optional size suffix :WxH (pixels)
+        if (imageSpec.contains(':')) {
+          List<String> parts = imageSpec.split(':', 2);
+          imageField = parts[0].trim();
+          String sizeStr = parts[1].trim().toLowerCase();
+          if (sizeStr.contains('x')) {
+            List<String> dims = sizeStr.split('x');
+            if (
+              dims.size() == 2 &&
+              dims[0].isNumeric() &&
+              dims[1].isNumeric()
+            ) {
+              imgWidthPx = Integer.valueOf(dims[0]);
+              imgHeightPx = Integer.valueOf(dims[1]);
             }
+          }
         }
-        return output;
+
+        Object val = resolveValue(data, imageField);
+        if (val != null) {
+          String imageXml = buildImageXml(
+            String.valueOf(val),
+            imgWidthPx,
+            imgHeightPx
+          );
+          if (imageXml != null) {
+            output += imageXml;
+          }
+        }
+        cursor = tagClose + 1;
+      } else {
+        // Parse optional date format suffix: {FieldName:format}
+        String fieldName = tagContent;
+        String dateFormat = null;
+        if (tagContent.contains(':')) {
+          Integer colonIdx = tagContent.indexOf(':');
+          fieldName = tagContent.substring(0, colonIdx).trim();
+          dateFormat = tagContent.substring(colonIdx + 1).trim();
+        }
+
+        Object val = resolveValue(data, fieldName);
+        if (val != null) {
+          String strVal;
+          // Apply date/time formatting if a format was specified
+          if (dateFormat != null && val instanceof DateTime) {
+            strVal = ((DateTime) val).format(dateFormat);
+          } else if (dateFormat != null && val instanceof Date) {
+            DateTime dt = DateTime.newInstance(
+              (Date) val,
+              Time.newInstance(0, 0, 0, 0)
+            );
+            strVal = dt.format(dateFormat);
+          } else {
+            strVal = String.valueOf(val);
+          }
+          // Rich text HTML — convert to DOCX XML preserving formatting, images, and paragraphs
+          // PowerPoint: strip HTML tags and output plain text (Word XML corrupts PPTX)
+          if (
+            strVal.contains('<') &&
+            strVal.contains('>') &&
+            (strVal.containsIgnoreCase('<p') ||
+            strVal.containsIgnoreCase('<div') ||
+            strVal.containsIgnoreCase('<span') ||
+            strVal.containsIgnoreCase('<br') ||
+            strVal.containsIgnoreCase('<img') ||
+            strVal.containsIgnoreCase('<b>') ||
+            strVal.containsIgnoreCase('<i>') ||
+            strVal.containsIgnoreCase('<u>') ||
+            strVal.containsIgnoreCase('<strong') ||
+            strVal.containsIgnoreCase('<em'))
+          ) {
+            if (currentTemplateType == 'PowerPoint') {
+              // Strip HTML tags for plain text in PPTX
+              output += strVal.replaceAll('<[^>]+>', ' ')
+                .replaceAll('\\s+', ' ')
+                .trim()
+                .escapeXml();
+            } else {
+              output += convertRichTextToDocxXml(strVal);
+            }
+          } else {
+            output += strVal.escapeXml();
+          }
+        }
+        cursor = tagClose + 1;
+      }
     }
-    
-    private static Integer findBalancedEnd(String xml, Integer startSearch, String key) {
-        Integer depth = 1;
-        Integer cursor = startSearch;
-        while (cursor < xml.length()) {
-            Integer nextStart = xml.indexOf('{', cursor);
-            if (nextStart == -1) return -1;
-            Integer nextClose = xml.indexOf('}', nextStart);
-            if (nextClose == -1) return -1;
-            String content = xml.substring(nextStart + 1, nextClose).trim();
-            if (content.equals('#' + key)) depth++;
-            else if (content.equals('/' + key)) {
-                depth--;
-                if (depth == 0) return nextStart;
-            }
-            cursor = nextClose + 1;
-        }
+    return output;
+  }
+
+  private static Integer findBalancedEnd(
+    String xml,
+    Integer startSearch,
+    String key
+  ) {
+    Integer depth = 1;
+    Integer cursor = startSearch;
+    while (cursor < xml.length()) {
+      Integer nextStart = xml.indexOf('{', cursor);
+      if (nextStart == -1)
         return -1;
+      Integer nextClose = xml.indexOf('}', nextStart);
+      if (nextClose == -1)
+        return -1;
+      String content = xml.substring(nextStart + 1, nextClose).trim();
+      if (content.equals('#' + key))
+        depth++;
+      else if (content.equals('/' + key)) {
+        depth--;
+        if (depth == 0)
+          return nextStart;
+      }
+      cursor = nextClose + 1;
     }
-    
-    private static Object resolveValue(Map<String, Object> data, String path) {
-        if (data == null) return null;
-        List<String> parts = path.split('\\.');
-        Object current = data;
-        
-        for (String part : parts) {
-            if (current instanceof Map<String, Object>) {
-                Map<String, Object> currentMap = (Map<String, Object>) current;
-                if (currentMap.containsKey(part)) {
-                    current = currentMap.get(part);
-                } else {
-                    // Try case-insensitive comparison
-                    Boolean found = false;
-                    for (String key : currentMap.keySet()) {
-                        if (key.equalsIgnoreCase(part)) {
-                            current = currentMap.get(key);
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        return null;
-                    }
-                }
-            } else if (current instanceof SObject) {
-                 SObject sobj = (SObject) current;
-                 try {
-                     current = sobj.get(part);
-                 } catch(Exception e) {
-                     return null;
-                 }
-            } else {
-                return null;
-            }
-            if (current == null) return null;
-        }
-        return current;
-    }
-    
-    /**
-     * Builds OOXML drawing markup for an image and registers it for ZIP injection.
-     * Accepts: HTML with <img> tags, Salesforce file references (/servlet/..., /sfc/..., refid=...),
-     * ContentVersion IDs, or base64 data URIs.
-     */
-    /**
-     * Converts rich text HTML to DOCX XML (w:p, w:r, w:t elements).
-     * Preserves text, basic formatting (bold/italic/underline), multiple images, and paragraphs.
-     * Returns DOCX XML that closes the current run/paragraph context and reopens it after.
-     */
-    private static String convertRichTextToDocxXml(String html) {
-        // Normalize: replace common entities and whitespace
-        html = html.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>');
+    return -1;
+  }
 
-        // Split into paragraphs by <p>, <div>, and <br> tags
-        // First, normalize paragraph boundaries: replace </p><p>, </div><div>, <br>, <br/> with a delimiter
-        String delim = '\n__PARA__\n';
-        String normalized = html;
-        normalized = normalized.replaceAll('(?i)</p>\\s*<p[^>]*>', delim);
-        normalized = normalized.replaceAll('(?i)</div>\\s*<div[^>]*>', delim);
-        normalized = normalized.replaceAll('(?i)<br\\s*/?>',  delim);
-        normalized = normalized.replaceAll('(?i)</?p[^>]*>', delim);
-        normalized = normalized.replaceAll('(?i)</?div[^>]*>', delim);
+  private static Object resolveValue(Map<String, Object> data, String path) {
+    if (data == null)
+      return null;
+    List<String> parts = path.split('\\.');
+    Object current = data;
 
-        List<String> paragraphs = normalized.split(delim);
-
-        // Build DOCX XML: close current context, emit paragraphs, reopen context
-        String result = '</w:t></w:r>';  // close current run
-
-        Boolean firstPara = true;
-        for (String para : paragraphs) {
-            String trimmed = para.trim();
-            if (String.isBlank(trimmed)) continue;
-
-            if (!firstPara) {
-                result += '</w:p><w:p>';  // new paragraph
-            } else {
-                // Continue in the same paragraph as the merge tag
-                firstPara = false;
-            }
-
-            // Process inline content within this paragraph
-            result += processInlineHtml(trimmed);
-        }
-
-        // If we never output anything, just return empty text
-        if (firstPara) {
-            return '';
-        }
-
-        // Reopen run/text context for any content after the merge tag
-        result += '<w:r><w:t xml:space="preserve">';
-        return result;
-    }
-
-    /**
-     * Processes inline HTML elements within a paragraph into DOCX w:r elements.
-     * Handles <b>, <i>, <u>, <strong>, <em>, <span>, <img>, and plain text.
-     */
-    private static String processInlineHtml(String html) {
-        String result = '';
-        Integer cursor = 0;
-
-        // Track formatting state
-        Boolean isBold = false;
-        Boolean isItalic = false;
-        Boolean isUnderline = false;
-
-        while (cursor < html.length()) {
-            Integer nextTag = html.indexOf('<', cursor);
-
-            if (nextTag == -1) {
-                // Remaining plain text
-                String text = html.substring(cursor).trim();
-                if (String.isNotBlank(text)) {
-                    result += buildRun(stripTags(text), isBold, isItalic, isUnderline);
-                }
-                break;
-            }
-
-            // Text before the tag
-            if (nextTag > cursor) {
-                String text = html.substring(cursor, nextTag);
-                if (String.isNotBlank(text)) {
-                    result += buildRun(stripTags(text), isBold, isItalic, isUnderline);
-                }
-            }
-
-            // Find end of tag
-            Integer tagEnd = html.indexOf('>', nextTag);
-            if (tagEnd == -1) break;
-            tagEnd++;
-
-            String tag = html.substring(nextTag, tagEnd).toLowerCase();
-
-            // Handle formatting tags
-            if (tag.startsWith('<b>') || tag.startsWith('<b ') || tag.startsWith('<strong')) {
-                isBold = true;
-            } else if (tag.startsWith('</b>') || tag.startsWith('</strong')) {
-                isBold = false;
-            } else if (tag.startsWith('<i>') || tag.startsWith('<i ') || tag.startsWith('<em')) {
-                isItalic = true;
-            } else if (tag.startsWith('</i>') || tag.startsWith('</em')) {
-                isItalic = false;
-            } else if (tag.startsWith('<u>') || tag.startsWith('<u ')) {
-                isUnderline = true;
-            } else if (tag.startsWith('</u>')) {
-                isUnderline = false;
-            } else if (tag.startsWith('<img')) {
-                // Extract image from <img> tag
-                String imgTag = html.substring(nextTag, tagEnd);
-                String imgResult = processRichTextImage(imgTag);
-                if (imgResult != null) {
-                    result += imgResult;
-                }
-            }
-            // Skip other tags (spans, anchors, etc.) — just process their text content
-
-            cursor = tagEnd;
-        }
-
-        return result;
-    }
-
-    /**
-     * Builds a DOCX w:r (run) element with optional formatting.
-     */
-    private static String buildRun(String text, Boolean bold, Boolean italic, Boolean underline) {
-        if (String.isBlank(text)) return '';
-        String rPr = '';
-        if (bold || italic || underline) {
-            rPr = '<w:rPr>';
-            if (bold) rPr += '<w:b/>';
-            if (italic) rPr += '<w:i/>';
-            if (underline) rPr += '<w:u w:val="single"/>';
-            rPr += '</w:rPr>';
-        }
-        return '<w:r>' + rPr + '<w:t xml:space="preserve">' + text.escapeXml() + '</w:t></w:r>';
-    }
-
-    /**
-     * Strips any remaining HTML tags from text content.
-     */
-    private static String stripTags(String text) {
-        return text.replaceAll('<[^>]+>', '');
-    }
-
-    /**
-     * Processes an <img> tag from rich text, fetches the image, and returns DrawingML XML.
-     */
-    private static String processRichTextImage(String imgTag) {
-        // Extract src attribute
-        Integer srcIdx = imgTag.indexOfIgnoreCase('src=');
-        if (srcIdx == -1) return null;
-        srcIdx += 4;
-        while (srcIdx < imgTag.length() && imgTag.substring(srcIdx, srcIdx + 1) == ' ') srcIdx++;
-        String quoteChar = imgTag.substring(srcIdx, srcIdx + 1);
-        if (quoteChar != '"' && quoteChar != '\'') return null;
-        srcIdx++;
-        Integer srcEnd = imgTag.indexOf(quoteChar, srcIdx);
-        if (srcEnd == -1) return null;
-        String src = imgTag.substring(srcIdx, srcEnd).replace('&amp;', '&');
-
-        // Extract optional width/height
-        Integer widthPx = null;
-        Integer heightPx = null;
-        Integer wIdx = imgTag.indexOfIgnoreCase('width=');
-        if (wIdx != -1) {
-            String wVal = extractHtmlAttrValue(imgTag, wIdx + 6);
-            if (wVal != null && wVal.replaceAll('[^0-9]', '').isNumeric()) {
-                widthPx = Integer.valueOf(wVal.replaceAll('[^0-9]', ''));
-            }
-        }
-        Integer hIdx = imgTag.indexOfIgnoreCase('height=');
-        if (hIdx != -1) {
-            String hVal = extractHtmlAttrValue(imgTag, hIdx + 7);
-            if (hVal != null && hVal.replaceAll('[^0-9]', '').isNumeric()) {
-                heightPx = Integer.valueOf(hVal.replaceAll('[^0-9]', ''));
-            }
-        }
-
-        // Resolve image: decode data URIs to blobs, store Salesforce URLs for PDF rendering.
-        // No HTTP callouts or session IDs — AppExchange safe.
-        Blob imageBlob = null;
-        String ext = 'png';
-        try {
-            if (src.startsWith('data:image/')) {
-                // Data URI — decode to blob (for DOCX embedding)
-                String base64Part = src.substringAfter(',');
-                if (src.containsIgnoreCase('jpeg') || src.containsIgnoreCase('jpg')) ext = 'jpeg';
-                imageBlob = EncodingUtil.base64Decode(base64Part);
-            }
-            // For Salesforce URLs (servlet, sfc, https), store URL for PDF rendering.
-            // Blob.toPdf() resolves Salesforce URLs natively via the VF engine.
-            if (src.containsIgnoreCase('.jpg') || src.containsIgnoreCase('.jpeg')) ext = 'jpeg';
-        } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'DocGen: Rich text image processing error: ' + e.getMessage());
-        }
-
-        // Register image — store blob for DOCX and URL for PDF rendering.
-        imageCounter++;
-        String relId = 'rIdImg' + imageCounter;
-        String fileName = 'docgen_image_' + imageCounter + '.' + ext;
-
-        if (imageBlob != null) {
-            Map<String, Object> imgData = new Map<String, Object>{
-                'relId' => relId,
-                'fileName' => fileName,
-                'blob' => imageBlob
-            };
-            // Store source URL for PDF rendering (Blob.toPdf fetches images via URL)
-            if (!src.startsWith('data:')) {
-                imgData.put('url', src);
-            }
-            pendingImages.add(imgData);
-        } else if (String.isNotBlank(src) && !src.startsWith('data:')) {
-            // URL-only: no blob available, store URL for PDF rendering
-            pendingImages.add(new Map<String, Object>{
-                'relId' => relId,
-                'fileName' => fileName,
-                'url' => src
-            });
+    for (String part : parts) {
+      if (current instanceof Map<String, Object>) {
+        Map<String, Object> currentMap = (Map<String, Object>) current;
+        if (currentMap.containsKey(part)) {
+          current = currentMap.get(part);
         } else {
-            return null; // Can't resolve image at all
-        }
-
-        // Build DrawingML
-        Integer widthEmu = (widthPx != null) ? (widthPx * 9525) : (288 * 12700);
-        Integer heightEmu = (heightPx != null) ? (heightPx * 9525) : (216 * 12700);
-
-        return '<w:r><w:drawing>' +
-            '<wp:inline distT="0" distB="0" distL="0" distR="0" ' +
-                'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">' +
-              '<wp:extent cx="' + widthEmu + '" cy="' + heightEmu + '"/>' +
-              '<wp:docPr id="' + imageCounter + '" name="DocGenImage' + imageCounter + '"/>' +
-              '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
-                '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
-                  '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
-                    '<pic:nvPicPr>' +
-                      '<pic:cNvPr id="' + imageCounter + '" name="DocGenImage' + imageCounter + '"/>' +
-                      '<pic:cNvPicPr/>' +
-                    '</pic:nvPicPr>' +
-                    '<pic:blipFill>' +
-                      '<a:blip r:embed="' + relId + '" ' +
-                        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>' +
-                      '<a:stretch><a:fillRect/></a:stretch>' +
-                    '</pic:blipFill>' +
-                    '<pic:spPr>' +
-                      '<a:xfrm>' +
-                        '<a:off x="0" y="0"/>' +
-                        '<a:ext cx="' + widthEmu + '" cy="' + heightEmu + '"/>' +
-                      '</a:xfrm>' +
-                      '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
-                    '</pic:spPr>' +
-                  '</pic:pic>' +
-                '</a:graphicData>' +
-              '</a:graphic>' +
-            '</wp:inline>' +
-            '</w:drawing></w:r>';
-    }
-
-    /**
-     * Extracts an HTML attribute value starting at the given position (after 'attr=').
-     */
-    private static String extractHtmlAttrValue(String tag, Integer startAfterEquals) {
-        Integer pos = startAfterEquals;
-        while (pos < tag.length() && tag.substring(pos, pos + 1) == ' ') pos++;
-        if (pos >= tag.length()) return null;
-        String ch = tag.substring(pos, pos + 1);
-        if (ch == '"' || ch == '\'') {
-            Integer end2 = tag.indexOf(ch, pos + 1);
-            return end2 != -1 ? tag.substring(pos + 1, end2) : null;
-        }
-        // Unquoted value
-        Integer end2 = pos;
-        while (end2 < tag.length() && tag.substring(end2, end2 + 1) != ' ' && tag.substring(end2, end2 + 1) != '>') end2++;
-        return tag.substring(pos, end2);
-    }
-
-    private static String buildImageXml(String fieldValue) {
-        return buildImageXml(fieldValue, null, null);
-    }
-
-    private static String buildImageXml(String fieldValue, Integer widthPx, Integer heightPx) {
-        if (String.isBlank(fieldValue)) return null;
-
-        Blob imageBlob = null;
-        String ext = 'png';
-        String cvImageUrl = null;
-
-        try {
-            // 1. Rich text HTML containing <img> tags
-            if (fieldValue.containsIgnoreCase('<img')) {
-                imageBlob = extractImageFromHtml(fieldValue);
+          // Try case-insensitive comparison
+          Boolean found = false;
+          for (String key : currentMap.keySet()) {
+            if (key.equalsIgnoreCase(part)) {
+              current = currentMap.get(key);
+              found = true;
+              break;
             }
-            // 2. Base64 data URI
-            else if (fieldValue.startsWith('data:image/')) {
-                String base64Part = fieldValue.substringAfter(',');
-                if (fieldValue.containsIgnoreCase('jpeg') || fieldValue.containsIgnoreCase('jpg')) ext = 'jpeg';
-                imageBlob = EncodingUtil.base64Decode(base64Part);
-            }
-            // 3. Raw base64 (no data URI prefix)
-            else if (fieldValue.length() > 100 && !fieldValue.contains('/') && !fieldValue.contains(' ')) {
-                imageBlob = EncodingUtil.base64Decode(fieldValue);
-            }
-            // 4. ContentVersion ID (starts with 068) — works for both DOCX (blob) and PDF (URL)
-            else if (fieldValue.startsWith('068') && fieldValue.length() >= 15) {
-                List<ContentVersion> cvs = [SELECT Id, VersionData, FileExtension FROM ContentVersion WHERE Id = :fieldValue WITH SYSTEM_MODE LIMIT 1];
-                if (!cvs.isEmpty()) {
-                    imageBlob = cvs[0].VersionData;
-                    if (cvs[0].FileExtension != null) ext = cvs[0].FileExtension.toLowerCase();
-                    // Store URL for PDF rendering (committed CV = stable URL)
-                    cvImageUrl = URL.getOrgDomainUrl().toExternalForm() + '/sfc/servlet.shepherd/version/download/' + cvs[0].Id;
-                }
-            }
-            // 5. Salesforce file URL containing refid (rich text image reference)
-            else if (fieldValue.containsIgnoreCase('refid=')) {
-                String refId = fieldValue.substringAfterLast('refid=').substringBefore('&');
-                if (String.isBlank(refId)) refId = fieldValue.substringAfterLast('refid=');
-                imageBlob = fetchSalesforceImage(refId);
-            }
-            // 6. Salesforce servlet/sfc URL
-            else if (fieldValue.containsIgnoreCase('/servlet/') || fieldValue.containsIgnoreCase('/sfc/')) {
-                String docId = fieldValue.substringAfterLast('/');
-                if (docId.contains('?')) docId = docId.substringBefore('?');
-                imageBlob = fetchSalesforceImage(docId);
-            }
-            // 7. Generic HTTPS URL — can't fetch without session ID (AppExchange safe).
-            // For {%ImageField} tags, users should use ContentVersion IDs or data URIs.
-            else if (fieldValue.startsWith('https://')) {
-                System.debug(LoggingLevel.WARN, 'DocGen: External URL images require ContentVersion ID or data URI: ' + fieldValue.left(200));
-            }
-
-            // If no blob but we have a URL, store it for PDF rendering
-            // (Blob.toPdf resolves Salesforce URLs natively via the VF engine)
-            String sourceUrl = null;
-            if (imageBlob == null) {
-                // Try to extract a URL from the field value for PDF
-                if (fieldValue.containsIgnoreCase('<img')) {
-                    // HTML with img tag — extract src URL
-                    Integer sIdx = fieldValue.indexOfIgnoreCase('src=');
-                    if (sIdx != -1) {
-                        sIdx += 4;
-                        while (sIdx < fieldValue.length() && fieldValue.substring(sIdx, sIdx + 1) == ' ') sIdx++;
-                        String qc = fieldValue.substring(sIdx, sIdx + 1);
-                        if (qc == '"' || qc == '\'') {
-                            sIdx++;
-                            Integer sEnd = fieldValue.indexOf(qc, sIdx);
-                            if (sEnd != -1) sourceUrl = fieldValue.substring(sIdx, sEnd).replace('&amp;', '&');
-                        }
-                    }
-                } else if (fieldValue.startsWithIgnoreCase('http') || fieldValue.startsWith('/')) {
-                    sourceUrl = fieldValue;
-                }
-
-                if (String.isBlank(sourceUrl) || sourceUrl.startsWith('data:')) {
-                    System.debug(LoggingLevel.WARN, 'DocGen: Could not resolve image from: ' + fieldValue.left(200));
-                    return null;
-                }
-            }
-
-            imageCounter++;
-            String relId = 'rIdImg' + imageCounter;
-            String fileName = 'docgen_image_' + imageCounter + '.' + ext;
-
-            // Register image — blob for DOCX, URL for PDF
-            Map<String, Object> imgEntry = new Map<String, Object>{
-                'relId' => relId,
-                'fileName' => fileName
-            };
-            if (imageBlob != null) {
-                imgEntry.put('blob', imageBlob);
-            }
-            // Prefer CV URL (committed, works for PDF), fall back to extracted source URL
-            if (cvImageUrl != null) {
-                imgEntry.put('url', cvImageUrl);
-            } else if (sourceUrl != null) {
-                imgEntry.put('url', sourceUrl);
-            }
-            pendingImages.add(imgEntry);
-
-            // Use DrawingML format (<w:drawing>) for broad compatibility.
-            // VML (<w:pict>) works in Word but docx-preview (used for client-side PDF) cannot render it.
-            // DrawingML is the modern OOXML standard supported by Word, docx-preview, and Salesforce rendition API.
-            // EMU conversion: 1px at 96dpi = 9525 EMU, 1pt = 12700 EMU. Default: 4in x 3in
-            Integer widthEmu = (widthPx != null) ? (widthPx * 9525) : (288 * 12700);
-            Integer heightEmu = (heightPx != null) ? (heightPx * 9525) : (216 * 12700);
-
-            return '</w:t></w:r>' +
-                '<w:r><w:drawing>' +
-                '<wp:inline distT="0" distB="0" distL="0" distR="0" ' +
-                    'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">' +
-                  '<wp:extent cx="' + widthEmu + '" cy="' + heightEmu + '"/>' +
-                  '<wp:docPr id="' + imageCounter + '" name="DocGenImage' + imageCounter + '"/>' +
-                  '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
-                    '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
-                      '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
-                        '<pic:nvPicPr>' +
-                          '<pic:cNvPr id="' + imageCounter + '" name="DocGenImage' + imageCounter + '"/>' +
-                          '<pic:cNvPicPr/>' +
-                        '</pic:nvPicPr>' +
-                        '<pic:blipFill>' +
-                          '<a:blip r:embed="' + relId + '" ' +
-                            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>' +
-                          '<a:stretch><a:fillRect/></a:stretch>' +
-                        '</pic:blipFill>' +
-                        '<pic:spPr>' +
-                          '<a:xfrm>' +
-                            '<a:off x="0" y="0"/>' +
-                            '<a:ext cx="' + widthEmu + '" cy="' + heightEmu + '"/>' +
-                          '</a:xfrm>' +
-                          '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
-                        '</pic:spPr>' +
-                      '</pic:pic>' +
-                    '</a:graphicData>' +
-                  '</a:graphic>' +
-                '</wp:inline>' +
-                '</w:drawing></w:r><w:r><w:t xml:space="preserve">';
-
-        } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'DocGen: Image injection error: ' + e.getMessage());
+          }
+          if (!found) {
             return null;
+          }
         }
-    }
-
-    /**
-     * Extracts the first image from rich text HTML.
-     * Handles data URIs, Salesforce servlet URLs (via session-based auth), and refid references.
-     */
-    private static Blob extractImageFromHtml(String html) {
-        // Use string parsing instead of regex to avoid "Regex too complicated" on large base64 data
-        Integer imgIdx = html.indexOfIgnoreCase('<img');
-        if (imgIdx == -1) return null;
-
-        Integer srcIdx = html.indexOfIgnoreCase('src=', imgIdx);
-        if (srcIdx == -1) return null;
-
-        srcIdx += 4; // skip 'src='
-        // Skip optional whitespace
-        while (srcIdx < html.length() && html.substring(srcIdx, srcIdx + 1) == ' ') srcIdx++;
-
-        // Determine quote character
-        String quoteChar = html.substring(srcIdx, srcIdx + 1);
-        if (quoteChar != '"' && quoteChar != '\'') return null;
-        srcIdx++; // skip opening quote
-
-        Integer srcEnd = html.indexOf(quoteChar, srcIdx);
-        if (srcEnd == -1) return null;
-
-        String src = html.substring(srcIdx, srcEnd).replace('&amp;', '&');
-
-        // Data URI — decode to blob
-        if (src.startsWith('data:image/')) {
-            String base64Part = src.substringAfter(',');
-            return EncodingUtil.base64Decode(base64Part);
-        }
-
-        // Salesforce URLs — can't fetch without session ID (AppExchange limitation).
-        // For PDF, Blob.toPdf() resolves these URLs natively via the VF engine.
-        // Return null here; the caller will use the URL path for PDF rendering.
-        return null;
-    }
-
-    // No session-based HTTP fetch methods — AppExchange safe.
-    // Blob.toPdf() resolves Salesforce URLs natively via the VF rendering engine.
-
-    /**
-     * Fetches image blob from a Salesforce file reference (ContentDocument ID or ContentVersion ID).
-     */
-    private static Blob fetchSalesforceImage(String fileRef) {
-        if (String.isBlank(fileRef)) return null;
+      } else if (current instanceof SObject) {
+        SObject sobj = (SObject) current;
         try {
-            // Try as ContentVersion ID first
-            if (fileRef.startsWith('068')) {
-                List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :fileRef WITH SYSTEM_MODE LIMIT 1];
-                if (!cvs.isEmpty()) return cvs[0].VersionData;
-            }
-            // Try as ContentDocument ID
-            if (fileRef.startsWith('069')) {
-                List<ContentDocument> docs = [SELECT LatestPublishedVersionId FROM ContentDocument WHERE Id = :fileRef WITH SYSTEM_MODE LIMIT 1];
-                if (!docs.isEmpty() && docs[0].LatestPublishedVersionId != null) {
-                    Id latestCvId = docs[0].LatestPublishedVersionId;
-                    List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :latestCvId WITH SYSTEM_MODE LIMIT 1];
-                    if (!cvs.isEmpty()) return cvs[0].VersionData;
-                }
-            }
-            // Try as a generic ID that could be linked
-            if (fileRef.length() >= 15) {
-                List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :fileRef WITH SYSTEM_MODE LIMIT 1];
-                if (!cvs.isEmpty()) return cvs[0].VersionData;
-            }
+          current = sobj.get(part);
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: Failed to fetch image for ref: ' + fileRef + ' - ' + e.getMessage());
+          return null;
         }
+      } else {
+        return null;
+      }
+      if (current == null)
         return null;
     }
+    return current;
+  }
 
+  /**
+   * Builds OOXML drawing markup for an image and registers it for ZIP injection.
+   * Accepts: HTML with <img> tags, Salesforce file references (/servlet/..., /sfc/..., refid=...),
+   * ContentVersion IDs, or base64 data URIs.
+   */
+  /**
+   * Converts rich text HTML to DOCX XML (w:p, w:r, w:t elements).
+   * Preserves text, basic formatting (bold/italic/underline), multiple images, and paragraphs.
+   * Returns DOCX XML that closes the current run/paragraph context and reopens it after.
+   */
+  private static String convertRichTextToDocxXml(String html) {
+    // Normalize: replace common entities and whitespace
+    html = html.replace('&nbsp;', ' ')
+      .replace('&amp;', '&')
+      .replace('&lt;', '<')
+      .replace('&gt;', '>');
 
-    private static Id saveFile(Blob fileBlob, String title, Id recordId, String format, String type) {
-        ContentVersion cv = new ContentVersion();
-        String baseName = title != null ? title : 'Generated_Document';
+    // Split into paragraphs by <p>, <div>, and <br> tags
+    // First, normalize paragraph boundaries: replace </p><p>, </div><div>, <br>, <br/> with a delimiter
+    String delim = '\n__PARA__\n';
+    String normalized = html;
+    normalized = normalized.replaceAll('(?i)</p>\\s*<p[^>]*>', delim);
+    normalized = normalized.replaceAll('(?i)</div>\\s*<div[^>]*>', delim);
+    normalized = normalized.replaceAll('(?i)<br\\s*/?>', delim);
+    normalized = normalized.replaceAll('(?i)</?p[^>]*>', delim);
+    normalized = normalized.replaceAll('(?i)</?div[^>]*>', delim);
 
-        String ext = (type == 'PowerPoint') ? '.pptx' : '.docx';
-        cv.Title = baseName;
-        cv.PathOnClient = baseName + ext;
-        cv.VersionData = fileBlob;
-        cv.FirstPublishLocationId = recordId;
-        SObjectAccessDecision cvDecision = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentVersion>{ cv });
-        insert cvDecision.getRecords();
-        Id savedCvId = cvDecision.getRecords()[0].Id;
+    List<String> paragraphs = normalized.split(delim);
 
-        return [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :savedCvId WITH SYSTEM_MODE].ContentDocumentId;
+    // Build DOCX XML: close current context, emit paragraphs, reopen context
+    String result = '</w:t></w:r>'; // close current run
+
+    Boolean firstPara = true;
+    for (String para : paragraphs) {
+      String trimmed = para.trim();
+      if (String.isBlank(trimmed))
+        continue;
+
+      if (!firstPara) {
+        result += '</w:p><w:p>'; // new paragraph
+      } else {
+        // Continue in the same paragraph as the merge tag
+        firstPara = false;
+      }
+
+      // Process inline content within this paragraph
+      result += processInlineHtml(trimmed);
     }
 
-    /**
-     * Saves a PDF Blob as a ContentVersion attached to the record.
-     */
-    private static Id savePdfFile(Blob pdfBlob, String title, Id recordId) {
-        ContentVersion cv = new ContentVersion();
-        String baseName = title != null ? title : 'Generated_Document';
-        cv.Title = baseName;
-        cv.PathOnClient = baseName + '.pdf';
-        cv.VersionData = pdfBlob;
-        cv.FirstPublishLocationId = recordId;
-        SObjectAccessDecision cvDecision = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentVersion>{ cv });
-        insert cvDecision.getRecords();
-        Id savedCvId = cvDecision.getRecords()[0].Id;
-
-        return [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :savedCvId WITH SYSTEM_MODE].ContentDocumentId;
-    }
-    /**
-     * Extracts an attribute value from an XML tag string.
-     * E.g., extractXmlAttrValue('<Relationship Id="rId1" Target="media/image1.png"/>', 'Id') returns 'rId1'
-     */
-    private static String extractXmlAttrValue(String tag, String attrName) {
-        String search = attrName + '="';
-        Integer start = tag.indexOf(search);
-        if (start == -1) return null;
-        start += search.length();
-        Integer end2 = tag.indexOf('"', start);
-        if (end2 == -1) return null;
-        return tag.substring(start, end2);
+    // If we never output anything, just return empty text
+    if (firstPara) {
+      return '';
     }
 
-    private static String generateDocTitle(String format, Map<String, Object> data) {
-        if (String.isBlank(format)) return null;
-        String result = format;
-        Pattern p = Pattern.compile('\\{([^}]+)\\}');
-        Matcher m = p.matcher(format);
-        while(m.find()) {
-            String key = m.group(1);
-            Object val = resolveValue(data, key);
-            if (val != null) {
-                 result = result.replace('{' + key + '}', String.valueOf(val));
-            } else {
-                result = result.replace('{' + key + '}', '');
-            }
+    // Reopen run/text context for any content after the merge tag
+    result += '<w:r><w:t xml:space="preserve">';
+    return result;
+  }
+
+  /**
+   * Processes inline HTML elements within a paragraph into DOCX w:r elements.
+   * Handles <b>, <i>, <u>, <strong>, <em>, <span>, <img>, and plain text.
+   */
+  private static String processInlineHtml(String html) {
+    String result = '';
+    Integer cursor = 0;
+
+    // Track formatting state
+    Boolean isBold = false;
+    Boolean isItalic = false;
+    Boolean isUnderline = false;
+
+    while (cursor < html.length()) {
+      Integer nextTag = html.indexOf('<', cursor);
+
+      if (nextTag == -1) {
+        // Remaining plain text
+        String text = html.substring(cursor).trim();
+        if (String.isNotBlank(text)) {
+          result += buildRun(stripTags(text), isBold, isItalic, isUnderline);
         }
-        return result;
+        break;
+      }
+
+      // Text before the tag
+      if (nextTag > cursor) {
+        String text = html.substring(cursor, nextTag);
+        if (String.isNotBlank(text)) {
+          result += buildRun(stripTags(text), isBold, isItalic, isUnderline);
+        }
+      }
+
+      // Find end of tag
+      Integer tagEnd = html.indexOf('>', nextTag);
+      if (tagEnd == -1)
+        break;
+      tagEnd++;
+
+      String tag = html.substring(nextTag, tagEnd).toLowerCase();
+
+      // Handle formatting tags
+      if (
+        tag.startsWith('<b>') ||
+        tag.startsWith('<b ') ||
+        tag.startsWith('<strong')
+      ) {
+        isBold = true;
+      } else if (tag.startsWith('</b>') || tag.startsWith('</strong')) {
+        isBold = false;
+      } else if (
+        tag.startsWith('<i>') ||
+        tag.startsWith('<i ') ||
+        tag.startsWith('<em')
+      ) {
+        isItalic = true;
+      } else if (tag.startsWith('</i>') || tag.startsWith('</em')) {
+        isItalic = false;
+      } else if (tag.startsWith('<u>') || tag.startsWith('<u ')) {
+        isUnderline = true;
+      } else if (tag.startsWith('</u>')) {
+        isUnderline = false;
+      } else if (tag.startsWith('<img')) {
+        // Extract image from <img> tag
+        String imgTag = html.substring(nextTag, tagEnd);
+        String imgResult = processRichTextImage(imgTag);
+        if (imgResult != null) {
+          result += imgResult;
+        }
+      }
+      // Skip other tags (spans, anchors, etc.) — just process their text content
+
+      cursor = tagEnd;
     }
+
+    return result;
+  }
+
+  /**
+   * Builds a DOCX w:r (run) element with optional formatting.
+   */
+  private static String buildRun(
+    String text,
+    Boolean bold,
+    Boolean italic,
+    Boolean underline
+  ) {
+    if (String.isBlank(text))
+      return '';
+    String rPr = '';
+    if (bold || italic || underline) {
+      rPr = '<w:rPr>';
+      if (bold)
+        rPr += '<w:b/>';
+      if (italic)
+        rPr += '<w:i/>';
+      if (underline)
+        rPr += '<w:u w:val="single"/>';
+      rPr += '</w:rPr>';
+    }
+    return '<w:r>' +
+      rPr +
+      '<w:t xml:space="preserve">' +
+      text.escapeXml() +
+      '</w:t></w:r>';
+  }
+
+  /**
+   * Strips any remaining HTML tags from text content.
+   */
+  private static String stripTags(String text) {
+    return text.replaceAll('<[^>]+>', '');
+  }
+
+  /**
+   * Processes an <img> tag from rich text, fetches the image, and returns DrawingML XML.
+   */
+  private static String processRichTextImage(String imgTag) {
+    // Extract src attribute
+    Integer srcIdx = imgTag.indexOfIgnoreCase('src=');
+    if (srcIdx == -1)
+      return null;
+    srcIdx += 4;
+    while (
+      srcIdx < imgTag.length() &&
+      imgTag.substring(srcIdx, srcIdx + 1) == ' '
+    )
+      srcIdx++;
+    String quoteChar = imgTag.substring(srcIdx, srcIdx + 1);
+    if (quoteChar != '"' && quoteChar != '\'')
+      return null;
+    srcIdx++;
+    Integer srcEnd = imgTag.indexOf(quoteChar, srcIdx);
+    if (srcEnd == -1)
+      return null;
+    String src = imgTag.substring(srcIdx, srcEnd).replace('&amp;', '&');
+
+    // Extract optional width/height
+    Integer widthPx = null;
+    Integer heightPx = null;
+    Integer wIdx = imgTag.indexOfIgnoreCase('width=');
+    if (wIdx != -1) {
+      String wVal = extractHtmlAttrValue(imgTag, wIdx + 6);
+      if (wVal != null && wVal.replaceAll('[^0-9]', '').isNumeric()) {
+        widthPx = Integer.valueOf(wVal.replaceAll('[^0-9]', ''));
+      }
+    }
+    Integer hIdx = imgTag.indexOfIgnoreCase('height=');
+    if (hIdx != -1) {
+      String hVal = extractHtmlAttrValue(imgTag, hIdx + 7);
+      if (hVal != null && hVal.replaceAll('[^0-9]', '').isNumeric()) {
+        heightPx = Integer.valueOf(hVal.replaceAll('[^0-9]', ''));
+      }
+    }
+
+    // Resolve image: decode data URIs to blobs, store Salesforce URLs for PDF rendering.
+    // No HTTP callouts or session IDs — AppExchange safe.
+    Blob imageBlob = null;
+    String ext = 'png';
+    try {
+      if (src.startsWith('data:image/')) {
+        // Data URI — decode to blob (for DOCX embedding)
+        String base64Part = src.substringAfter(',');
+        if (src.containsIgnoreCase('jpeg') || src.containsIgnoreCase('jpg'))
+          ext = 'jpeg';
+        imageBlob = EncodingUtil.base64Decode(base64Part);
+      }
+      // For Salesforce URLs (servlet, sfc, https), store URL for PDF rendering.
+      // Blob.toPdf() resolves Salesforce URLs natively via the VF engine.
+      if (src.containsIgnoreCase('.jpg') || src.containsIgnoreCase('.jpeg'))
+        ext = 'jpeg';
+    } catch (Exception e) {
+      System.debug(
+        LoggingLevel.ERROR,
+        'DocGen: Rich text image processing error: ' + e.getMessage()
+      );
+    }
+
+    // Register image — store blob for DOCX and URL for PDF rendering.
+    imageCounter++;
+    String relId = 'rIdImg' + imageCounter;
+    String fileName = 'docgen_image_' + imageCounter + '.' + ext;
+
+    if (imageBlob != null) {
+      Map<String, Object> imgData = new Map<String, Object>{
+        'relId' => relId,
+        'fileName' => fileName,
+        'blob' => imageBlob
+      };
+      // Store source URL for PDF rendering (Blob.toPdf fetches images via URL)
+      if (!src.startsWith('data:')) {
+        imgData.put('url', src);
+      }
+      pendingImages.add(imgData);
+    } else if (String.isNotBlank(src) && !src.startsWith('data:')) {
+      // URL-only: no blob available, store URL for PDF rendering
+      pendingImages.add(
+        new Map<String, Object>{
+          'relId' => relId,
+          'fileName' => fileName,
+          'url' => src
+        }
+      );
+    } else {
+      return null; // Can't resolve image at all
+    }
+
+    // Build DrawingML
+    Integer widthEmu = (widthPx != null) ? (widthPx * 9525) : (288 * 12700);
+    Integer heightEmu = (heightPx != null) ? (heightPx * 9525) : (216 * 12700);
+
+    return '<w:r><w:drawing>' +
+      '<wp:inline distT="0" distB="0" distL="0" distR="0" ' +
+      'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">' +
+      '<wp:extent cx="' +
+      widthEmu +
+      '" cy="' +
+      heightEmu +
+      '"/>' +
+      '<wp:docPr id="' +
+      imageCounter +
+      '" name="DocGenImage' +
+      imageCounter +
+      '"/>' +
+      '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+      '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+      '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+      '<pic:nvPicPr>' +
+      '<pic:cNvPr id="' +
+      imageCounter +
+      '" name="DocGenImage' +
+      imageCounter +
+      '"/>' +
+      '<pic:cNvPicPr/>' +
+      '</pic:nvPicPr>' +
+      '<pic:blipFill>' +
+      '<a:blip r:embed="' +
+      relId +
+      '" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>' +
+      '<a:stretch><a:fillRect/></a:stretch>' +
+      '</pic:blipFill>' +
+      '<pic:spPr>' +
+      '<a:xfrm>' +
+      '<a:off x="0" y="0"/>' +
+      '<a:ext cx="' +
+      widthEmu +
+      '" cy="' +
+      heightEmu +
+      '"/>' +
+      '</a:xfrm>' +
+      '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
+      '</pic:spPr>' +
+      '</pic:pic>' +
+      '</a:graphicData>' +
+      '</a:graphic>' +
+      '</wp:inline>' +
+      '</w:drawing></w:r>';
+  }
+
+  /**
+   * Extracts an HTML attribute value starting at the given position (after 'attr=').
+   */
+  private static String extractHtmlAttrValue(
+    String tag,
+    Integer startAfterEquals
+  ) {
+    Integer pos = startAfterEquals;
+    while (pos < tag.length() && tag.substring(pos, pos + 1) == ' ')
+      pos++;
+    if (pos >= tag.length())
+      return null;
+    String ch = tag.substring(pos, pos + 1);
+    if (ch == '"' || ch == '\'') {
+      Integer end2 = tag.indexOf(ch, pos + 1);
+      return end2 != -1 ? tag.substring(pos + 1, end2) : null;
+    }
+    // Unquoted value
+    Integer end2 = pos;
+    while (
+      end2 < tag.length() &&
+      tag.substring(end2, end2 + 1) != ' ' &&
+      tag.substring(end2, end2 + 1) != '>'
+    )
+      end2++;
+    return tag.substring(pos, end2);
+  }
+
+  private static String buildImageXml(String fieldValue) {
+    return buildImageXml(fieldValue, null, null);
+  }
+
+  private static String buildImageXml(
+    String fieldValue,
+    Integer widthPx,
+    Integer heightPx
+  ) {
+    if (String.isBlank(fieldValue))
+      return null;
+
+    Blob imageBlob = null;
+    String ext = 'png';
+    String cvImageUrl = null;
+
+    try {
+      // 1. Rich text HTML containing <img> tags
+      if (fieldValue.containsIgnoreCase('<img')) {
+        imageBlob = extractImageFromHtml(fieldValue);
+      }
+      // 2. Base64 data URI
+      else if (fieldValue.startsWith('data:image/')) {
+        String base64Part = fieldValue.substringAfter(',');
+        if (
+          fieldValue.containsIgnoreCase('jpeg') ||
+          fieldValue.containsIgnoreCase('jpg')
+        )
+          ext = 'jpeg';
+        imageBlob = EncodingUtil.base64Decode(base64Part);
+      }
+      // 3. Raw base64 (no data URI prefix)
+      else if (
+        fieldValue.length() > 100 &&
+        !fieldValue.contains('/') &&
+        !fieldValue.contains(' ')
+      ) {
+        imageBlob = EncodingUtil.base64Decode(fieldValue);
+      }
+      // 4. ContentVersion ID (starts with 068) — works for both DOCX (blob) and PDF (URL)
+      else if (fieldValue.startsWith('068') && fieldValue.length() >= 15) {
+        List<ContentVersion> cvs = [
+          SELECT Id, VersionData, FileExtension
+          FROM ContentVersion
+          WHERE Id = :fieldValue
+          WITH SYSTEM_MODE
+          LIMIT 1
+        ];
+        if (!cvs.isEmpty()) {
+          imageBlob = cvs[0].VersionData;
+          if (cvs[0].FileExtension != null)
+            ext = cvs[0].FileExtension.toLowerCase();
+          // Store URL for PDF rendering (committed CV = stable URL)
+          cvImageUrl =
+            URL.getOrgDomainUrl().toExternalForm() +
+            '/sfc/servlet.shepherd/version/download/' +
+            cvs[0].Id;
+        }
+      }
+      // 5. Salesforce file URL containing refid (rich text image reference)
+      else if (fieldValue.containsIgnoreCase('refid=')) {
+        String refId = fieldValue.substringAfterLast('refid=')
+          .substringBefore('&');
+        if (String.isBlank(refId))
+          refId = fieldValue.substringAfterLast('refid=');
+        imageBlob = fetchSalesforceImage(refId);
+      }
+      // 6. Salesforce servlet/sfc URL
+      else if (
+        fieldValue.containsIgnoreCase('/servlet/') ||
+        fieldValue.containsIgnoreCase('/sfc/')
+      ) {
+        String docId = fieldValue.substringAfterLast('/');
+        if (docId.contains('?'))
+          docId = docId.substringBefore('?');
+        imageBlob = fetchSalesforceImage(docId);
+      }
+      // 7. Generic HTTPS URL — can't fetch without session ID (AppExchange safe).
+      // For {%ImageField} tags, users should use ContentVersion IDs or data URIs.
+      else if (fieldValue.startsWith('https://')) {
+        System.debug(
+          LoggingLevel.WARN,
+          'DocGen: External URL images require ContentVersion ID or data URI: ' +
+          fieldValue.left(200)
+        );
+      }
+
+      // If no blob but we have a URL, store it for PDF rendering
+      // (Blob.toPdf resolves Salesforce URLs natively via the VF engine)
+      String sourceUrl = null;
+      if (imageBlob == null) {
+        // Try to extract a URL from the field value for PDF
+        if (fieldValue.containsIgnoreCase('<img')) {
+          // HTML with img tag — extract src URL
+          Integer sIdx = fieldValue.indexOfIgnoreCase('src=');
+          if (sIdx != -1) {
+            sIdx += 4;
+            while (
+              sIdx < fieldValue.length() &&
+              fieldValue.substring(sIdx, sIdx + 1) == ' '
+            )
+              sIdx++;
+            String qc = fieldValue.substring(sIdx, sIdx + 1);
+            if (qc == '"' || qc == '\'') {
+              sIdx++;
+              Integer sEnd = fieldValue.indexOf(qc, sIdx);
+              if (sEnd != -1)
+                sourceUrl = fieldValue.substring(sIdx, sEnd)
+                  .replace('&amp;', '&');
+            }
+          }
+        } else if (
+          fieldValue.startsWithIgnoreCase('http') || fieldValue.startsWith('/')
+        ) {
+          sourceUrl = fieldValue;
+        }
+
+        if (String.isBlank(sourceUrl) || sourceUrl.startsWith('data:')) {
+          System.debug(
+            LoggingLevel.WARN,
+            'DocGen: Could not resolve image from: ' + fieldValue.left(200)
+          );
+          return null;
+        }
+      }
+
+      imageCounter++;
+      String relId = 'rIdImg' + imageCounter;
+      String fileName = 'docgen_image_' + imageCounter + '.' + ext;
+
+      // Register image — blob for DOCX, URL for PDF
+      Map<String, Object> imgEntry = new Map<String, Object>{
+        'relId' => relId,
+        'fileName' => fileName
+      };
+      if (imageBlob != null) {
+        imgEntry.put('blob', imageBlob);
+      }
+      // Prefer CV URL (committed, works for PDF), fall back to extracted source URL
+      if (cvImageUrl != null) {
+        imgEntry.put('url', cvImageUrl);
+      } else if (sourceUrl != null) {
+        imgEntry.put('url', sourceUrl);
+      }
+      pendingImages.add(imgEntry);
+
+      // Use DrawingML format (<w:drawing>) for broad compatibility.
+      // VML (<w:pict>) works in Word but docx-preview (used for client-side PDF) cannot render it.
+      // DrawingML is the modern OOXML standard supported by Word, docx-preview, and Salesforce rendition API.
+      // EMU conversion: 1px at 96dpi = 9525 EMU, 1pt = 12700 EMU. Default: 4in x 3in
+      Integer widthEmu = (widthPx != null) ? (widthPx * 9525) : (288 * 12700);
+      Integer heightEmu = (heightPx != null)
+        ? (heightPx * 9525)
+        : (216 * 12700);
+
+      return '</w:t></w:r>' +
+        '<w:r><w:drawing>' +
+        '<wp:inline distT="0" distB="0" distL="0" distR="0" ' +
+        'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">' +
+        '<wp:extent cx="' +
+        widthEmu +
+        '" cy="' +
+        heightEmu +
+        '"/>' +
+        '<wp:docPr id="' +
+        imageCounter +
+        '" name="DocGenImage' +
+        imageCounter +
+        '"/>' +
+        '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+        '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+        '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+        '<pic:nvPicPr>' +
+        '<pic:cNvPr id="' +
+        imageCounter +
+        '" name="DocGenImage' +
+        imageCounter +
+        '"/>' +
+        '<pic:cNvPicPr/>' +
+        '</pic:nvPicPr>' +
+        '<pic:blipFill>' +
+        '<a:blip r:embed="' +
+        relId +
+        '" ' +
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>' +
+        '<a:stretch><a:fillRect/></a:stretch>' +
+        '</pic:blipFill>' +
+        '<pic:spPr>' +
+        '<a:xfrm>' +
+        '<a:off x="0" y="0"/>' +
+        '<a:ext cx="' +
+        widthEmu +
+        '" cy="' +
+        heightEmu +
+        '"/>' +
+        '</a:xfrm>' +
+        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
+        '</pic:spPr>' +
+        '</pic:pic>' +
+        '</a:graphicData>' +
+        '</a:graphic>' +
+        '</wp:inline>' +
+        '</w:drawing></w:r><w:r><w:t xml:space="preserve">';
+    } catch (Exception e) {
+      System.debug(
+        LoggingLevel.ERROR,
+        'DocGen: Image injection error: ' + e.getMessage()
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Extracts the first image from rich text HTML.
+   * Handles data URIs, Salesforce servlet URLs (via session-based auth), and refid references.
+   */
+  private static Blob extractImageFromHtml(String html) {
+    // Use string parsing instead of regex to avoid "Regex too complicated" on large base64 data
+    Integer imgIdx = html.indexOfIgnoreCase('<img');
+    if (imgIdx == -1)
+      return null;
+
+    Integer srcIdx = html.indexOfIgnoreCase('src=', imgIdx);
+    if (srcIdx == -1)
+      return null;
+
+    srcIdx += 4; // skip 'src='
+    // Skip optional whitespace
+    while (srcIdx < html.length() && html.substring(srcIdx, srcIdx + 1) == ' ')
+      srcIdx++;
+
+    // Determine quote character
+    String quoteChar = html.substring(srcIdx, srcIdx + 1);
+    if (quoteChar != '"' && quoteChar != '\'')
+      return null;
+    srcIdx++; // skip opening quote
+
+    Integer srcEnd = html.indexOf(quoteChar, srcIdx);
+    if (srcEnd == -1)
+      return null;
+
+    String src = html.substring(srcIdx, srcEnd).replace('&amp;', '&');
+
+    // Data URI — decode to blob
+    if (src.startsWith('data:image/')) {
+      String base64Part = src.substringAfter(',');
+      return EncodingUtil.base64Decode(base64Part);
+    }
+
+    // Salesforce URLs — can't fetch without session ID (AppExchange limitation).
+    // For PDF, Blob.toPdf() resolves these URLs natively via the VF engine.
+    // Return null here; the caller will use the URL path for PDF rendering.
+    return null;
+  }
+
+  // No session-based HTTP fetch methods — AppExchange safe.
+  // Blob.toPdf() resolves Salesforce URLs natively via the VF rendering engine.
+
+  /**
+   * Fetches image blob from a Salesforce file reference (ContentDocument ID or ContentVersion ID).
+   */
+  private static Blob fetchSalesforceImage(String fileRef) {
+    if (String.isBlank(fileRef))
+      return null;
+    try {
+      // Try as ContentVersion ID first
+      if (fileRef.startsWith('068')) {
+        List<ContentVersion> cvs = [
+          SELECT VersionData
+          FROM ContentVersion
+          WHERE Id = :fileRef
+          WITH SYSTEM_MODE
+          LIMIT 1
+        ];
+        if (!cvs.isEmpty())
+          return cvs[0].VersionData;
+      }
+      // Try as ContentDocument ID
+      if (fileRef.startsWith('069')) {
+        List<ContentDocument> docs = [
+          SELECT LatestPublishedVersionId
+          FROM ContentDocument
+          WHERE Id = :fileRef
+          WITH SYSTEM_MODE
+          LIMIT 1
+        ];
+        if (!docs.isEmpty() && docs[0].LatestPublishedVersionId != null) {
+          Id latestCvId = docs[0].LatestPublishedVersionId;
+          List<ContentVersion> cvs = [
+            SELECT VersionData
+            FROM ContentVersion
+            WHERE Id = :latestCvId
+            WITH SYSTEM_MODE
+            LIMIT 1
+          ];
+          if (!cvs.isEmpty())
+            return cvs[0].VersionData;
+        }
+      }
+      // Try as a generic ID that could be linked
+      if (fileRef.length() >= 15) {
+        List<ContentVersion> cvs = [
+          SELECT VersionData
+          FROM ContentVersion
+          WHERE Id = :fileRef
+          WITH SYSTEM_MODE
+          LIMIT 1
+        ];
+        if (!cvs.isEmpty())
+          return cvs[0].VersionData;
+      }
+    } catch (Exception e) {
+      System.debug(
+        LoggingLevel.WARN,
+        'DocGen: Failed to fetch image for ref: ' +
+          fileRef +
+          ' - ' +
+          e.getMessage()
+      );
+    }
+    return null;
+  }
+
+  private static Id saveFile(
+    Blob fileBlob,
+    String title,
+    Id recordId,
+    String format,
+    String type
+  ) {
+    ContentVersion cv = new ContentVersion();
+    String baseName = title != null ? title : 'Generated_Document';
+
+    String ext = (type == 'PowerPoint') ? '.pptx' : '.docx';
+    cv.Title = baseName;
+    cv.PathOnClient = baseName + ext;
+    cv.VersionData = fileBlob;
+    cv.FirstPublishLocationId = recordId;
+    SObjectAccessDecision cvDecision = Security.stripInaccessible(
+      AccessType.CREATABLE,
+      new List<ContentVersion>{ cv }
+    );
+    insert cvDecision.getRecords();
+    Id savedCvId = cvDecision.getRecords()[0].Id;
+
+    return [
+      SELECT ContentDocumentId
+      FROM ContentVersion
+      WHERE Id = :savedCvId
+      WITH SYSTEM_MODE
+    ]
+    .ContentDocumentId;
+  }
+
+  /**
+   * Saves a PDF Blob as a ContentVersion attached to the record.
+   */
+  private static Id savePdfFile(Blob pdfBlob, String title, Id recordId) {
+    ContentVersion cv = new ContentVersion();
+    String baseName = title != null ? title : 'Generated_Document';
+    cv.Title = baseName;
+    cv.PathOnClient = baseName + '.pdf';
+    cv.VersionData = pdfBlob;
+    cv.FirstPublishLocationId = recordId;
+    SObjectAccessDecision cvDecision = Security.stripInaccessible(
+      AccessType.CREATABLE,
+      new List<ContentVersion>{ cv }
+    );
+    insert cvDecision.getRecords();
+    Id savedCvId = cvDecision.getRecords()[0].Id;
+
+    return [
+      SELECT ContentDocumentId
+      FROM ContentVersion
+      WHERE Id = :savedCvId
+      WITH SYSTEM_MODE
+    ]
+    .ContentDocumentId;
+  }
+  /**
+   * Extracts an attribute value from an XML tag string.
+   * E.g., extractXmlAttrValue('<Relationship Id="rId1" Target="media/image1.png"/>', 'Id') returns 'rId1'
+   */
+  private static String extractXmlAttrValue(String tag, String attrName) {
+    String search = attrName + '="';
+    Integer start = tag.indexOf(search);
+    if (start == -1)
+      return null;
+    start += search.length();
+    Integer end2 = tag.indexOf('"', start);
+    if (end2 == -1)
+      return null;
+    return tag.substring(start, end2);
+  }
+
+  private static String generateDocTitle(
+    String format,
+    Map<String, Object> data
+  ) {
+    if (String.isBlank(format))
+      return null;
+    String result = format;
+    Pattern p = Pattern.compile('\\{([^}]+)\\}');
+    Matcher m = p.matcher(format);
+    while (m.find()) {
+      String key = m.group(1);
+      Object val = resolveValue(data, key);
+      if (val != null) {
+        result = result.replace('{' + key + '}', String.valueOf(val));
+      } else {
+        result = result.replace('{' + key + '}', '');
+      }
+    }
+    return result;
+  }
 }

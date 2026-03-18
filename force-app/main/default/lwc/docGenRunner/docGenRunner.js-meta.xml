@@ -1,18 +1,28 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>66.0</apiVersion>
     <isExposed>true</isExposed>
     <targets>
         <target>lightning__RecordPage</target>
         <target>lightning__AppPage</target>
-        <target>
-        lightning__FlowScreen</target>
+        <target>lightning__FlowScreen</target>
     </targets>
     <targetConfigs>
-
+        <targetConfig targets="lightning__RecordPage,lightning__AppPage">
+            <property
+        name="enableClientSideGeneration"
+        type="Boolean"
+        label="Enable Client-Side Generation"
+        description="When enabled, DOCX files are assembled in the browser to avoid Apex heap limits. Does not support PDF or PowerPoint output."
+      />
+        </targetConfig>
         <targetConfig targets="lightning__FlowScreen">
             <property name="recordId" type="String" label="Record ID" />
-            <property name="objectApiName" type="String" label="Object API Name" />
+            <property
+        name="objectApiName"
+        type="String"
+        label="Object API Name"
+      />
         </targetConfig>
     </targetConfigs>
 </LightningComponentBundle>

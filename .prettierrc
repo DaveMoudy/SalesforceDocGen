@@ -1,5 +1,6 @@
 {
   "trailingComma": "none",
+  "apexStandaloneParser": "none",
   "plugins": [
     "prettier-plugin-apex",
     "@prettier/plugin-xml"

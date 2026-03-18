@@ -46,3 +46,13 @@ $RECYCLE.BIN/
 **/__pycache__/
 **/.venv/
 **/venv/
+
+# Git worktrees
+.worktrees/
+
+# Claude Local session docs (not for commit)
+docs/session-*.md
+docs/pr-*.md
+docs/plans/
+*/.claude/*
+*/settings.local.json

@@ -1,48 +1,101 @@
 <template>
-    <lightning-card title="Document Generator" icon-name="custom:custom18">
-        <div class="slds-var-p-around_medium">
-            <template lwc:if={error}>
-                <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_error" role="alert">
-                    <span class="slds-assistive-text">error</span>
-                    <h2>{error}</h2>
-                </div>
-            </template>
-
-            <template lwc:if={isLoading}>
-                 <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
-            </template>
-            
-            <template lwc:else>
-                <lightning-combobox
-                    name="template"
-                    label="Select Template"
-                    value={selectedTemplateId}
-                    placeholder="Choose a template..."
-                    options={templateOptions}
-                    onchange={handleTemplateChange}
-                    class="slds-var-m-bottom_medium">
-                </lightning-combobox>
-
-                <div class="slds-var-m-bottom_medium">
-                    <lightning-radio-group
-                        name="outputMode"
-                        label="Action"
-                        options={outputOptions}
-                        value={outputMode}
-                        onchange={handleOutputModeChange}
-                        type="button">
-                    </lightning-radio-group>
-                </div>
-
-                <lightning-button 
-                    variant="brand" 
-                    label="Generate Document" 
-                    onclick={generateDocument} 
-                    disabled={isGenerateDisabled}
-                    class="slds-var-m-top_medium">
-                </lightning-button>
-            </template>
-            
+  <lightning-card title="Document Generator" icon-name="custom:custom18">
+    <div class="slds-var-p-around_medium">
+      <template lwc:if={_isClientSideActive}>
+        <div
+          data-id="client-side-badge"
+          class="slds-badge slds-badge_lightest slds-var-m-bottom_small"
+        >
+          Client-side generation enabled
         </div>
-    </lightning-card>
+      </template>
+
+      <template lwc:if={error}>
+        <div
+          class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_error"
+          role="alert"
+        >
+          <span class="slds-assistive-text">error</span>
+          <h2>{error}</h2>
+        </div>
+      </template>
+
+      <template lwc:if={clientSideError}>
+        <div
+          class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_warning"
+          role="alert"
+        >
+          <h2>{clientSideError}</h2>
+          <lightning-button
+            label="Try server-side generation"
+            onclick={handleFallbackToServerSide}
+            class="slds-var-m-top_x-small"
+          >
+          </lightning-button>
+        </div>
+      </template>
+
+      <template lwc:if={isLoading}>
+        <lightning-spinner
+          alternative-text="Loading"
+          size="medium"
+        ></lightning-spinner>
+      </template>
+
+      <template lwc:else>
+        <lightning-combobox
+          name="template"
+          label="Select Template"
+          value={selectedTemplateId}
+          placeholder="Choose a template..."
+          options={templateOptions}
+          onchange={handleTemplateChange}
+          class="slds-var-m-bottom_medium"
+        >
+        </lightning-combobox>
+
+        <div class="slds-var-m-bottom_medium">
+          <lightning-radio-group
+            name="outputMode"
+            label="Action"
+            options={outputOptions}
+            value={outputMode}
+            onchange={handleOutputModeChange}
+            type="button"
+          >
+          </lightning-radio-group>
+        </div>
+
+        <template lwc:if={isClientSideUnsupported}>
+          <template lwc:if={isPdfUnsupported}>
+            <p
+              data-id="client-side-pdf-warning"
+              class="slds-text-color_weak slds-var-m-bottom_small"
+            >
+              Client-side generation does not support PDF output. Use
+              server-side generation for PDF.
+            </p>
+          </template>
+          <template lwc:if={isPptxUnsupported}>
+            <p
+              data-id="client-side-pptx-warning"
+              class="slds-text-color_weak slds-var-m-bottom_small"
+            >
+              Client-side generation does not support PowerPoint. Use
+              server-side generation for PPTX.
+            </p>
+          </template>
+        </template>
+
+        <lightning-button
+          variant="brand"
+          label="Generate Document"
+          onclick={generateDocument}
+          disabled={isGenerateDisabled}
+          class="slds-var-m-top_medium"
+        >
+        </lightning-button>
+      </template>
+    </div>
+  </lightning-card>
 </template>
