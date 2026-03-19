@@ -56,16 +56,16 @@ This project gives you a professional-grade document engine -- template manageme
 
 ## Quick Install
 
-**Package Version ID**: `04tdL000000RGLdQAO`
+**Package Version ID**: `04tdL000000RHkjQAG`
 
 **CLI:**
 ```bash
-sf package install --package 04tdL000000RGLdQAO --wait 10 --installation-key-bypass
+sf package install --package 04tdL000000RHkjQAG --wait 10 --installation-key-bypass
 ```
 
 **Browser:**
-- [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RGLdQAO)
-- [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RGLdQAO)
+- [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RHkjQAG)
+- [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RHkjQAG)
 
 > Select **Install for Admins Only** during installation, then assign permission sets to your users.
 
