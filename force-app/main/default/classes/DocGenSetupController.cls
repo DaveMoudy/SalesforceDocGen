@@ -23,6 +23,19 @@ public with sharing class DocGenSetupController {
         upsert settings;
     }
 
+    @AuraEnabled(cacheable=true)
+    public static Map<String, Integer> getBuilderLimits() {
+        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
+        Integer maxParent = settings.Max_Parent_Fields__c != null
+            ? (Integer) settings.Max_Parent_Fields__c : 10;
+        Integer maxChild = settings.Max_Child_Lists__c != null
+            ? (Integer) settings.Max_Child_Lists__c : 5;
+        return new Map<String, Integer>{
+            'maxParentFields' => maxParent,
+            'maxChildLists' => maxChild
+        };
+    }
+
     @AuraEnabled
     public static void saveEmailBrandingSettings(String companyName, String logoUrl, String brandColor, String emailSubject, String emailMessage, String footerText) {
         if (!FeatureManagement.checkPermission('DocGen_Admin_Access') &&

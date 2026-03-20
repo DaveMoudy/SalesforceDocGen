@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Max_Parent_Fields__c</fullName>
+    <defaultValue>10</defaultValue>
+    <description>Maximum number of parent (relationship) fields allowed in the DocGen query builder. Controls the UI limit in the template configuration.</description>
+    <externalId>false</externalId>
+    <label>Max Parent Fields</label>
+    <precision>18</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <type>Number</type>
+</CustomField>

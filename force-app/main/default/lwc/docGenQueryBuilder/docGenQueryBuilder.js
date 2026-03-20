@@ -5,7 +5,12 @@ import getObjectFields from '@salesforce/apex/DocGenController.getObjectFields';
 import getChildRelationships from '@salesforce/apex/DocGenController.getChildRelationships';
 import getParentRelationships from '@salesforce/apex/DocGenController.getParentRelationships';
 import previewRecordData from '@salesforce/apex/DocGenController.previewRecordData';
+import getBuilderLimits from '@salesforce/apex/DocGenSetupController.getBuilderLimits';
 import { refreshApex } from '@salesforce/apex';
+
+// Fallback defaults if custom setting has no value
+const DEFAULT_MAX_PARENT_FIELDS = 10;
+const DEFAULT_MAX_CHILD_LISTS = 5;
 
 export default class DocGenQueryBuilder extends LightningElement {
     @track objectOptions = [];
@@ -47,9 +52,25 @@ export default class DocGenQueryBuilder extends LightningElement {
     @track showParentFieldDropdown = false;
     @track filteredParentFieldOptions = [];
 
+    // --- Dynamic Limits (from DocGen_Settings__c) ---
+    maxParentFields = DEFAULT_MAX_PARENT_FIELDS;
+    maxChildLists = DEFAULT_MAX_CHILD_LISTS;
+
+    @wire(getBuilderLimits)
+    wiredLimits({ error, data }) {
+        if (data) {
+            this.maxParentFields = data.maxParentFields || DEFAULT_MAX_PARENT_FIELDS;
+            this.maxChildLists = data.maxChildLists || DEFAULT_MAX_CHILD_LISTS;
+        } else if (error) {
+            // Fallback to defaults silently
+            this.maxParentFields = DEFAULT_MAX_PARENT_FIELDS;
+            this.maxChildLists = DEFAULT_MAX_CHILD_LISTS;
+        }
+    }
+
     // --- New Mode ---
     @api showTagsOnly = false;
-    
+
     // --- Layout Getters ---
     get mainColumnClass() { 
         return this.showTagsOnly ? 'slds-hide' : 'slds-col slds-size_2-of-3';
@@ -464,15 +485,15 @@ export default class DocGenQueryBuilder extends LightningElement {
         const warnings = [];
         
         // 1. Parent Fields Count
-        if (this.parentFieldSelection.length >= 10) {
-            warnings.push(`Maximum strict limit of 10 parent fields reached. You cannot add more.`);
-        } else if (this.parentFieldSelection.length > 8) {
-             warnings.push(`Approaching parent field limit (${this.parentFieldSelection.length}/10).`);
+        if (this.parentFieldSelection.length >= this.maxParentFields) {
+            warnings.push(`Maximum limit of ${this.maxParentFields} parent fields reached. You cannot add more.`);
+        } else if (this.parentFieldSelection.length > Math.floor(this.maxParentFields * 0.9)) {
+             warnings.push(`Approaching parent field limit (${this.parentFieldSelection.length}/${this.maxParentFields}).`);
         }
-        
+
         // 2. Child Lists Count
-        if (this.childConfigs.length >= 5) {
-            warnings.push(`Maximum strict limit of 5 related lists reached. You cannot add more.`);
+        if (this.childConfigs.length >= this.maxChildLists) {
+            warnings.push(`Maximum limit of ${this.maxChildLists} related lists reached. You cannot add more.`);
         }
         
         // 3. Total Fields
@@ -837,20 +858,20 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     get isAddParentDisabled() {
         // Disabled if nothing selected OR limit reached
-        if (this.parentFieldSelection.length >= 10) return true;
+        if (this.parentFieldSelection.length >= this.maxParentFields) return true;
         return !this.selectedParentFields || this.selectedParentFields.length === 0;
     }
     
     get isAddChildDisabled() {
-         return this.childConfigs.length >= 5;
+         return this.childConfigs.length >= this.maxChildLists;
     }
 
     addParentField() {
-        if (this.parentFieldSelection.length >= 10) {
+        if (this.parentFieldSelection.length >= this.maxParentFields) {
             this.dispatchEvent(
                 new ShowToastEvent({
                     title: 'Limit Reached',
-                    message: 'You cannot add more than 10 parent fields.',
+                    message: `You cannot add more than ${this.maxParentFields} parent fields.`,
                     variant: 'error',
                 })
             );
@@ -858,7 +879,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         }
 
         if (this.selectedParentRel && this.selectedParentFields.length > 0) {
-            const remaining = 10 - this.parentFieldSelection.length;
+            const remaining = this.maxParentFields - this.parentFieldSelection.length;
             let newFields = [];
             
             // Slice if they tried to select more than allowed in one go
@@ -867,7 +888,7 @@ export default class DocGenQueryBuilder extends LightningElement {
                  this.dispatchEvent(
                     new ShowToastEvent({
                         title: 'Selection Truncated',
-                        message: `Only added ${remaining} fields to stay within the limit of 10.`,
+                        message: `Only added ${remaining} fields to stay within the limit of ${this.maxParentFields}.`,
                         variant: 'warning',
                     })
                 );
@@ -934,11 +955,11 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     // Updated Logic for Child Checkboxes
     addChildConfig() {
-        if (this.childConfigs.length >= 5) {
+        if (this.childConfigs.length >= this.maxChildLists) {
              this.dispatchEvent(
                 new ShowToastEvent({
                     title: 'Limit Reached',
-                    message: 'You cannot add more than 5 related lists.',
+                    message: `You cannot add more than ${this.maxChildLists} related lists.`,
                     variant: 'error',
                 })
             );
