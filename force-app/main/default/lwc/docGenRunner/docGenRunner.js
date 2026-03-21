@@ -23,10 +23,15 @@ export default class DocGenRunner extends LightningElement {
 
     get outputOptions() {
         const formatLabel = this.templateOutputFormat || 'Document';
-        return [
-            { label: `Download ${formatLabel}`, value: 'download' },
-            { label: `Save to Record (${formatLabel})`, value: 'save' }
+        const options = [
+            { label: `Download ${formatLabel}`, value: 'download' }
         ];
+        // Save to Record is only available for PDF — client-side DOCX/PPTX
+        // assembly exceeds the Aura 4MB payload limit for save operations
+        if (formatLabel === 'PDF') {
+            options.push({ label: `Save to Record (${formatLabel})`, value: 'save' });
+        }
+        return options;
     }
 
     @wire(getTemplatesForObject, { objectApiName: '$objectApiName' })
@@ -59,6 +64,10 @@ export default class DocGenRunner extends LightningElement {
         const selected = this._templateData.find(t => t.Id === this.selectedTemplateId);
         if (selected) {
             this.templateOutputFormat = selected.Output_Format__c || 'Document';
+            // Reset to download if save isn't available for this format
+            if (this.templateOutputFormat !== 'PDF' && this.outputMode === 'save') {
+                this.outputMode = 'download';
+            }
         }
     }
 

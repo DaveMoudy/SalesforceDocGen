@@ -36,10 +36,14 @@ public with sharing class DocGenService {
      * Returns structured intermediate data without assembling into a final format.
      */
     private static MergeResult mergeTemplate(Id templateId, Id recordId) {
-        return mergeTemplate(templateId, recordId, null);
+        return mergeTemplate(templateId, recordId, null, null);
     }
 
     private static MergeResult mergeTemplate(Id templateId, Id recordId, Map<String, String> resolvedImages) {
+        return mergeTemplate(templateId, recordId, resolvedImages, null);
+    }
+
+    private static MergeResult mergeTemplate(Id templateId, Id recordId, Map<String, String> resolvedImages, String outputFormatOverride) {
         pendingImages = new List<Map<String, Object>>();
         imageCounter = 0;
 
@@ -60,6 +64,11 @@ public with sharing class DocGenService {
         Object dataObj = dataMap.get('data');
         String outputFormat = (String) dataMap.get('outputFormat');
         String templateType = (String) dataMap.get('templateType');
+
+        // Allow callers to force PDF output (e.g., signature flow always produces PDF)
+        if (outputFormatOverride != null) {
+            outputFormat = outputFormatOverride;
+        }
 
         if (base64File == null) throw new DocGenException('Template file content is missing.');
 
@@ -689,6 +698,46 @@ public with sharing class DocGenService {
     }
 
     /**
+     * Generates HTML for browser preview with data URI images.
+     * Uses the same merge + image pipeline as the PDF generator (forced PDF mode,
+     * pre-decomposed XML, buildPdfImageMap), then converts relative CV URLs
+     * to base64 data URIs so guest users can view them without a Salesforce session.
+     */
+    public static String renderPreviewHtml(Id templateId, Id recordId) {
+        // Same merge path as PDF generation — forced PDF mode
+        MergeResult mr = mergeTemplate(templateId, recordId, null, 'PDF');
+
+        if (mr.templateType == 'PowerPoint') {
+            throw new DocGenException('Preview is only supported for Word templates.');
+        }
+
+        // Build the same image map the PDF generator uses
+        Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
+
+        // Convert relative CV URLs to data URIs for browser rendering
+        Map<String, String> previewImages = new Map<String, String>();
+        for (String relId : pdfImages.keySet()) {
+            String url = pdfImages.get(relId);
+            // Extract CV Id from /sfc/servlet.shepherd/version/download/{cvId}
+            if (url != null && url.contains('/version/download/')) {
+                String cvId = url.substringAfterLast('/');
+                try {
+                    ContentVersion cv = [SELECT VersionData, FileExtension FROM ContentVersion WHERE Id = :cvId LIMIT 1];
+                    String ext = cv.FileExtension != null ? cv.FileExtension.toLowerCase() : 'png';
+                    String mime = (ext == 'jpg' || ext == 'jpeg') ? 'image/jpeg' : 'image/png';
+                    previewImages.put(relId, 'data:' + mime + ';base64,' + EncodingUtil.base64Encode(cv.VersionData));
+                } catch (Exception e) {
+                    // Skip unresolvable images
+                }
+            } else if (url != null) {
+                previewImages.put(relId, url);
+            }
+        }
+
+        return DocGenHtmlRenderer.convertToHtml(mr.documentXml, previewImages);
+    }
+
+    /**
      * Generates a PDF Blob and title without saving to record.
      * Used by DocGenController for download mode.
      */
@@ -704,6 +753,30 @@ public with sharing class DocGenService {
         return new Map<String, Object>{
             'blob' => pdfBlob,
             'title' => mr.docTitle
+        };
+    }
+
+    /**
+     * Merges a template with record data and returns the XML parts + image URL map
+     * needed for signature stamping and PDF rendering.
+     * Used by the template-based signature flow (no DOCX intermediate).
+     */
+    public static Map<String, Object> mergeTemplateForSignature(Id templateId, Id recordId) {
+        // Force PDF output so dynamic images use relative CV URLs (no blob loading)
+        MergeResult mr = mergeTemplate(templateId, recordId, null, 'PDF');
+
+        if (mr.templateType == 'PowerPoint') {
+            throw new DocGenException('Signature PDF generation is only supported for Word templates.');
+        }
+
+        Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
+
+        return new Map<String, Object>{
+            'documentXml' => mr.documentXml,
+            'relsXml' => mr.relsXml,
+            'contentTypesXml' => mr.contentTypesXml,
+            'pdfImageMap' => pdfImages,
+            'docTitle' => mr.docTitle
         };
     }
 

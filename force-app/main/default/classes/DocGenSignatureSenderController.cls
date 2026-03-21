@@ -7,6 +7,153 @@ public with sharing class DocGenSignatureSenderController {
         @AuraEnabled public String signerEmail;
     }
 
+    /**
+     * Returns all active DocGen templates for the signature sender template picker.
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<DocGen_Template__c> getDocGenTemplates() {
+        return [
+            SELECT Id, Name
+            FROM DocGen_Template__c
+            WITH USER_MODE
+            ORDER BY Name ASC
+        ];
+    }
+
+    /**
+     * Scans a DocGen template's pre-decomposed XML for {#Signature_XXX} placeholders.
+     * No ZIP decompression needed — reads from stored XML ContentVersions.
+     */
+    @AuraEnabled
+    public static List<String> getTemplateSignatureRoles(Id templateId) {
+        List<DocGen_Template_Version__c> activeVersions = [
+            SELECT Id FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = true
+            WITH SYSTEM_MODE LIMIT 1
+        ];
+        if (activeVersions.isEmpty()) return new List<String>();
+
+        String xmlPrefix = 'docgen_tmpl_xml_' + activeVersions[0].Id + '_';
+        List<ContentVersion> xmlCvs = [
+            SELECT Title, VersionData FROM ContentVersion
+            WHERE Title LIKE :(xmlPrefix + '%')
+            WITH SYSTEM_MODE
+        ];
+
+        // Find the document.xml entry
+        String documentXml = null;
+        for (ContentVersion cv : xmlCvs) {
+            String key = cv.Title.substring(xmlPrefix.length());
+            String originalPath = key.replace('__', '/');
+            if (originalPath == 'word/document.xml') {
+                documentXml = cv.VersionData.toString();
+                break;
+            }
+        }
+        if (documentXml == null) return new List<String>();
+
+        // Extract text from <w:t> elements
+        String plainText = '';
+        Pattern wtPat = Pattern.compile('<w:t[^>]*>([^<]*)</w:t>');
+        Matcher wtMatch = wtPat.matcher(documentXml);
+        while (wtMatch.find()) {
+            plainText += wtMatch.group(1);
+        }
+
+        // Find {#Signature_RoleName} placeholders
+        List<String> roles = new List<String>();
+        Pattern sigPat = Pattern.compile('\\{#Signature_([^}]+)\\}');
+        Matcher sigMatch = sigPat.matcher(plainText);
+        while (sigMatch.find()) {
+            String roleName = sigMatch.group(1).replaceAll('_', ' ');
+            if (!roles.contains(roleName)) {
+                roles.add(roleName);
+            }
+        }
+
+        if (roles.isEmpty() && plainText.contains('{#Signature}')) {
+            roles.add('Signer');
+        }
+
+        return roles;
+    }
+
+    /**
+     * Creates a template-based multi-signer signature request.
+     * No pre-generated DOCX needed — PDF is merged from template at signing time.
+     */
+    @AuraEnabled
+    public static List<SignerResult> createTemplateSignerRequest(Id templateId, String relatedRecordId, String signersJson) {
+        // Validate template exists
+        List<DocGen_Template__c> templates = [SELECT Id, Name FROM DocGen_Template__c WHERE Id = :templateId WITH SYSTEM_MODE LIMIT 1];
+        if (templates.isEmpty()) {
+            throw new AuraHandledException('Template not found.');
+        }
+
+        // Parse signers JSON
+        List<Object> rawInputs = (List<Object>) JSON.deserializeUntyped(signersJson);
+        List<Map<String, Object>> signerInputs = new List<Map<String, Object>>();
+        for (Object item : rawInputs) {
+            signerInputs.add((Map<String, Object>) item);
+        }
+
+        // Create parent request with template reference (no Source_Document_Id__c)
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
+        req.Template__c = templateId;
+        req.Related_Record_Id__c = relatedRecordId;
+        req.Status__c = 'Sent';
+        // Package-internal object — CRUD controlled by DocGen permission sets
+        insert req;
+
+        // Pre-compute everything while we have admin access.
+        // Guest users can't query template data or ContentVersions (content sharing).
+        // Store on the request record which the guest accesses via token + SYSTEM_MODE.
+        try {
+            Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
+            Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
+
+            // Build preview HTML with public URLs for images (not data URIs — keeps size small).
+            // Create ContentDistributions for each template image so guest browser can load them.
+            Map<String, String> previewImageMap = new Map<String, String>();
+            for (String relId : pdfImageMap.keySet()) {
+                String url = pdfImageMap.get(relId);
+                if (url != null && url.contains('/version/download/')) {
+                    String cvId = url.substringAfterLast('/');
+                    try {
+                        ContentDistribution dist = new ContentDistribution();
+                        dist.Name = 'sig_preview_' + relId;
+                        dist.ContentVersionId = cvId;
+                        dist.PreferencesAllowViewInBrowser = true;
+                        dist.PreferencesLinkLatestVersion = false;
+                        dist.PreferencesExpires = false;
+                        insert dist;
+                        dist = [SELECT ContentDownloadUrl FROM ContentDistribution WHERE Id = :dist.Id];
+                        previewImageMap.put(relId, dist.ContentDownloadUrl);
+                    } catch (Exception e) {
+                        System.debug(LoggingLevel.WARN, 'DocGen: Could not create public link for ' + relId + ': ' + e.getMessage());
+                    }
+                }
+            }
+
+            // Render preview HTML using public URLs (small, no base64 bloat)
+            String docXml = (String) mergeData.get('documentXml');
+            String previewHtml = DocGenHtmlRenderer.convertToHtml(docXml, previewImageMap);
+
+            // Store image map (for Queueable) + preview HTML (for guest VF page)
+            Map<String, Object> cachedData = new Map<String, Object>{
+                'imageMap' => pdfImageMap,
+                'previewHtml' => previewHtml
+            };
+            req.Signature_Data__c = JSON.serialize(cachedData);
+            update req;
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'DocGen: Failed to pre-compute signature data: ' + e.getMessage());
+        }
+
+        // Create individual signer records + send emails (shared logic)
+        return createSignersAndNotify(req.Id, templateId, templates[0].Name, signerInputs);
+    }
+
     @AuraEnabled(cacheable=true)
     public static List<ContentVersion> getRelatedDocuments(Id recordId) {
         List<ContentDocumentLink> links = [SELECT ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId = :recordId WITH USER_MODE];
@@ -25,6 +172,7 @@ public with sharing class DocGenSignatureSenderController {
 
     /**
      * Creates a multi-signer signature request with individual tokens per signer.
+     * Legacy DOCX-based flow — requires a pre-generated DOCX on the record.
      * signersJson: [{roleName, contactId, signerName, signerEmail}, ...]
      */
     @AuraEnabled
@@ -51,68 +199,8 @@ public with sharing class DocGenSignatureSenderController {
         // Package-internal object — CRUD controlled by DocGen permission sets
         insert req;
 
-        // Create individual signer records
-        String siteUrl = getSiteBaseUrl();
-        List<DocGen_Signer__c> signerRecords = new List<DocGen_Signer__c>();
-        List<SignerResult> results = new List<SignerResult>();
-
-        for (Integer i = 0; i < signerInputs.size(); i++) {
-            Map<String, Object> input = signerInputs[i];
-            String signerName = (String) input.get('signerName');
-            String signerEmail = (String) input.get('signerEmail');
-            String roleName = (String) input.get('roleName');
-            String contactId = (String) input.get('contactId');
-
-            // Generate unique token per signer using cryptographic randomness
-            Blob randomBytes = Crypto.generateAesKey(256);
-            Blob hash = Crypto.generateDigest('SHA-256',
-                Blob.valueOf(EncodingUtil.convertToHex(randomBytes) + signerEmail + i)
-            );
-            String token = EncodingUtil.convertToHex(hash);
-
-            DocGen_Signer__c signer = new DocGen_Signer__c();
-            signer.Signature_Request__c = req.Id;
-            signer.Role_Name__c = roleName;
-            signer.Signer_Name__c = signerName;
-            signer.Signer_Email__c = signerEmail;
-            signer.Secure_Token__c = token;
-            signer.Status__c = 'Pending';
-            signer.Sort_Order__c = i + 1;
-            if (String.isNotBlank(contactId)) {
-                signer.Contact__c = contactId;
-            }
-            signerRecords.add(signer);
-
-            SignerResult sr = new SignerResult();
-            sr.signerName = signerName;
-            sr.roleName = roleName;
-            sr.signerEmail = signerEmail;
-            sr.signerUrl = siteUrl + '/apex/DocGenSignature?token=' + token;
-            results.add(sr);
-        }
-
-        // Package-internal object — CRUD controlled by DocGen permission sets
-        insert signerRecords;
-
-        // Send branded signature request emails automatically
         String documentTitle = getDocumentTitle(contentVersionId);
-        List<DocGenSignatureEmailService.SignerEmail> emailList = new List<DocGenSignatureEmailService.SignerEmail>();
-        for (SignerResult sr : results) {
-            Id cId = null;
-            // Find matching contactId from inputs
-            for (Map<String, Object> input : signerInputs) {
-                if (sr.signerEmail == (String) input.get('signerEmail') && String.isNotBlank((String) input.get('contactId'))) {
-                    cId = (Id) input.get('contactId');
-                    break;
-                }
-            }
-            emailList.add(new DocGenSignatureEmailService.SignerEmail(
-                sr.signerName, sr.signerEmail, sr.roleName, sr.signerUrl, cId
-            ));
-        }
-        DocGenSignatureEmailService.sendSignatureRequestEmails(emailList, documentTitle);
-
-        return results;
+        return createSignersAndNotify(req.Id, null, documentTitle, signerInputs);
     }
 
     /**
@@ -346,6 +434,71 @@ public with sharing class DocGenSignatureSenderController {
         }
 
         return roles;
+    }
+
+    /**
+     * Shared logic: creates DocGen_Signer__c records and sends notification emails.
+     * Used by both createMultiSignerRequest (DOCX) and createTemplateSignerRequest (template).
+     */
+    private static List<SignerResult> createSignersAndNotify(Id requestId, Id templateId, String documentTitle, List<Map<String, Object>> signerInputs) {
+        String siteUrl = getSiteBaseUrl();
+        List<DocGen_Signer__c> signerRecords = new List<DocGen_Signer__c>();
+        List<SignerResult> results = new List<SignerResult>();
+
+        for (Integer i = 0; i < signerInputs.size(); i++) {
+            Map<String, Object> input = signerInputs[i];
+            String signerName = (String) input.get('signerName');
+            String signerEmail = (String) input.get('signerEmail');
+            String roleName = (String) input.get('roleName');
+            String contactId = (String) input.get('contactId');
+
+            Blob randomBytes = Crypto.generateAesKey(256);
+            Blob hash = Crypto.generateDigest('SHA-256',
+                Blob.valueOf(EncodingUtil.convertToHex(randomBytes) + signerEmail + i)
+            );
+            String token = EncodingUtil.convertToHex(hash);
+
+            DocGen_Signer__c signer = new DocGen_Signer__c();
+            signer.Signature_Request__c = requestId;
+            signer.Role_Name__c = roleName;
+            signer.Signer_Name__c = signerName;
+            signer.Signer_Email__c = signerEmail;
+            signer.Secure_Token__c = token;
+            signer.Status__c = 'Pending';
+            signer.Sort_Order__c = i + 1;
+            if (String.isNotBlank(contactId)) {
+                signer.Contact__c = contactId;
+            }
+            signerRecords.add(signer);
+
+            SignerResult sr = new SignerResult();
+            sr.signerName = signerName;
+            sr.roleName = roleName;
+            sr.signerEmail = signerEmail;
+            sr.signerUrl = siteUrl + '/apex/DocGenSignature?token=' + token;
+            results.add(sr);
+        }
+
+        // Package-internal object — CRUD controlled by DocGen permission sets
+        insert signerRecords;
+
+        // Send branded signature request emails
+        List<DocGenSignatureEmailService.SignerEmail> emailList = new List<DocGenSignatureEmailService.SignerEmail>();
+        for (SignerResult sr : results) {
+            Id cId = null;
+            for (Map<String, Object> input : signerInputs) {
+                if (sr.signerEmail == (String) input.get('signerEmail') && String.isNotBlank((String) input.get('contactId'))) {
+                    cId = (Id) input.get('contactId');
+                    break;
+                }
+            }
+            emailList.add(new DocGenSignatureEmailService.SignerEmail(
+                sr.signerName, sr.signerEmail, sr.roleName, sr.signerUrl, cId
+            ));
+        }
+        DocGenSignatureEmailService.sendSignatureRequestEmails(emailList, documentTitle);
+
+        return results;
     }
 
     private static String getDocumentTitle(Id contentVersionId) {

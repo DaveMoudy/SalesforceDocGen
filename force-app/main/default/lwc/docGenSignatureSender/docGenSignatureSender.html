@@ -5,35 +5,64 @@
         </template>
 
         <template if:false={signerResults}>
-            <!-- Document Selection -->
+            <!-- Source Mode Toggle -->
             <div class="slds-var-m-bottom_medium">
-                <lightning-combobox
-                    name="document"
-                    label="Select Document to Sign"
-                    value={selectedDocId}
-                    placeholder="Choose a recently generated document"
-                    options={documentOptions}
-                    onchange={handleDocChange}
-                    required>
-                </lightning-combobox>
+                <lightning-radio-group
+                    name="sourceMode"
+                    label="Document Source"
+                    type="button"
+                    options={sourceModeOptions}
+                    value={sourceMode}
+                    onchange={handleSourceModeChange}>
+                </lightning-radio-group>
             </div>
 
-            <!-- Template Loader -->
+            <!-- DocGen Template Selection (Primary) -->
+            <template if:true={isTemplateMode}>
+                <div class="slds-var-m-bottom_medium">
+                    <lightning-combobox
+                        name="docGenTemplate"
+                        label="Select Template"
+                        value={selectedDocGenTemplateId}
+                        placeholder="Choose a DocGen template"
+                        options={docGenTemplateOptions}
+                        onchange={handleDocGenTemplateChange}
+                        required>
+                    </lightning-combobox>
+                </div>
+            </template>
+
+            <!-- Legacy Document Selection -->
+            <template if:true={isDocumentMode}>
+                <div class="slds-var-m-bottom_medium">
+                    <lightning-combobox
+                        name="document"
+                        label="Select Document to Sign"
+                        value={selectedDocId}
+                        placeholder="Choose a recently generated document"
+                        options={documentOptions}
+                        onchange={handleDocChange}
+                        required>
+                    </lightning-combobox>
+                </div>
+            </template>
+
+            <!-- Signature Role Template Loader -->
             <div class="slds-var-m-bottom_medium">
                 <div class="slds-grid slds-gutters_x-small slds-grid_vertical-align-end">
                     <div class="slds-col slds-grow">
                         <lightning-combobox
                             name="template"
-                            label="Load from Template"
+                            label="Load Roles from Preset"
                             value={selectedTemplateId}
-                            placeholder="(Optional) Select a saved template"
+                            placeholder="(Optional) Select a saved role preset"
                             options={templateOptions}
                             onchange={handleTemplateChange}>
                         </lightning-combobox>
                     </div>
                     <div class="slds-col slds-no-flex">
                         <lightning-button
-                            label="Save as Template"
+                            label="Save as Preset"
                             variant="neutral"
                             onclick={handleSaveTemplate}
                             disabled={isSaveTemplateDisabled}>

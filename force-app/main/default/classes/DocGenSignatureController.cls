@@ -48,7 +48,8 @@ public without sharing class DocGenSignatureController {
         List<DocGen_Signer__c> signers = [
             SELECT Id, Status__c, Signer_Name__c, Role_Name__c, Sort_Order__c, CreatedDate,
                    Signature_Request__r.Id, Signature_Request__r.Status__c,
-                   Signature_Request__r.Source_Document_Id__c, Signature_Request__r.Related_Record_Id__c
+                   Signature_Request__r.Source_Document_Id__c, Signature_Request__r.Related_Record_Id__c,
+                   Signature_Request__r.Template__c, Signature_Request__r.Template__r.Name
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
@@ -126,14 +127,19 @@ public without sharing class DocGenSignatureController {
         }
         res.signedCount = signed;
 
-        // Get document metadata
-        Id sourceDocId = parentReq.Source_Document_Id__c;
-        List<ContentVersion> cvs = [SELECT Id, Title FROM ContentVersion WHERE Id = :sourceDocId WITH SYSTEM_MODE LIMIT 1];
-        if (!cvs.isEmpty()) {
-            res.documentTitle = cvs[0].Title;
-            res.documentUrl = getOrCreatePublicLink(cvs[0]);
+        // Get document metadata — template name or source document title
+        if (parentReq.Template__c != null) {
+            res.documentTitle = parentReq.Template__r.Name;
+            // No public link needed — preview is rendered from template merge
         } else {
-            res.documentTitle = 'Confidential Document';
+            Id sourceDocId = parentReq.Source_Document_Id__c;
+            List<ContentVersion> cvs = [SELECT Id, Title FROM ContentVersion WHERE Id = :sourceDocId WITH SYSTEM_MODE LIMIT 1];
+            if (!cvs.isEmpty()) {
+                res.documentTitle = cvs[0].Title;
+                res.documentUrl = getOrCreatePublicLink(cvs[0]);
+            } else {
+                res.documentTitle = 'Confidential Document';
+            }
         }
 
         return res;
@@ -198,7 +204,8 @@ public without sharing class DocGenSignatureController {
 
     /**
      * Fetches pre-rendered HTML for document display in the signature page.
-     * Converts the source DOCX to HTML server-side using DocGenHtmlRenderer.
+     * Template-based requests: merges template with record data for a fully merged preview.
+     * Legacy requests: converts source DOCX to HTML.
      */
     @AuraEnabled
     @RemoteAction
@@ -208,34 +215,67 @@ public without sharing class DocGenSignatureController {
 
         // Try multi-signer path
         List<DocGen_Signer__c> signers = [
-            SELECT Signature_Request__r.Source_Document_Id__c, Signature_Request__r.Related_Record_Id__c
+            SELECT Signature_Request__r.Source_Document_Id__c, Signature_Request__r.Related_Record_Id__c,
+                   Signature_Request__r.Template__c
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE LIMIT 1
         ];
 
         Id sourceDocId;
+        Id templateId;
+        Id requestId;
+        String recordId;
         if (!signers.isEmpty()) {
             sourceDocId = signers[0].Signature_Request__r.Source_Document_Id__c;
-            res.recordId = signers[0].Signature_Request__r.Related_Record_Id__c;
+            templateId = signers[0].Signature_Request__r.Template__c;
+            requestId = signers[0].Signature_Request__r.Id;
+            recordId = signers[0].Signature_Request__r.Related_Record_Id__c;
+            res.recordId = recordId;
         } else {
             // Legacy fallback
             List<DocGen_Signature_Request__c> requests = [
-                SELECT Source_Document_Id__c, Related_Record_Id__c
+                SELECT Id, Source_Document_Id__c, Related_Record_Id__c, Template__c
                 FROM DocGen_Signature_Request__c
                 WHERE Secure_Token__c = :token
                 WITH SYSTEM_MODE LIMIT 1
             ];
             if (!requests.isEmpty()) {
                 sourceDocId = requests[0].Source_Document_Id__c;
-                res.recordId = requests[0].Related_Record_Id__c;
+                templateId = requests[0].Template__c;
+                requestId = requests[0].Id;
+                recordId = requests[0].Related_Record_Id__c;
+                res.recordId = recordId;
             }
         }
 
+        // Template-based: load preview HTML from Signature_Data__c on the request.
+        // The guest user has tokenized access to the request record via SYSTEM_MODE.
+        if (templateId != null && requestId != null) {
+            List<DocGen_Signature_Request__c> reqs = [
+                SELECT Signature_Data__c FROM DocGen_Signature_Request__c
+                WHERE Id = :requestId WITH SYSTEM_MODE LIMIT 1
+            ];
+            if (!reqs.isEmpty() && String.isNotBlank(reqs[0].Signature_Data__c)) {
+                try {
+                    Map<String, Object> cachedData = (Map<String, Object>) JSON.deserializeUntyped(reqs[0].Signature_Data__c);
+                    String previewHtml = (String) cachedData.get('previewHtml');
+                    if (String.isNotBlank(previewHtml)) {
+                        res.templateBase64 = previewHtml;
+                        return res;
+                    }
+                } catch (Exception e) {
+                    System.debug(LoggingLevel.WARN, 'DocGen: Failed to parse cached preview: ' + e.getMessage());
+                }
+            }
+            res.templateBase64 = '<html><body><p>Document preview unavailable.</p></body></html>';
+            return res;
+        }
+
+        // Legacy: convert source DOCX to HTML
         if (sourceDocId != null) {
             List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :sourceDocId WITH SYSTEM_MODE LIMIT 1];
             if (!cvs.isEmpty()) {
-                // Convert DOCX to HTML for display
                 res.templateBase64 = getDocumentHtml(cvs[0].VersionData);
             }
         }
@@ -360,7 +400,9 @@ public without sharing class DocGenSignatureController {
         List<DocGen_Signer__c> signerList = [
             SELECT Id, Signature_Request__c,
                    Signature_Request__r.Source_Document_Id__c,
-                   Signature_Request__r.Related_Record_Id__c
+                   Signature_Request__r.Related_Record_Id__c,
+                   Signature_Request__r.Template__c,
+                   Signature_Request__r.Template__r.Name
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE LIMIT 1
@@ -377,6 +419,7 @@ public without sharing class DocGenSignatureController {
     private static Map<String, String> stampMultiSignerAndSavePdf(DocGen_Signer__c triggerSigner) {
         Id requestId = triggerSigner.Signature_Request__c;
         Id sourceDocId = triggerSigner.Signature_Request__r.Source_Document_Id__c;
+        Id templateId = triggerSigner.Signature_Request__r.Template__c;
         String relatedRecordId = triggerSigner.Signature_Request__r.Related_Record_Id__c;
 
         try {
@@ -387,12 +430,19 @@ public without sharing class DocGenSignatureController {
             pdfEvent.Request_Id__c = requestId;
             EventBus.publish(pdfEvent);
 
-            // PDF generation, audit trail, status updates, and cleanup all happen
-            // in the Queueable (runs as system user with full Content access).
-            ContentVersion sourceDoc = [SELECT Title FROM ContentVersion WHERE Id = :sourceDocId WITH SYSTEM_MODE LIMIT 1];
+            // Return title for the UI
+            String docTitle;
+            if (templateId != null) {
+                docTitle = triggerSigner.Signature_Request__r.Template__r.Name;
+            } else if (sourceDocId != null) {
+                ContentVersion sourceDoc = [SELECT Title FROM ContentVersion WHERE Id = :sourceDocId WITH SYSTEM_MODE LIMIT 1];
+                docTitle = sourceDoc.Title;
+            } else {
+                docTitle = 'Document';
+            }
             return new Map<String, String>{
                 'status' => 'complete',
-                'title' => sourceDoc.Title + ' - Signed'
+                'title' => docTitle + ' - Signed'
             };
         } catch (Exception e) {
             System.debug(LoggingLevel.ERROR, 'DocGen: Multi-signer stamping failed: ' + e.getMessage());

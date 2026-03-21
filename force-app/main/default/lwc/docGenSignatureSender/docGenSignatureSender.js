@@ -5,10 +5,13 @@ import getSignerRolePicklistValues from '@salesforce/apex/DocGenSignatureSenderC
 import getSignatureTemplates from '@salesforce/apex/DocGenSignatureSenderController.getSignatureTemplates';
 import getTemplateRoles from '@salesforce/apex/DocGenSignatureSenderController.getTemplateRoles';
 import createMultiSignerRequest from '@salesforce/apex/DocGenSignatureSenderController.createMultiSignerRequest';
+import createTemplateSignerRequest from '@salesforce/apex/DocGenSignatureSenderController.createTemplateSignerRequest';
 import saveSignatureTemplate from '@salesforce/apex/DocGenSignatureSenderController.saveSignatureTemplate';
 import getContactInfo from '@salesforce/apex/DocGenSignatureSenderController.getContactInfo';
 import getPendingSignatureRequests from '@salesforce/apex/DocGenSignatureSenderController.getPendingSignatureRequests';
 import getDocumentSignatureRoles from '@salesforce/apex/DocGenSignatureSenderController.getDocumentSignatureRoles';
+import getDocGenTemplates from '@salesforce/apex/DocGenSignatureSenderController.getDocGenTemplates';
+import getTemplateSignatureRoles from '@salesforce/apex/DocGenSignatureSenderController.getTemplateSignatureRoles';
 
 let signerIdCounter = 0;
 
@@ -18,14 +21,21 @@ export default class DocGenSignatureSender extends LightningElement {
     @track isLoading = true;
     @track error;
 
-    // Document selection
+    // Source mode: 'template' (default) or 'document' (legacy)
+    @track sourceMode = 'template';
+
+    // DocGen template selection (primary)
+    @track docGenTemplateOptions = [];
+    @track selectedDocGenTemplateId = '';
+
+    // Document selection (legacy fallback)
     @track documentOptions = [];
     @track selectedDocId = '';
 
     // Role picklist
     @track roleOptions = [];
 
-    // Templates
+    // Signature role templates (saved presets)
     @track templateOptions = [];
     @track selectedTemplateId = '';
     @track showTemplateModal = false;
@@ -83,13 +93,34 @@ export default class DocGenSignatureSender extends LightningElement {
         this._checkInitialLoad();
     }
 
+    @wire(getDocGenTemplates)
+    wiredDocGenTemplates({ error, data }) {
+        if (data) {
+            this.docGenTemplateOptions = data.map(t => ({
+                label: t.Name,
+                value: t.Id
+            }));
+            if (this.docGenTemplateOptions.length > 0 && !this.selectedDocGenTemplateId) {
+                this.selectedDocGenTemplateId = this.docGenTemplateOptions[0].value;
+            }
+        } else if (error) {
+            this.docGenTemplateOptions = [];
+        }
+        this._checkInitialLoad();
+    }
+
     _wireCallsReturned = 0;
     _checkInitialLoad() {
         this._wireCallsReturned++;
-        if (this._wireCallsReturned >= 3) {
+        if (this._wireCallsReturned >= 4) {
             this.isLoading = false;
-            if (this.selectedDocId) {
-                // Scan selected document for signature role placeholders
+            if (this.sourceMode === 'template' && this.selectedDocGenTemplateId) {
+                this._scanTemplateForRoles().then(() => {
+                    if (this.signers.length === 0) {
+                        this.handleAddSigner();
+                    }
+                });
+            } else if (this.sourceMode === 'document' && this.selectedDocId) {
                 this._scanDocumentForRoles().then(() => {
                     if (this.signers.length === 0) {
                         this.handleAddSigner();
@@ -103,8 +134,26 @@ export default class DocGenSignatureSender extends LightningElement {
 
     // --- Computed Properties ---
 
+    get isTemplateMode() {
+        return this.sourceMode === 'template';
+    }
+
+    get isDocumentMode() {
+        return this.sourceMode === 'document';
+    }
+
+    get sourceModeOptions() {
+        return [
+            { label: 'DocGen Template', value: 'template' },
+            { label: 'Existing Document', value: 'document' }
+        ];
+    }
+
     get isGenerateDisabled() {
-        if (!this.selectedDocId || this.signers.length === 0) return true;
+        const hasSource = this.sourceMode === 'template'
+            ? !!this.selectedDocGenTemplateId
+            : !!this.selectedDocId;
+        if (!hasSource || this.signers.length === 0) return true;
         return this.signers.some(s => !s.signerName || !s.signerEmail || !s.roleName);
     }
 
@@ -128,7 +177,42 @@ export default class DocGenSignatureSender extends LightningElement {
         return !this.newTemplateName || this.newTemplateName.trim().length === 0;
     }
 
-    // --- Document Handlers ---
+    // --- Source Mode ---
+
+    handleSourceModeChange(event) {
+        this.sourceMode = event.detail.value;
+        this.signerResults = undefined;
+        this.signers = [];
+        this.handleAddSigner();
+    }
+
+    // --- DocGen Template Handlers ---
+
+    async handleDocGenTemplateChange(event) {
+        this.selectedDocGenTemplateId = event.detail.value;
+        this.signerResults = undefined;
+        await this._scanTemplateForRoles();
+    }
+
+    async _scanTemplateForRoles() {
+        if (!this.selectedDocGenTemplateId) return;
+        try {
+            const roles = await getTemplateSignatureRoles({ templateId: this.selectedDocGenTemplateId });
+            if (roles && roles.length > 0) {
+                this.signers = roles.map(roleName => ({
+                    id: ++signerIdCounter,
+                    roleName: roleName,
+                    contactId: '',
+                    signerName: '',
+                    signerEmail: ''
+                }));
+            }
+        } catch (_err) {
+            // Silently fail — user can still add signers manually
+        }
+    }
+
+    // --- Document Handlers (Legacy) ---
 
     async handleDocChange(event) {
         this.selectedDocId = event.detail.value;
@@ -294,15 +378,23 @@ export default class DocGenSignatureSender extends LightningElement {
                 signerName: s.signerName,
                 signerEmail: s.signerEmail
             }));
+            const signersJson = JSON.stringify(signersPayload);
 
-            this.signerResults = await createMultiSignerRequest({
-                contentDocumentId: this.selectedDocId,
-                relatedRecordId: this.recordId,
-                signersJson: JSON.stringify(signersPayload)
-            });
+            if (this.sourceMode === 'template') {
+                this.signerResults = await createTemplateSignerRequest({
+                    templateId: this.selectedDocGenTemplateId,
+                    relatedRecordId: this.recordId,
+                    signersJson: signersJson
+                });
+            } else {
+                this.signerResults = await createMultiSignerRequest({
+                    contentDocumentId: this.selectedDocId,
+                    relatedRecordId: this.recordId,
+                    signersJson: signersJson
+                });
+            }
 
             this.showToast('Success', 'Signature links generated for ' + this.signerResults.length + ' signer(s).', 'success');
-            // Refresh previous requests list
             if (this.showPreviousRequests) {
                 this.loadPreviousRequests();
             }
