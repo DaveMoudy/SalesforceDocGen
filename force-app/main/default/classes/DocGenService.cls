@@ -173,13 +173,11 @@ public with sharing class DocGenService {
             }
             if (mr.relsXml != null) {
                 for (Map<String, Object> img : pendingImages) {
-                    if (img.containsKey('blob')) {
-                        String relId = (String) img.get('relId');
-                        String fName = (String) img.get('fileName');
-                        String newRel = '<Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + fName + '"/>';
-                        mr.relsXml = mr.relsXml.replace('</Relationships>', newRel + '</Relationships>');
-                    }
-                    // URL-only images are not added to rels (they're for HTML/PDF only, not DOCX)
+                    // Add relationship for ALL images (blob or URL-only)
+                    String relId = (String) img.get('relId');
+                    String fName = (String) img.get('fileName');
+                    String newRel = '<Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + fName + '"/>';
+                    mr.relsXml = mr.relsXml.replace('</Relationships>', newRel + '</Relationships>');
                 }
             }
             // Collect image data for rendering paths
@@ -291,12 +289,11 @@ public with sharing class DocGenService {
         if (!pendingImages.isEmpty()) {
             if (mr.relsXml != null) {
                 for (Map<String, Object> img : pendingImages) {
-                    if (img.containsKey('blob')) {
-                        String relId = (String) img.get('relId');
-                        String fName = (String) img.get('fileName');
-                        String newRel = '<Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + fName + '"/>';
-                        mr.relsXml = mr.relsXml.replace('</Relationships>', newRel + '</Relationships>');
-                    }
+                    // Add relationship for ALL images (blob or URL-only)
+                    String relId = (String) img.get('relId');
+                    String fName = (String) img.get('fileName');
+                    String newRel = '<Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + fName + '"/>';
+                    mr.relsXml = mr.relsXml.replace('</Relationships>', newRel + '</Relationships>');
                 }
             }
             for (Map<String, Object> img : pendingImages) {
@@ -379,6 +376,72 @@ public with sharing class DocGenService {
     }
 
     /**
+     * Returns merged document parts for client-side DOCX assembly.
+     * No ZIP assembly on server — just the merged XML, updated rels/content types,
+     * shell CV ID, and pending image CV IDs. The browser fetches the shell ZIP and
+     * images by URL, then assembles the final DOCX client-side (zero heap for ZIP).
+     */
+    public static Map<String, Object> generateDocumentParts(Id templateId, Id recordId) {
+        // Use PDF output format to skip image blob loading during merge.
+        // Images are collected as CV URLs only — we deduplicate and load once below.
+        currentOutputFormat = 'PDF';
+        MergeResult mr = mergeTemplate(templateId, recordId);
+        currentOutputFormat = 'Native';
+
+        // Collect ALL XML parts for the client to build the ZIP from scratch.
+        // Merged entries (document.xml, headers, footers) come from processXml.
+        // Passthrough entries (styles, numbering, theme, etc.) come from the template.
+        // All are returned as path→string maps — the client assembles the ZIP.
+        Map<String, String> allXmlParts = new Map<String, String>(mr.processedXmlEntries);
+        if (mr.contentTypesXml != null) {
+            allXmlParts.put('[Content_Types].xml', mr.contentTypesXml);
+        }
+        if (mr.relsXml != null) {
+            allXmlParts.put(mr.relsPath, mr.relsXml);
+        }
+        // Add passthrough XML entries (styles.xml, numbering.xml, theme, etc.)
+        for (String path : mr.passthroughEntries.keySet()) {
+            Blob entryBlob = mr.passthroughEntries.get(path);
+            if (!path.startsWith(mr.mediaPath)) {
+                // Non-media passthrough = XML/text content
+                allXmlParts.put(path, entryBlob.toString());
+            }
+        }
+
+        // Build image map — return CV IDs for client to fetch one at a time.
+        // Each client-side Apex call gets its own fresh heap, enabling unlimited images.
+        // Template-embedded media from passthrough (small, already in heap)
+        Map<String, String> imageBase64Map = new Map<String, String>();
+        for (String path : mr.passthroughEntries.keySet()) {
+            if (path.startsWith(mr.mediaPath)) {
+                imageBase64Map.put(path, EncodingUtil.base64Encode(mr.passthroughEntries.get(path)));
+            }
+        }
+
+        // Dynamic images: return mediaPath → CV ID mapping (not base64)
+        // Client calls getContentVersionBase64() for each unique CV in separate transactions
+        Map<String, String> imageCvIdMap = new Map<String, String>();
+        for (Map<String, Object> img : pendingImages) {
+            String fileName = (String) img.get('fileName');
+            String mediaPath = 'word/media/' + fileName;
+            if (img.containsKey('url')) {
+                String url = (String) img.get('url');
+                if (url.contains('/version/download/')) {
+                    imageCvIdMap.put(mediaPath, url.substringAfterLast('/'));
+                }
+            }
+        }
+
+        return new Map<String, Object>{
+            'allXmlParts' => allXmlParts,
+            'imageBase64Map' => imageBase64Map,
+            'imageCvIdMap' => imageCvIdMap,
+            'title' => mr.docTitle,
+            'templateType' => mr.templateType
+        };
+    }
+
+    /**
      * Extracts images from a template DOCX/PPTX file and saves them as ContentVersion
      * records linked to the template version. These committed CVs provide stable URLs
      * for Blob.toPdf() which cannot render data URI images (Flying Saucer limitation).
@@ -412,24 +475,48 @@ public with sharing class DocGenService {
         Map<String, Blob> mediaEntries = new Map<String, Blob>();
         Map<String, String> xmlEntries = new Map<String, String>();
 
+        // Extract all entries in one pass — ZipReader may not support multiple extractions
+        Map<String, Blob> allEntries = new Map<String, Blob>();
         for (Compression.ZipEntry entry : reader.getEntries()) {
             String name = entry.getName();
+            allEntries.put(name, reader.extract(name));
+        }
+
+        // Classify entries and build shell ZIP
+        Compression.ZipWriter shellWriter = new Compression.ZipWriter();
+        Set<String> documentXmlPaths = new Set<String>();
+
+        for (String name : allEntries.keySet()) {
+            Blob entryBlob = allEntries.get(name);
+            Boolean isDocumentXml = false;
+
             if (name == relsPath) {
-                relsXml = reader.extract(name).toString();
+                relsXml = entryBlob.toString();
             } else if (name.startsWith(mediaPath)) {
-                mediaEntries.put(name, reader.extract(name));
+                mediaEntries.put(name, entryBlob);
             }
-            // Capture XML parts needed for PDF generation (skip ZIP at render time)
+
+            // Identify XML parts that get merged/replaced at generation time
             if (templateType == 'Word') {
                 if (name == 'word/document.xml' ||
                     (name.startsWith('word/header') && name.endsWith('.xml')) ||
                     (name.startsWith('word/footer') && name.endsWith('.xml'))) {
-                    xmlEntries.put(name, reader.extract(name).toString());
+                    xmlEntries.put(name, entryBlob.toString());
+                    isDocumentXml = true;
+                    documentXmlPaths.add(name);
                 }
             } else if (templateType == 'PowerPoint') {
                 if (name.startsWith('ppt/slides/slide') && name.endsWith('.xml')) {
-                    xmlEntries.put(name, reader.extract(name).toString());
+                    xmlEntries.put(name, entryBlob.toString());
+                    isDocumentXml = true;
+                    documentXmlPaths.add(name);
                 }
+            }
+
+            // Shell gets everything EXCEPT document XML, rels, and [Content_Types].xml
+            // (rels and content types may be modified during merge for new images)
+            if (!isDocumentXml && name != relsPath && name != '[Content_Types].xml') {
+                shellWriter.addEntry(name, entryBlob);
             }
         }
 
@@ -494,6 +581,16 @@ public with sharing class DocGenService {
                 relCursor = relEnd;
             }
         }
+
+        // Save shell ZIP — the template without document XML entries, rels, or content types.
+        // Client-side DOCX assembly fetches this shell, adds the server-merged XML, and produces the final DOCX.
+        Blob shellBlob = shellWriter.getArchive();
+        ContentVersion shellCv = new ContentVersion();
+        shellCv.Title = 'docgen_tmpl_shell_' + versionId;
+        shellCv.PathOnClient = 'docgen_tmpl_shell_' + versionId + '.docx';
+        shellCv.VersionData = shellBlob;
+        shellCv.FirstPublishLocationId = versionId;
+        newCvs.add(shellCv);
 
         if (!newCvs.isEmpty()) {
             SObjectAccessDecision cvDecision = Security.stripInaccessible(AccessType.CREATABLE, newCvs);

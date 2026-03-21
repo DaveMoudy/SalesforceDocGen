@@ -103,6 +103,35 @@ public with sharing class DocGenController {
         }
     }
 
+    /**
+     * Returns merged document parts for client-side DOCX assembly.
+     * Server merges the XML (lightweight). Client fetches the shell ZIP and images
+     * by URL, then assembles the final DOCX — no server-side ZIP, zero heap for large docs.
+     */
+    @AuraEnabled
+    public static Map<String, Object> generateDocumentParts(Id templateId, Id recordId) {
+        try {
+            return DocGenService.generateDocumentParts(templateId, recordId);
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'DocGen: Error generating document parts: ' + e.getMessage());
+            throw new AuraHandledException('Error generating document parts. Please check the template configuration.');
+        }
+    }
+
+    /**
+     * Returns a single ContentVersion's binary data as base64.
+     * Called by the client in a loop — each call is its own transaction with fresh heap.
+     * This enables client-side DOCX assembly with unlimited images.
+     */
+    @AuraEnabled
+    public static String getContentVersionBase64(Id contentVersionId) {
+        List<ContentVersion> cvs = [
+            SELECT VersionData FROM ContentVersion WHERE Id = :contentVersionId WITH SYSTEM_MODE LIMIT 1
+        ];
+        if (cvs.isEmpty()) return null;
+        return EncodingUtil.base64Encode(cvs[0].VersionData);
+    }
+
     @AuraEnabled(cacheable=true)
     public static Map<String, Object> previewRecordData(Id recordId, String baseObject, String queryConfig) {
         if (recordId == null || String.isBlank(baseObject) || String.isBlank(queryConfig)) {

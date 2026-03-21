@@ -2,8 +2,11 @@ import { LightningElement, api, wire, track } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import getTemplatesForObject from '@salesforce/apex/DocGenController.getTemplatesForObject';
 import processAndReturnDocument from '@salesforce/apex/DocGenController.processAndReturnDocument';
+import generateDocumentParts from '@salesforce/apex/DocGenController.generateDocumentParts';
+import getContentVersionBase64 from '@salesforce/apex/DocGenController.getContentVersionBase64';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import saveGeneratedDocument from '@salesforce/apex/DocGenController.saveGeneratedDocument';
+import { buildDocx } from './docGenZipWriter';
 
 export default class DocGenRunner extends LightningElement {
     @api recordId;
@@ -95,8 +98,12 @@ export default class DocGenRunner extends LightningElement {
                     this.downloadBase64(result.base64, docTitle + '.pdf', 'application/pdf');
                     this.showToast('Success', 'PDF downloaded.', 'success');
                 }
+            } else if (!isPPT) {
+                // Word DOCX — client-side assembly for zero heap
+                this.showToast('Info', 'Generating Word document...', 'info');
+                await this._generateDocxClientSide(saveToRecord);
             } else {
-                // Native DOCX/PPTX path
+                // PowerPoint — still server-side (different ZIP structure)
                 const result = await processAndReturnDocument({
                     templateId: this.selectedTemplateId,
                     recordId: this.recordId
@@ -106,7 +113,6 @@ export default class DocGenRunner extends LightningElement {
                     throw new Error('Document generation returned empty result.');
                 }
 
-                const ext = isPPT ? 'pptx' : 'docx';
                 const docTitle = result.title || 'Document';
 
                 if (saveToRecord) {
@@ -115,12 +121,12 @@ export default class DocGenRunner extends LightningElement {
                         recordId: this.recordId,
                         fileName: docTitle,
                         base64Data: result.base64,
-                        extension: ext
+                        extension: 'pptx'
                     });
-                    this.showToast('Success', `${ext.toUpperCase()} saved to record.`, 'success');
+                    this.showToast('Success', 'PPTX saved to record.', 'success');
                 } else {
-                    this.downloadBase64(result.base64, docTitle + '.' + ext, 'application/octet-stream');
-                    this.showToast('Success', `${isPPT ? 'PowerPoint' : 'Word document'} downloaded.`, 'success');
+                    this.downloadBase64(result.base64, docTitle + '.pptx', 'application/octet-stream');
+                    this.showToast('Success', 'PowerPoint downloaded.', 'success');
                 }
             }
         } catch (e) {
@@ -136,6 +142,122 @@ export default class DocGenRunner extends LightningElement {
         } finally {
             this.isLoading = false;
         }
+    }
+
+    /**
+     * Client-side DOCX assembly. Server merges XML (lightweight), client fetches
+     * the shell ZIP and images by URL, then assembles the final DOCX.
+     * Zero server-side heap for ZIP assembly — enables unlimited document size.
+     */
+    async _generateDocxClientSide(saveToRecord) {
+        // 1. Server merges the XML — returns parts, not a ZIP
+        const parts = await generateDocumentParts({
+            templateId: this.selectedTemplateId,
+            recordId: this.recordId
+        });
+
+        if (!parts || !parts.allXmlParts) {
+            throw new Error('Document generation returned empty result.');
+        }
+
+        const docTitle = parts.title || 'Document';
+
+        // 2. Fetch dynamic images one at a time — each Apex call gets fresh heap
+        const allImages = { ...(parts.imageBase64Map || {}) };
+        if (parts.imageCvIdMap) {
+            // Deduplicate: multiple media paths may reference the same CV ID
+            const uniqueCvIds = new Map();
+            for (const [mediaPath, cvId] of Object.entries(parts.imageCvIdMap)) {
+                if (!uniqueCvIds.has(cvId)) {
+                    uniqueCvIds.set(cvId, []);
+                }
+                uniqueCvIds.get(cvId).push(mediaPath);
+            }
+
+            // Fetch each unique image in its own Apex call — fresh 6MB heap each time
+            for (const [cvId, mediaPaths] of uniqueCvIds) {
+                try {
+                    const b64 = await getContentVersionBase64({ contentVersionId: cvId });
+                    if (b64) {
+                        for (const mediaPath of mediaPaths) {
+                            allImages[mediaPath] = b64;
+                        }
+                    }
+                } catch (imgErr) {
+                    console.warn('DocGen: Failed to fetch image CV ' + cvId, imgErr);
+                }
+            }
+        }
+
+        // 3. Build the DOCX ZIP from scratch — all XML parts + media as base64
+        const docxBytes = buildDocx(parts.allXmlParts, allImages);
+        const docxBase64 = this._uint8ArrayToBase64(docxBytes);
+
+        // 6. Download or save
+        if (saveToRecord) {
+            this.showToast('Info', 'Saving to Record...', 'info');
+            await this._saveDocxViaRestApi(docxBytes, docTitle);
+            this.showToast('Success', 'DOCX saved to record.', 'success');
+        } else {
+            this.downloadBase64(docxBase64, docTitle + '.docx', 'application/octet-stream');
+            this.showToast('Success', 'Word document downloaded.', 'success');
+        }
+    }
+
+    /**
+     * Uploads a DOCX file to Salesforce via REST API and links it to the record.
+     * Bypasses Aura payload limits — the browser sends the binary directly.
+     */
+    async _saveDocxViaRestApi(docxBytes, docTitle) {
+        const fileName = docTitle + '.docx';
+        const boundary = '----DocGenBoundary' + Date.now();
+
+        // Build multipart/form-data body
+        const header = '--' + boundary + '\r\n' +
+            'Content-Disposition: form-data; name="entity_content"\r\n' +
+            'Content-Type: application/json\r\n\r\n' +
+            JSON.stringify({
+                Title: docTitle,
+                PathOnClient: fileName,
+                FirstPublishLocationId: this.recordId
+            }) + '\r\n' +
+            '--' + boundary + '\r\n' +
+            'Content-Disposition: form-data; name="VersionData"; filename="' + fileName + '"\r\n' +
+            'Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n';
+        const footer = '\r\n--' + boundary + '--';
+
+        const headerBytes = new TextEncoder().encode(header);
+        const footerBytes = new TextEncoder().encode(footer);
+        const bodyArray = new Uint8Array(headerBytes.length + docxBytes.length + footerBytes.length);
+        bodyArray.set(headerBytes, 0);
+        bodyArray.set(docxBytes, headerBytes.length);
+        bodyArray.set(footerBytes, headerBytes.length + docxBytes.length);
+
+        const response = await fetch('/services/data/v66.0/sobjects/ContentVersion/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'multipart/form-data; boundary=' + boundary,
+                'X-SFDC-Request-Id': Date.now().toString()
+            },
+            credentials: 'include',
+            body: bodyArray.buffer
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error('Failed to save document: ' + response.status + ' ' + errorText);
+        }
+    }
+
+    /**
+     * Converts a Uint8Array to a base64 string.
+     */
+    _uint8ArrayToBase64(bytes) {
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
     }
 
     /**
