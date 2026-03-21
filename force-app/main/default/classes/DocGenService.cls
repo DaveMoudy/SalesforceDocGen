@@ -399,7 +399,7 @@ public with sharing class DocGenService {
             ];
             for (ContentVersion cv : tmplCvs) {
                 String relId = cv.Title.substring(prefix.length());
-                pdfImages.put(relId, baseUrl + '/sfc/servlet.shepherd/version/download/' + cv.Id);
+                pdfImages.put(relId, '/sfc/servlet.shepherd/version/download/' + cv.Id);
             }
         }
 
@@ -428,10 +428,10 @@ public with sharing class DocGenService {
         Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
         String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, pdfImages);
 
-        // Try Blob.toPdf() first — Spring '26+ orgs with the Release Update enabled
-        // can resolve Salesforce ContentVersion image URLs natively.
+        // Blob.toPdf() with the Spring '26 Release Update resolves relative Salesforce
+        // ContentVersion URLs (/sfc/servlet.shepherd/...) natively via the VF rendering engine.
         // If it fails (pre-Spring '26 or Release Update not enabled), fall back to
-        // VF page renderAs="pdf" (Flying Saucer) which resolves image URLs universally.
+        // VF page renderAs="pdf" which resolves image URLs via session.
         try {
             return Blob.toPdf(html);
         } catch (Exception e) {

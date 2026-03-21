@@ -68,7 +68,7 @@
                         </div>
                         <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
                             <lightning-icon icon-name="utility:check" size="x-small" variant="success" class="slds-var-m-right_x-small"></lightning-icon>
-                            <strong>No external services</strong> — AppExchange safe
+                            <strong>No external services</strong> — no HTTP callouts
                         </div>
                     </div>
                 </div>
@@ -139,7 +139,7 @@
 
                 <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
                     <h3 class="slds-text-heading_small slds-var-m-bottom_small">Step 1: Install the Package</h3>
-                    <p class="slds-var-m-bottom_small">Install DocGen from the AppExchange or via the package installation URL provided by your administrator. Choose "Install for Admins Only" to start, then assign permission sets as needed.</p>
+                    <p class="slds-var-m-bottom_small">Install DocGen using the package installation URL provided on the project's GitHub page. Choose "Install for Admins Only" to start, then assign permission sets as needed.</p>
                 </div>
 
                 <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
@@ -823,7 +823,7 @@
                         <li class="slds-var-p-bottom_x-small">CRUD/FLS enforcement uses a mix of <code>WITH USER_MODE</code> (for user-context queries) and <code>Security.stripInaccessible()</code> (for DML operations).</li>
                         <li class="slds-var-p-bottom_x-small">Dynamic SOQL in the data retriever validates all field names against the Schema before inclusion in queries.</li>
                         <li class="slds-var-p-bottom_x-small">Guest user signature tokens are SHA-256 hashes with a 30-day expiration window.</li>
-                        <li class="slds-var-p-bottom_x-small">No HTTP callouts or session ID usage — the app is fully AppExchange safe.</li>
+                        <li class="slds-var-p-bottom_x-small">No HTTP callouts or session ID usage — fully self-contained on the Salesforce platform.</li>
                     </ul>
                 </div>
             </template>

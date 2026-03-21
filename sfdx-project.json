@@ -1,8 +1,8 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v1.3.1 - Encoding fix, RTF docs, improved docs, sponsorship",
-      "versionNumber": "1.3.1.NEXT",
+      "versionName": "v1.3.2 - PDF image fix, encoding fix, space fix, docs overhaul",
+      "versionNumber": "1.3.2.NEXT",
       "path": "force-app",
       "default": true,
       "package": "Document Generation",
@@ -37,6 +37,7 @@
     "Document Generation@1.2.1-1": "04tdL000000RHrBQAW",
     "Document Generation@1.2.2-1": "04tdL000000RMqrQAG",
     "Document Generation@1.3.0-1": "04tdL000000RcijQAC",
-    "Document Generation@1.3.1-1": "04tdL000000RckLQAS"
+    "Document Generation@1.3.1-1": "04tdL000000RckLQAS",
+    "Document Generation@1.3.2-1": "04tdL000000Rd0TQAS"
   }
 }

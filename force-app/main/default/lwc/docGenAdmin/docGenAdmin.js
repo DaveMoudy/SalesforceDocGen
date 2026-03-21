@@ -285,6 +285,7 @@ const VERSION_COLUMNS = [
                 Name: this.newTemplateName,
                 Category__c: this.newTemplateCategory,
                 Type__c: this.newTemplateType,
+                Output_Format__c: this.newTemplateOutputFormat,
                 Base_Object_API__c: this.newTemplateObject,
                 Description__c: this.newTemplateDesc,
                 Query_Config__c: this.newTemplateQuery,

@@ -2,7 +2,7 @@
 
 **A free, native, production-ready document engine for Salesforce.**
 
-[![Version](https://img.shields.io/badge/version-1.3.1-blue.svg)](#quick-install)
+[![Version](https://img.shields.io/badge/version-1.3.2-blue.svg)](#quick-install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![API Version](https://img.shields.io/badge/API-v66.0-orange.svg)](#)
@@ -58,16 +58,16 @@ This project gives you a professional-grade document engine -- template manageme
 
 ## Quick Install
 
-**Package Version ID**: `04tdL000000RckLQAS`
+**Package Version ID**: `04tdL000000Rd0TQAS`
 
 **CLI:**
 ```bash
-sf package install --package 04tdL000000RckLQAS --wait 10 --installation-key-bypass
+sf package install --package 04tdL000000Rd0TQAS --wait 10 --installation-key-bypass
 ```
 
 **Browser:**
-- [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RckLQAS)
-- [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RckLQAS)
+- [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000Rd0TQAS)
+- [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000Rd0TQAS)
 
 > Select **Install for Admins Only** during installation, then assign permission sets to your users.
 
@@ -89,7 +89,17 @@ DocGen runs 100% on the Salesforce platform, which means it operates within [Ape
 
 **Is this right for you?** — If your use case consistently requires documents or image data larger than these limits, this tool may not be the right fit in its current state. For very large documents, consider the [client-side generation option](https://github.com/DaveMoudy/SalesforceDocGen/issues/23) which offloads assembly to the browser.
 
-## What's New in v1.3.1
+## What's New in v1.3.2
+
+### Bug Fix: PDF Images Broken in Single-Record Generation
+- Template images in PDFs were rendering as broken placeholders since v1.2.0
+- Root cause: `buildPdfImageMap()` was prepending the org domain to ContentVersion URLs, creating absolute URLs. `Blob.toPdf()` only resolves **relative** Salesforce paths (`/sfc/servlet.shepherd/version/download/...`)
+- Fix: Use relative ContentVersion download URLs, matching the original design from commit `35ea7cb`
+
+### Bug Fix: PDF Loses Space Between Bold Merge Fields (#34)
+- A space between two adjacent bold merge fields (e.g., `{FirstName} {LastName}`) was being dropped in PDF output
+- Root cause: `String.isBlank(" ")` returns `true` in Apex, so whitespace-only text runs were discarded
+- Fix: Changed to `String.isEmpty()` which preserves space-only content
 
 ### Bug Fix: Character Encoding (#21)
 - Fixed `&` characters rendering as `&amp;` in PDF output -- the HTML renderer was double-encoding XML entities from the DOCX source

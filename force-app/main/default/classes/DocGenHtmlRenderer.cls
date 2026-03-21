@@ -594,9 +594,9 @@ public with sharing class DocGenHtmlRenderer {
             }
         }
 
-        // Extract text
+        // Extract text (use isEmpty, not isBlank — preserve whitespace-only runs like spaces between bold merge fields)
         String text = extractTextContent(rXml);
-        if (String.isBlank(text)) return '';
+        if (String.isEmpty(text)) return '';
 
         // Extract run properties
         String rPr = extractElement(rXml, 'w:rPr');
