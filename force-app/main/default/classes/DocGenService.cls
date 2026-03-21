@@ -4,6 +4,7 @@ public with sharing class DocGenService {
     private static List<Map<String, Object>> pendingImages = new List<Map<String, Object>>();
     private static Integer imageCounter = 0;
     private static String currentTemplateType = 'Word'; // Set before processXml calls
+    private static String currentOutputFormat = 'Native'; // Set before processXml — PDF skips blob loading for images
 
     /**
      * Intermediate merge result containing processed XML, images, and passthrough ZIP entries.
@@ -85,6 +86,7 @@ public with sharing class DocGenService {
         // saved as ContentVersions during template version save, skipping full ZIP decompression.
         // Saves ~1.5-2MB heap by avoiding base64 decode + ZIP reader + passthrough extraction.
         if (outputFormat == 'PDF' && templateType == 'Word') {
+            currentOutputFormat = 'PDF';
             MergeResult pdfResult = tryMergeFromPreDecomposed(templateId, recordDataMap, mr);
             if (pdfResult != null) {
                 mr = pdfResult;
@@ -527,11 +529,16 @@ public with sharing class DocGenService {
             }
         }
 
-        // 2. RTF/dynamic images: absolute Salesforce URLs
+        // 2. RTF/dynamic images: use relative Salesforce URLs for Blob.toPdf()
         for (String relId : mr.imageUrlByRelId.keySet()) {
             String url = mr.imageUrlByRelId.get(relId);
-            if (!url.startsWithIgnoreCase('http')) {
-                url = baseUrl + url;
+            // Strip domain if absolute — Blob.toPdf() only resolves relative paths
+            if (url.startsWithIgnoreCase('http')) {
+                Integer pathStart = url.indexOf('/sfc/');
+                if (pathStart == -1) pathStart = url.indexOf('/servlet/');
+                if (pathStart != -1) {
+                    url = url.substring(pathStart);
+                }
             }
             pdfImages.put(relId, url);
         }
@@ -1333,12 +1340,22 @@ public with sharing class DocGenService {
             }
             // 4. ContentVersion ID (starts with 068) — works for both DOCX (blob) and PDF (URL)
             else if (fieldValue.startsWith('068') && fieldValue.length() >= 15) {
-                List<ContentVersion> cvs = [SELECT Id, VersionData, FileExtension FROM ContentVersion WHERE Id = :fieldValue WITH SYSTEM_MODE LIMIT 1];
-                if (!cvs.isEmpty()) {
-                    imageBlob = cvs[0].VersionData;
-                    if (cvs[0].FileExtension != null) ext = cvs[0].FileExtension.toLowerCase();
-                    // Store URL for PDF rendering (committed CV = stable URL)
-                    cvImageUrl = URL.getOrgDomainUrl().toExternalForm() + '/sfc/servlet.shepherd/version/download/' + cvs[0].Id;
+                if (currentOutputFormat == 'PDF') {
+                    // PDF path: only need the URL — Blob.toPdf() fetches images server-side.
+                    // Skip loading the blob entirely to save heap.
+                    List<ContentVersion> cvs = [SELECT Id, FileExtension FROM ContentVersion WHERE Id = :fieldValue WITH SYSTEM_MODE LIMIT 1];
+                    if (!cvs.isEmpty()) {
+                        if (cvs[0].FileExtension != null) ext = cvs[0].FileExtension.toLowerCase();
+                        cvImageUrl = '/sfc/servlet.shepherd/version/download/' + cvs[0].Id;
+                    }
+                } else {
+                    // DOCX path: need the blob for ZIP embedding
+                    List<ContentVersion> cvs = [SELECT Id, VersionData, FileExtension FROM ContentVersion WHERE Id = :fieldValue WITH SYSTEM_MODE LIMIT 1];
+                    if (!cvs.isEmpty()) {
+                        imageBlob = cvs[0].VersionData;
+                        if (cvs[0].FileExtension != null) ext = cvs[0].FileExtension.toLowerCase();
+                        cvImageUrl = '/sfc/servlet.shepherd/version/download/' + cvs[0].Id;
+                    }
                 }
             }
             // 5. Salesforce file URL containing refid (rich text image reference)
@@ -1361,8 +1378,8 @@ public with sharing class DocGenService {
 
             // If no blob but we have a URL, store it for PDF rendering
             // (Blob.toPdf resolves Salesforce URLs natively via the VF engine)
-            String sourceUrl = null;
-            if (imageBlob == null) {
+            String sourceUrl = cvImageUrl; // Use CV URL if already resolved (PDF path)
+            if (imageBlob == null && sourceUrl == null) {
                 // Try to extract a URL from the field value for PDF
                 if (fieldValue.containsIgnoreCase('<img')) {
                     // HTML with img tag — extract src URL

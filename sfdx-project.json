@@ -1,8 +1,8 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v1.3.3 - Pre-decomposed PDF, image fix, encoding fix, space fix",
-      "versionNumber": "1.3.3.NEXT",
+      "versionName": "v1.3.4 - Zero-heap PDF images, pre-decomposed templates",
+      "versionNumber": "1.3.4.NEXT",
       "path": "force-app",
       "default": true,
       "package": "Document Generation",
@@ -39,6 +39,7 @@
     "Document Generation@1.3.0-1": "04tdL000000RcijQAC",
     "Document Generation@1.3.1-1": "04tdL000000RckLQAS",
     "Document Generation@1.3.2-1": "04tdL000000Rd0TQAS",
-    "Document Generation@1.3.3-1": "04tdL000000Rd6vQAC"
+    "Document Generation@1.3.3-1": "04tdL000000Rd6vQAC",
+    "Document Generation@1.3.4-1": "04tdL000000RdDNQA0"
   }
 }
