@@ -35,10 +35,7 @@
         <!-- Relationship Map (always visible) -->
         <div class="slds-box slds-var-m-bottom_small" style="background: #f8fafc; border-radius: 8px; border: 1px solid #e5e5e5; padding: 0.75rem 1rem;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span style="font-size: 0.75rem; font-weight: 600; color: #706e6b; text-transform: uppercase; letter-spacing: 0.5px;">Relationship Map</span>
-                    <lightning-button label="Change Root Object" variant="base" size="small" icon-name="utility:refresh" onclick={handleChangeRoot}></lightning-button>
-                </div>
+                <span style="font-size: 0.75rem; font-weight: 600; color: #706e6b; text-transform: uppercase; letter-spacing: 0.5px;">Document Data Map</span>
                 <lightning-button label="Import from Report" variant="neutral" icon-name="utility:upload" size="small" onclick={handleOpenReportImport}></lightning-button>
             </div>
             <div style="font-size: 0.8125rem; font-family: monospace;">
@@ -91,8 +88,50 @@
                 <!-- Per-Object Relationship Actions -->
                 <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e5e5;">
                     <lightning-button label="Add child records" variant="neutral" icon-name="utility:add" size="small" onclick={handleAddNode}></lightning-button>
-                    <lightning-button label="Add parent above" variant="neutral" icon-name="utility:level_up" size="small" onclick={handleAddParentNode}></lightning-button>
+                    <lightning-button label="Include parent fields" variant="neutral" icon-name="utility:record_lookup" size="small" onclick={handleShowParentFieldPicker}></lightning-button>
                 </div>
+
+                <!-- Parent Field Picker (inline, shown when active) -->
+                <template if:true={showParentFieldPicker}>
+                    <div style="background: #f8fafc; border: 1px solid #e5e5e5; border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <strong style="font-size: 0.8125rem;">Include fields from a related record</strong>
+                            <lightning-button-icon icon-name="utility:close" variant="bare" size="small" alternative-text="Close" onclick={handleCloseParentFieldPicker}></lightning-button-icon>
+                        </div>
+                        <p class="slds-text-body_small slds-text-color_weak" style="margin-bottom: 0.5rem;">Pick a relationship (like Owner or Account), then select which fields to pull in. These appear as parent fields like Owner.Name in your template.</p>
+
+                        <!-- Step 1: Pick relationship -->
+                        <template if:false={parentPickerRelSelected}>
+                            <lightning-input type="search" variant="label-hidden" placeholder="Search relationships..." onchange={handleParentPickerSearch} style="margin-bottom: 0.5rem;"></lightning-input>
+                            <div style="max-height: 200px; overflow-y: auto; border: 1px solid #e5e5e5; border-radius: 4px;">
+                                <template for:each={filteredParentPickerOptions} for:item="rel">
+                                    <div key={rel.value} class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" style="cursor: pointer; padding: 0.5rem;" data-value={rel.value} data-target={rel.targetObject} onclick={handleParentPickerRelSelect}>
+                                        <span class="slds-truncate">{rel.label}</span>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- Step 2: Pick fields from that relationship -->
+                        <template if:true={parentPickerRelSelected}>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                <span class="slds-badge slds-badge_lightest">{parentPickerRelName}</span>
+                                <lightning-button label="Change" variant="base" size="small" onclick={handleParentPickerBack}></lightning-button>
+                            </div>
+                            <div style="max-height: 200px; overflow-y: auto; border: 1px solid #e5e5e5; border-radius: 4px; padding: 0.5rem;">
+                                <lightning-checkbox-group
+                                    name="parentFields"
+                                    label="Fields"
+                                    variant="label-hidden"
+                                    options={parentPickerFieldOptions}
+                                    value={parentPickerSelectedFields}
+                                    onchange={handleParentPickerFieldChange}>
+                                </lightning-checkbox-group>
+                            </div>
+                            <lightning-button label="Add Selected Fields" variant="brand" size="small" onclick={handleParentPickerApply} class="slds-var-m-top_small"></lightning-button>
+                        </template>
+                    </div>
+                </template>
 
                 <!-- Field Search + Select All -->
                 <lightning-input type="search" variant="label-hidden" placeholder="Search fields..." onchange={handleFieldSearch} style="margin-bottom: 0.5rem;"></lightning-input>
@@ -113,15 +152,15 @@
                     </lightning-checkbox-group>
                 </div>
 
-                <!-- Parent Fields (shown as badges) -->
+                <!-- Parent Fields (shown as removable pills) -->
                 <template if:true={activeNode.parentGroups.length}>
                     <div style="margin-bottom: 0.75rem;">
-                        <p style="font-size: 0.75rem; font-weight: 600; color: #706e6b; margin-bottom: 0.25rem;">Parent Fields</p>
+                        <p style="font-size: 0.75rem; font-weight: 600; color: #706e6b; margin-bottom: 0.25rem;">Parent Fields (from related records)</p>
                         <template for:each={activeNode.parentGroups} for:item="pg">
-                            <div key={pg.relationshipName} style="background: #f3f2f2; border-radius: 6px; padding: 0.375rem 0.75rem; margin-bottom: 0.25rem;">
-                                <span style="font-size: 0.6875rem; font-weight: 600; color: #706e6b;">From: {pg.relationshipName}</span>
+                            <div key={pg.relationshipName} style="background: #eef4fb; border: 1px solid #d1e3f8; border-radius: 6px; padding: 0.375rem 0.75rem; margin-bottom: 0.25rem; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;">
+                                <span style="font-size: 0.6875rem; font-weight: 600; color: #0176d3;">{pg.relationshipName}:</span>
                                 <template for:each={pg.fields} for:item="pf">
-                                    <span key={pf} class="slds-badge slds-badge_lightest" style="margin-left: 4px;">{pg.relationshipName}.{pf}</span>
+                                    <span key={pf} class="slds-badge" style="background: #fff; border: 1px solid #d1e3f8;">{pf}</span>
                                 </template>
                             </div>
                         </template>
@@ -182,40 +221,6 @@
                                     </li>
                                 </template>
                             </ul>
-                        </template>
-                    </div>
-                </div>
-            </div>
-        </section>
-        <div class="slds-backdrop slds-backdrop_open"></div>
-    </template>
-
-    <!-- ==================== ADD PARENT MODAL ==================== -->
-    <template if:true={showAddParentModal}>
-        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
-            <div class="slds-modal__container" style="max-width: 480px;">
-                <header class="slds-modal__header">
-                    <lightning-button-icon icon-name="utility:close" alternative-text="Close" variant="bare-inverse" class="slds-modal__close" onclick={handleCloseAddParent}></lightning-button-icon>
-                    <h2 class="slds-text-heading_medium">Add Parent Object</h2>
-                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">Which object does this record belong to? It will become the new root of your document.</p>
-                </header>
-                <div class="slds-modal__content slds-var-p-around_medium">
-                    <lightning-input type="search" placeholder="Search..." value={addParentSearch} onchange={handleParentSearch} class="slds-var-m-bottom_small"></lightning-input>
-                    <div class="slds-scrollable_y" style="max-height: 300px;">
-                        <template if:true={filteredParentOptions.length}>
-                            <ul class="slds-listbox slds-listbox_vertical slds-has-dividers_bottom-space">
-                                <template for:each={filteredParentOptions} for:item="opt">
-                                    <li key={opt.value} class="slds-listbox__item">
-                                        <div class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" data-value={opt.value} onclick={handleAddParentSelect}>
-                                            <span class="slds-media__figure"><lightning-icon icon-name="utility:level_up" size="small"></lightning-icon></span>
-                                            <span class="slds-media__body"><span class="slds-truncate">{opt.label}</span></span>
-                                        </div>
-                                    </li>
-                                </template>
-                            </ul>
-                        </template>
-                        <template if:false={filteredParentOptions.length}>
-                            <p class="slds-text-body_small slds-text-color_weak slds-var-p-around_medium slds-text-align_center">No parent objects found.</p>
                         </template>
                     </div>
                 </div>

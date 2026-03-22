@@ -227,110 +227,96 @@ export default class DocGenColumnBuilder extends LightningElement {
         this._initRootNode(value, label);
     }
 
-    // === ADD PARENT ABOVE ROOT ===
-    @track showAddParentModal = false;
-    @track parentLookupOptions = [];
-    @track addParentSearch = '';
+    // === PARENT FIELD PICKER (inline, per-tab) ===
+    @track showParentFieldPicker = false;
+    @track parentPickerRelOptions = [];
+    @track parentPickerRelSearch = '';
+    @track parentPickerRelSelected = false;
+    @track parentPickerRelName = '';
+    @track parentPickerTargetObject = '';
+    @track parentPickerFieldOptions = [];
+    @track parentPickerSelectedFields = [];
 
-    handleAddParentNode() {
+    handleShowParentFieldPicker() {
         const node = this.activeNode;
         if (!node) return;
-        this.addParentSearch = '';
-        this._addParentForNodeId = node.id;
+        this.parentPickerRelSelected = false;
+        this.parentPickerRelSearch = '';
+        this.parentPickerSelectedFields = [];
 
         getParentRelationships({ objectName: node.objectApiName })
             .then(data => {
-                this.parentLookupOptions = data;
-                this.showAddParentModal = true;
+                this.parentPickerRelOptions = data;
+                this.showParentFieldPicker = true;
             })
             .catch(error => {
                 this.dispatchEvent(new ShowToastEvent({
                     title: 'Error',
-                    message: error.body ? error.body.message : 'Could not load parent relationships.',
+                    message: error.body ? error.body.message : 'Could not load relationships.',
                     variant: 'error'
                 }));
             });
     }
 
-    handleParentSearch(event) { this.addParentSearch = event.target.value; }
-    handleCloseAddParent() { this.showAddParentModal = false; }
+    handleCloseParentFieldPicker() { this.showParentFieldPicker = false; }
 
-    get filteredParentOptions() {
-        const term = (this.addParentSearch || '').toLowerCase();
-        return this.parentLookupOptions.filter(o => o.label.toLowerCase().includes(term));
+    handleParentPickerSearch(event) { this.parentPickerRelSearch = event.target.value; }
+
+    get filteredParentPickerOptions() {
+        const term = (this.parentPickerRelSearch || '').toLowerCase();
+        return this.parentPickerRelOptions.filter(o => o.label.toLowerCase().includes(term));
     }
 
-    handleAddParentSelect(event) {
+    handleParentPickerRelSelect(event) {
         const relName = event.currentTarget.dataset.value;
-        const opt = this.parentLookupOptions.find(o => o.value === relName);
-        if (!opt) return;
+        const targetObj = event.currentTarget.dataset.target;
+        this.parentPickerRelName = relName;
+        this.parentPickerTargetObject = targetObj;
+        this.parentPickerSelectedFields = [];
 
-        this.showAddParentModal = false;
-
-        // Find the node we're adding a parent to
-        const childNode = this.treeNodes.find(n => n.id === this._addParentForNodeId);
-        if (!childNode) return;
-
-        const parentObjectName = opt.targetObject;
-        const parentLabel = parentObjectName;
-
-        // If this node already has a parent, insert between them
-        // If this is the root, the new parent becomes root
-        const isCurrentRoot = childNode.isRoot;
-
-        // Create new parent node
-        const newParent = this._createNode(parentObjectName, parentLabel,
-            isCurrentRoot, // New parent is root if child was root
-            childNode.parentNodeId, // Takes the child's old parent
-            childNode.lookupField, // Takes the child's old lookup (if any)
-            childNode.relationshipName // Takes the child's old relationship name
-        );
-
-        // Update child to point to new parent
-        childNode.parentNodeId = newParent.id;
-        childNode.lookupField = relName + 'Id';
-        if (isCurrentRoot) {
-            childNode.isRoot = false;
-            childNode.isNotRoot = true;
-        }
-
-        // Determine relationship name from new parent's perspective
-        getChildRelationships({ objectName: parentObjectName })
-            .then(rels => {
-                const match = rels.find(r => r.childObjectApiName === childNode.objectApiName);
-                if (match) {
-                    childNode.relationshipName = match.value;
-                } else {
-                    childNode.relationshipName = childNode.objectApiName + 's';
-                }
-                this.treeNodes = [...this.treeNodes];
-                this._notifyChange();
+        getObjectFields({ objectName: targetObj })
+            .then(data => {
+                this.parentPickerFieldOptions = data;
+                this.parentPickerRelSelected = true;
             });
+    }
 
-        this.treeNodes = [newParent, ...this.treeNodes.filter(n => n.id !== newParent.id)];
-        this.activeNodeId = newParent.id;
+    handleParentPickerBack() {
+        this.parentPickerRelSelected = false;
+    }
 
-        if (isCurrentRoot) {
-            this.selectedObject = parentObjectName;
-            this.selectedObjectLabel = parentLabel;
+    handleParentPickerFieldChange(event) {
+        this.parentPickerSelectedFields = event.detail.value;
+    }
+
+    handleParentPickerApply() {
+        const node = this.activeNode;
+        if (!node || this.parentPickerSelectedFields.length === 0) return;
+
+        // Add as parent group on this node
+        if (!node.parentGroups) node.parentGroups = [];
+
+        // Check if this relationship group already exists
+        let group = node.parentGroups.find(g => g.relationshipName === this.parentPickerRelName);
+        if (!group) {
+            group = { relationshipName: this.parentPickerRelName, fields: [] };
+            node.parentGroups.push(group);
         }
 
-        this._loadNodeFields(newParent);
+        // Add new fields (no duplicates)
+        for (const f of this.parentPickerSelectedFields) {
+            if (!group.fields.includes(f)) group.fields.push(f);
+        }
+
+        this.showParentFieldPicker = false;
+        this.treeNodes = [...this.treeNodes];
+        this._notifyChange();
 
         this.dispatchEvent(new ShowToastEvent({
-            title: 'Parent Added',
-            message: parentLabel + ' added above ' + childNode.label + '.',
+            title: 'Parent Fields Added',
+            message: this.parentPickerSelectedFields.length + ' fields from ' + this.parentPickerRelName + ' added.',
             variant: 'success'
         }));
-    }
-
-    _guessRelationshipName(parentObjectName, childObjectName) {
-        // Common patterns: Account → Opportunities, Contact → Cases
-        // This is a rough guess — ideally we'd use Schema to look it up
-        // For now, pluralize the child object name
-        if (childObjectName.endsWith('y')) return childObjectName.substring(0, childObjectName.length - 1) + 'ies';
-        if (childObjectName.endsWith('__c')) return childObjectName.replace('__c', '__r');
-        return childObjectName + 's';
     }
 
     handleChangeRoot() {
