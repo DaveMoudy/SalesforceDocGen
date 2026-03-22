@@ -29,7 +29,7 @@ Or click: [Install in Production](https://login.salesforce.com/packaging/install
 ## How It Works
 
 1. **Name your template** — pick a name, output type (PDF or Word), and the Salesforce object
-2. **Pick your data** — use the visual query builder to select fields, parent lookups, and child lists (supports deep nesting: Account → Opportunities → Line Items)
+2. **Pick your data** — use the visual query builder to select fields, parent lookups, and child lists (supports deep nesting: Account → Opportunities → Line Items). Or **import from a Salesforce Report** to auto-detect objects, fields, and relationships.
 3. **Upload your Word file** — add merge tags like `{Name}`, `{Account.Name}`, or `{#Contacts}...{/Contacts}` where you want data
 4. **Generate** — from any record page, or in bulk, or from a Flow
 
@@ -69,7 +69,9 @@ Generate your document with DocGen. Send it to a signature provider. Best tool f
 | Feature | Description |
 |---------|-------------|
 | **Command Hub** | One-tab experience: create templates, generate in bulk, get help — all in one place |
-| **Visual Query Builder** | Point-and-click field selection with parent lookups and nested child lists |
+| **Multi-Object Query Builder** | Tab-per-object layout with visual relationship tree. Each object gets its own tab with field selection, parent lookups, and WHERE/ORDER BY/LIMIT. |
+| **Report Import** | Import field selections from an existing Salesforce Report. Auto-detects base object, parent lookups, child relationships, and junction objects. |
+| **Junction Object Support** | Contacts via OpportunityContactRole, Campaign Members, and other junction objects detected and handled automatically. |
 | **Deep Relationships** | Account → Opportunities → Line Items → Schedules. No depth limit in templates. |
 | **PDF Generation** | Server-side via `Blob.toPdf()` with zero-heap image rendering |
 | **DOCX Output** | Client-side assembly for unlimited file sizes. Custom fonts carry through. |
