@@ -708,7 +708,7 @@ public with sharing class DocGenController {
             'AccountCase' => 'Case',
             'CaseContact' => 'Contact',
             'CampaignMember' => 'Contact,Lead',
-            'QuoteProduct' => 'Quote,QuoteLineItem',
+            'QuoteProduct' => 'Quote',
             'QuoteList' => 'Quote'
         };
 
@@ -781,8 +781,38 @@ public with sharing class DocGenController {
             }
         }
 
-        // Hardcoded report column key → {object, fieldApiName} for columns that
-        // don't match by label (report labels differ from field labels)
+        // Also discover grandchildren (e.g., Quote → QuoteLineItems) so their
+        // field labels can match against report columns dynamically.
+        Map<String, String> grandchildRelNames = new Map<String, String>();
+        for (String childObjName : new List<String>(childRelNameByObject.keySet())) {
+            String relName = childRelNameByObject.get(childObjName);
+            if (relName.startsWith('__junction_')) continue; // Skip junctions
+            SObjectType childType = Schema.getGlobalDescribe().get(childObjName);
+            if (childType == null) continue;
+            for (Schema.ChildRelationship gcr : childType.getDescribe().getChildRelationships()) {
+                if (gcr.getRelationshipName() == null) continue;
+                String gcObjName = gcr.getChildSObject().getDescribe().getName();
+                // Skip if already tracked or if it's a system object
+                if (childFieldMaps.containsKey(gcObjName)) continue;
+                if (gcObjName.endsWith('History') || gcObjName.endsWith('Share') || gcObjName.endsWith('Feed')) continue;
+                // Only add grandchildren that might have report columns
+                // Check if the grandchild object has meaningful fields
+                Map<String, SObjectField> gcfm = gcr.getChildSObject().getDescribe().fields.getMap();
+                if (gcfm.size() < 3) continue; // Skip trivial objects
+                childFieldMaps.put(gcObjName, gcfm);
+                childRelNameByObject.put(gcObjName, gcr.getRelationshipName());
+                Map<String, String> gclm = new Map<String, String>();
+                Map<String, String> gcpm = new Map<String, String>();
+                for (String fn : gcfm.keySet()) {
+                    Schema.DescribeFieldResult gcdfr = gcfm.get(fn).getDescribe();
+                    gclm.put(gcdfr.getLabel().toLowerCase(), gcdfr.getName());
+                    gcpm.put(fn.toLowerCase(), gcdfr.getName());
+                }
+                childLabelMaps.put(gcObjName, gclm);
+                childProperCaseMaps.put(gcObjName, gcpm);
+            }
+        }
+
         // Report column abbreviation prefixes → target object
         Map<String, String> reportPrefixToObject = new Map<String, String>{
             'QLI' => 'QuoteLineItem',
