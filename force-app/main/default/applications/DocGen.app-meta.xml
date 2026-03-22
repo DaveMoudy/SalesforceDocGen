@@ -9,6 +9,5 @@
     <label>DocGen</label>
     <navType>Standard</navType>
     <tabs>DocGen_Command_Hub</tabs>
-    <tabs>DocGen_Job__c</tabs>
     <uiType>Lightning</uiType>
 </CustomApplication>

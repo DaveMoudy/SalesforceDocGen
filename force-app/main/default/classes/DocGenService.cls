@@ -743,7 +743,9 @@ public with sharing class DocGenService {
      * Used by DocGenController for download mode.
      */
     public static Map<String, Object> generatePdfBlob(Id templateId, Id recordId) {
-        MergeResult mr = mergeTemplate(templateId, recordId);
+        // Force PDF output format so we get the heap-efficient path
+        // (pre-decomposed XML, relative image URLs, no blob loading)
+        MergeResult mr = mergeTemplate(templateId, recordId, null, 'PDF');
 
         if (mr.templateType == 'PowerPoint') {
             throw new DocGenException('Server-side PDF generation is only supported for Word templates.');

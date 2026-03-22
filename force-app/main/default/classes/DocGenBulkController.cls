@@ -79,6 +79,17 @@ public with sharing class DocGenBulkController {
         return [SELECT Id, Name, Status__c, Success_Count__c, Error_Count__c, Total_Records__c FROM DocGen_Job__c WHERE Id = :jobId WITH SYSTEM_MODE];
     }
 
+    @AuraEnabled
+    public static List<DocGen_Job__c> getRecentJobs() {
+        return [
+            SELECT Id, Name, Status__c, Success_Count__c, Error_Count__c, Total_Records__c, CreatedDate, Template__r.Name
+            FROM DocGen_Job__c
+            WITH SYSTEM_MODE
+            ORDER BY CreatedDate DESC
+            LIMIT 10
+        ];
+    }
+
     // --- Saved Queries ---
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Saved_Query__c> getSavedQueries(Id templateId) {

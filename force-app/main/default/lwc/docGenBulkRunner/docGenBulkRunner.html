@@ -47,13 +47,35 @@
                         </div>
                     </template>
 
-                    <!-- Preview button -->
-                    <template if:true={canPreview}>
-                        <lightning-button label="Preview Sample Document" variant="neutral" icon-name="utility:preview" size="small" onclick={handlePreviewSample} class="slds-var-m-top_small"></lightning-button>
-                    </template>
                 </div>
 
                 <div class="slds-col slds-size_1-of-2">
+                     <!-- Sample Record (when template selected and no active job) -->
+                     <template if:true={selectedTemplateId}>
+                         <template if:false={jobId}>
+                             <div class="slds-box slds-theme_shade" style="border-radius: 6px;">
+                                 <h4 class="slds-text-title_bold slds-var-m-bottom_x-small">Sample Record</h4>
+                                 <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_small">Pick a record to preview what your document will look like before running the bulk job.</p>
+                                 <template if:true={baseObject}>
+                                     <lightning-record-picker
+                                         label="Sample Record"
+                                         variant="label-hidden"
+                                         object-api-name={baseObject}
+                                         value={sampleRecordId}
+                                         onchange={handleSampleRecordChange}
+                                         placeholder="Search for a record...">
+                                     </lightning-record-picker>
+                                 </template>
+                                 <template if:true={sampleRecordId}>
+                                     <lightning-button label="Preview Sample PDF" variant="brand" icon-name="utility:download" size="small" onclick={handlePreviewSample} disabled={isGeneratingPreview} class="slds-var-m-top_small"></lightning-button>
+                                     <template if:true={isGeneratingPreview}>
+                                         <lightning-spinner alternative-text="Generating..." size="small" class="slds-var-m-left_small"></lightning-spinner>
+                                     </template>
+                                 </template>
+                             </div>
+                         </template>
+                     </template>
+
                      <!-- Job Status Monitor -->
                      <template if:true={jobId}>
                         <div class="slds-box slds-theme_shade">
@@ -202,6 +224,28 @@
                     class="slds-var-p-horizontal_medium">
                 </lightning-button>
             </div>
+
+            <!-- Recent Jobs History -->
+            <template if:true={hasRecentJobs}>
+                <div class="slds-var-m-top_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">Recent Jobs</h3>
+                    <div class="slds-box slds-box_x-small slds-theme_default" style="border-radius: 6px;">
+                        <template for:each={recentJobs} for:item="rj">
+                            <div key={rj.id} class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-var-p-vertical_xx-small" style="border-bottom: 1px solid #e5e5e5;">
+                                <div class="slds-col">
+                                    <lightning-badge label={rj.status}></lightning-badge>
+                                    <span class="slds-text-body_small slds-var-m-left_x-small"><strong>{rj.templateName}</strong></span>
+                                </div>
+                                <div class="slds-col slds-text-align_right slds-text-body_small">
+                                    <span class="slds-text-color_success">{rj.success}</span> / {rj.total}
+                                    <template if:true={rj.error}><span class="slds-text-color_error slds-var-m-left_xx-small">({rj.error} errors)</span></template>
+                                    <span class="slds-text-color_weak slds-var-m-left_x-small">{rj.date}</span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
         </div>
     </lightning-card>
 
@@ -229,37 +273,4 @@
         <div class="slds-backdrop slds-backdrop_open"></div>
     </template>
 
-    <!-- Preview Modal -->
-    <template if:true={showPreviewModal}>
-        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_large">
-            <div class="slds-modal__container">
-                <header class="slds-modal__header">
-                    <lightning-button-icon icon-name="utility:close" alternative-text="Close" variant="bare-inverse" class="slds-modal__close" onclick={handleClosePreview}></lightning-button-icon>
-                    <h2 class="slds-text-heading_medium">Sample Document Preview</h2>
-                    <p class="slds-text-body_small slds-text-color_weak">This is what each document will look like when generated.</p>
-                </header>
-                <div class="slds-modal__content slds-var-p-around_medium">
-                    <template if:true={isGeneratingPreview}>
-                        <div class="slds-align_absolute-center" style="padding: 3rem;">
-                            <lightning-spinner alternative-text="Generating preview..." size="medium"></lightning-spinner>
-                        </div>
-                    </template>
-                    <template if:true={previewHtml}>
-                        <div style="border: 1px solid #e5e5e5; border-radius: 4px; padding: 1rem; background: #fff; max-height: 500px; overflow-y: auto;">
-                            <lightning-formatted-rich-text value={previewHtml}></lightning-formatted-rich-text>
-                        </div>
-                    </template>
-                    <template if:true={previewError}>
-                        <div class="slds-box slds-theme_error" style="border-radius: 6px;">
-                            <p>{previewError}</p>
-                        </div>
-                    </template>
-                </div>
-                <footer class="slds-modal__footer">
-                    <lightning-button label="Close" onclick={handleClosePreview}></lightning-button>
-                </footer>
-            </div>
-        </section>
-        <div class="slds-backdrop slds-backdrop_open"></div>
-    </template>
 </template>

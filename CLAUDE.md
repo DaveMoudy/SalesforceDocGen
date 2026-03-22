@@ -121,16 +121,16 @@ DOCX output preserves whatever fonts are in the template file. If users need cus
 
 Run: `sf apex run --target-org <org> -f scripts/e2e-test.apex`
 
-The script creates its own data (Account, Contacts, Opportunity, Products, Line Items), runs the V3 tree walker, validates parent fields, tests legacy backward compatibility, and generates an actual document. Output: `PASS: N  FAIL: 0  ALL TESTS PASSED`
+The script is fully self-contained — creates its own template, DOCX file, template version, test data (Account, Contacts, Opportunity, Products, Line Items, Contact Roles, image CV), runs the V3 tree walker, validates parent fields, tests legacy backward compatibility, generates an actual PDF, validates junction stitching, and cleans up. Output: `PASS: 13  FAIL: 0  ALL TESTS PASSED`
 
-**Requires:** An existing template named "E2E Full Tree Test" with a DOCX file attached and a template version. Create once per org using the E2E data setup scripts.
+**Requires:** Nothing. Zero dependencies on pre-existing org data. Works on any org with DocGen deployed.
 
 **When adding features:**
 1. Add test assertions to `scripts/e2e-test.apex`
 2. Run the script — all tests must pass
 3. If a test fails, fix before committing
 
-Current tests (9): Account name, Owner.Name parent field, Contacts count, Opportunities count, Line Items count, Product2.Name on Line Items, Legacy V1 backward compat, document generation, generated file not empty.
+Current tests (13): Account name, Owner.Name parent field, Contacts count, Opportunities count, Product2.Name on Line Items, Line Items count, Description CV ID, Legacy V1 backward compat, Image CV format, Image CV access, Document generation, Generated file not empty, Junction stitching (OCR → Contact).
 
 ## Query Config Formats
 

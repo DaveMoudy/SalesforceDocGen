@@ -8,7 +8,8 @@ import getJobStatus from '@salesforce/apex/DocGenBulkController.getJobStatus';
 import getSavedQueries from '@salesforce/apex/DocGenBulkController.getSavedQueries';
 import saveQuery from '@salesforce/apex/DocGenBulkController.saveQuery';
 import deleteQuery from '@salesforce/apex/DocGenBulkController.deleteQuery';
-import generateDocumentData from '@salesforce/apex/DocGenController.generateDocumentData';
+import getRecentJobs from '@salesforce/apex/DocGenBulkController.getRecentJobs';
+import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 
 const POLL_INTERVAL_MS = 5000;
 const TERMINAL_STATUSES = ['Completed', 'Failed', 'Completed with Errors'];
@@ -64,11 +65,12 @@ export default class DocGenBulkRunner extends LightningElement {
     @track showTemplateDropdown = false;
     @track selectedTemplateName = '';
 
-    // Preview state
-    @track showPreviewModal = false;
+    // Sample record + Preview state
+    @track sampleRecordId = '';
     @track isGeneratingPreview = false;
-    @track previewHtml = '';
-    @track previewError = '';
+
+    // Recent jobs from server
+    @track recentJobs = [];
 
     get filteredTemplates() {
         const term = (this.templateSearchTerm || '').toLowerCase();
@@ -77,9 +79,11 @@ export default class DocGenBulkRunner extends LightningElement {
     }
 
     get canPreview() {
-        if (!this.selectedTemplateId) return false;
-        const tmplData = this._templateDataMap[this.selectedTemplateId];
-        return tmplData && tmplData.Test_Record_Id__c;
+        return this.selectedTemplateId && this.sampleRecordId;
+    }
+
+    handleSampleRecordChange(event) {
+        this.sampleRecordId = event.detail.recordId;
     }
 
     handleTemplateSearch(event) {
@@ -147,49 +151,76 @@ export default class DocGenBulkRunner extends LightningElement {
         refreshApex(this._wiredTemplateResult);
     }
 
-    // Preview
-    handlePreviewSample() {
-        const tmplData = this._templateDataMap[this.selectedTemplateId];
-        if (!tmplData || !tmplData.Test_Record_Id__c) return;
+    // Preview — generates a real PDF sample via the heap-efficient Blob.toPdf() path
+    async handlePreviewSample() {
+        if (!this.selectedTemplateId || !this.sampleRecordId) return;
 
-        this.showPreviewModal = true;
         this.isGeneratingPreview = true;
-        this.previewHtml = '';
-        this.previewError = '';
+        this.showToast('Info', 'Generating sample PDF...', 'info');
 
-        generateDocumentData({ templateId: this.selectedTemplateId, recordId: tmplData.Test_Record_Id__c })
-            .then(result => {
-                // The result contains merged data — show a simple text preview
-                const data = result.data;
-                let preview = '<h3>Sample Data Preview</h3>';
-                preview += '<p>This is the data that will be merged into each document:</p>';
-                preview += '<table style="width:100%;border-collapse:collapse;">';
-                for (const key of Object.keys(data)) {
-                    const val = data[key];
-                    if (val && typeof val === 'object' && val.records) {
-                        preview += '<tr><td style="padding:4px;border:1px solid #e5e5e5;font-weight:bold;">' + key + '</td><td style="padding:4px;border:1px solid #e5e5e5;">' + val.records.length + ' records</td></tr>';
-                    } else if (val && typeof val === 'object') {
-                        preview += '<tr><td style="padding:4px;border:1px solid #e5e5e5;font-weight:bold;">' + key + '</td><td style="padding:4px;border:1px solid #e5e5e5;">(related record)</td></tr>';
-                    } else {
-                        preview += '<tr><td style="padding:4px;border:1px solid #e5e5e5;font-weight:bold;">' + key + '</td><td style="padding:4px;border:1px solid #e5e5e5;">' + (val != null ? val : '') + '</td></tr>';
-                    }
-                }
-                preview += '</table>';
-                this.previewHtml = preview;
-                this.isGeneratingPreview = false;
-            })
-            .catch(error => {
-                this.previewError = error.body ? error.body.message : 'Could not generate preview.';
-                this.isGeneratingPreview = false;
+        try {
+            const result = await generatePdf({
+                templateId: this.selectedTemplateId,
+                recordId: this.sampleRecordId,
+                saveToRecord: false
             });
+
+            if (!result || !result.base64) {
+                throw new Error('PDF generation returned empty result.');
+            }
+
+            // Download the PDF
+            const binaryString = atob(result.base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'Sample_' + (result.title || 'Document') + '.pdf';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            this.showToast('Success', 'Sample PDF downloaded', 'success');
+        } catch (error) {
+            const msg = error.body ? error.body.message : (error.message || 'Could not generate preview.');
+            this.showToast('Preview Error', msg, 'error');
+        } finally {
+            this.isGeneratingPreview = false;
+        }
     }
 
-    handleClosePreview() {
-        this.showPreviewModal = false;
+    connectedCallback() {
+        this.loadRecentJobs();
     }
 
     disconnectedCallback() {
         this.stopPolling();
+    }
+
+    loadRecentJobs() {
+        getRecentJobs()
+            .then(data => {
+                this.recentJobs = data.map(j => ({
+                    id: j.Id,
+                    name: j.Name,
+                    templateName: j.Template__r ? j.Template__r.Name : '',
+                    status: j.Status__c,
+                    success: j.Success_Count__c || 0,
+                    error: j.Error_Count__c || 0,
+                    total: j.Total_Records__c || 0,
+                    date: new Date(j.CreatedDate).toLocaleDateString()
+                }));
+            })
+            .catch(() => {});
+    }
+
+    get hasRecentJobs() {
+        return this.recentJobs.length > 0;
     }
 
     handleTemplateChange(event) {
@@ -404,6 +435,7 @@ export default class DocGenBulkRunner extends LightningElement {
                 this.isProcessing = false;
                 const variant = this.jobStatus === 'Completed' ? 'success' : (this.jobStatus === 'Failed' ? 'error' : 'warning');
                 this.showToast('Job Finished', `Status: ${this.jobStatus} — ${this.jobProgress.success} succeeded, ${this.jobProgress.error} failed`, variant);
+                this.loadRecentJobs();
             }
         } catch (_e) {
             this.stopPolling();

@@ -18,9 +18,13 @@ export default class DocGenColumnBuilder extends LightningElement {
     get queryConfig() { return this._queryConfig; }
     set queryConfig(value) {
         this._queryConfig = value;
-        if (value) this._parseConfig(value);
+        // Skip re-parse if this is the same config we just emitted (prevents reset loop)
+        if (value && value !== this._lastEmittedConfig) {
+            this._parseConfig(value);
+        }
     }
     _queryConfig = '';
+    _lastEmittedConfig = '';
 
     // === CORE STATE: Tree Nodes ===
     @track treeNodes = [];
@@ -802,8 +806,105 @@ export default class DocGenColumnBuilder extends LightningElement {
                 const version = config.v || 2;
                 if (version >= 3 && config.nodes) {
                     this._parseV3Config(config);
+                } else if (version === 2 && config.baseObject) {
+                    this._parseV2Config(config);
                 }
             } catch (e) { /* ignore parse errors for non-JSON */ }
+        } else if (trimmed.length > 0) {
+            // V1 flat string — parse field list and subqueries
+            this._parseV1Config(trimmed);
+        }
+    }
+
+    _parseV1Config(value) {
+        if (!this.selectedObject) return;
+        // V1: "Name, Industry, (SELECT FirstName, LastName FROM Contacts)"
+        const fields = [];
+        const children = [];
+        let remaining = value;
+
+        // Extract subqueries first
+        const subqRegex = /\(\s*SELECT\s+(.+?)\s+FROM\s+(\w+)\s*\)/gi;
+        let match;
+        while ((match = subqRegex.exec(value)) !== null) {
+            const childFields = match[1].split(',').map(f => f.trim()).filter(f => f);
+            children.push({ rel: match[2], fields: childFields });
+        }
+        remaining = remaining.replace(subqRegex, '').replace(/,\s*,/g, ',').replace(/^\s*,|,\s*$/g, '');
+
+        // Parse base fields
+        remaining.split(',').forEach(f => {
+            const field = f.trim();
+            if (field) fields.push(field);
+        });
+
+        // Build tree
+        const rootNode = this._createNode(this.selectedObject, this.selectedObject, true, null, null, null);
+        rootNode.selectedFields = fields;
+        const nodes = [rootNode];
+        this._loadNodeFields(rootNode);
+
+        for (const child of children) {
+            const childNode = this._createNode(child.rel, child.rel, false, rootNode.id, null, child.rel);
+            childNode.selectedFields = child.fields;
+            nodes.push(childNode);
+            this._loadNodeFields(childNode);
+        }
+
+        this.treeNodes = nodes;
+        this.activeNodeId = rootNode.id;
+    }
+
+    _parseV2Config(config) {
+        const objName = config.baseObject;
+        if (!objName) return;
+        this.selectedObject = objName;
+
+        const rootNode = this._createNode(objName, objName, true, null, null, null);
+        rootNode.selectedFields = config.baseFields || [];
+        if (config.parentFields && config.parentFields.length > 0) {
+            const groups = {};
+            for (const pf of config.parentFields) {
+                const parts = pf.split('.');
+                const rel = parts[0];
+                const field = parts.slice(1).join('.');
+                if (!groups[rel]) groups[rel] = { relationshipName: rel, fields: [] };
+                groups[rel].fields.push(field);
+            }
+            rootNode.parentGroups = Object.values(groups);
+        }
+        const nodes = [rootNode];
+        this._loadNodeFields(rootNode);
+
+        // Children
+        if (config.children) {
+            for (const child of config.children) {
+                const childNode = this._createNode(child.rel, child.rel, false, rootNode.id, null, child.rel);
+                childNode.selectedFields = child.fields || [];
+                nodes.push(childNode);
+                this._loadNodeFields(childNode);
+            }
+        }
+
+        // Junctions
+        if (config.junctions) {
+            for (const junc of config.junctions) {
+                const juncNode = this._createNode(junc.junctionRel, junc.junctionRel, false, rootNode.id, null, junc.junctionRel, {
+                    targetObject: junc.targetObject,
+                    targetIdField: junc.targetIdField,
+                    targetFields: junc.targetFields || []
+                });
+                juncNode.selectedFields = junc.junctionFields || [];
+                nodes.push(juncNode);
+                this._loadNodeFields(juncNode);
+            }
+        }
+
+        this.treeNodes = nodes;
+        this.activeNodeId = rootNode.id;
+
+        if (config.bulkWhereClause) {
+            this.savedReportFilters = config.bulkWhereClause;
         }
     }
 
@@ -838,10 +939,12 @@ export default class DocGenColumnBuilder extends LightningElement {
 
     // === NOTIFY PARENT ===
     _notifyChange() {
+        const config = this.generatedConfig;
+        this._lastEmittedConfig = config;
         this.dispatchEvent(new CustomEvent('configchange', {
             detail: {
                 objectName: this.selectedObject,
-                queryConfig: this.generatedConfig
+                queryConfig: config
             }
         }));
     }

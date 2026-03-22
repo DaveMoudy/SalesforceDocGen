@@ -1,107 +1,81 @@
 <template>
     <div class="hub-container">
 
-        <!-- Top bar: banner toggle + help toggle + coffee -->
+        <!-- Top bar -->
         <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-var-m-bottom_small">
-            <div style="display: flex; gap: 1rem; align-items: center;">
-                <template if:false={showBanner}>
-                    <a href="javascript:void(0)" style="font-size: 0.75rem; color: #706e6b; text-decoration: none;" onclick={handleShowBanner}>Show getting started guide</a>
-                </template>
-                <template if:true={showBanner}><span></span></template>
-                <a href="javascript:void(0)" style="font-size: 0.75rem; color: #0176d3; text-decoration: none; font-weight: 600;" onclick={handleToggleHelp}>
-                    <template if:false={showHelp}>How It Works</template>
-                    <template if:true={showHelp}>Hide Help</template>
-                </a>
-            </div>
+            <template if:false={showBanner}>
+                <a href="javascript:void(0)" style="font-size: 0.75rem; color: #706e6b; text-decoration: none;" onclick={handleShowBanner}>Show getting started guide</a>
+            </template>
+            <template if:true={showBanner}><span></span></template>
             <a href="https://buymeacoffee.com/davemoudya" target="_blank" rel="noopener noreferrer"
                style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: #FFDD00; color: #000; font-size: 0.8125rem; font-weight: 600; border-radius: 20px; text-decoration: none;">
                 Buy Amanda a Coffee
             </a>
         </div>
 
-        <!-- ==================== WELCOME BANNER ==================== -->
+        <!-- Banner -->
         <template if:true={showBanner}>
             <div class="slds-box slds-var-m-bottom_medium" style="background: linear-gradient(135deg, #0176D3 0%, #014486 100%); border: none; border-radius: 12px; color: #fff; padding: 1.5rem 2rem; position: relative;">
                 <a href="javascript:void(0)" style="position: absolute; top: 10px; right: 14px; color: rgba(255,255,255,0.6); font-size: 1.25rem; text-decoration: none; line-height: 1;" onclick={handleDismissBanner} aria-label="Dismiss">&times;</a>
                 <h1 style="font-size: 1.5rem; font-weight: 700; margin: 0 0 0.25rem 0;">{bannerHeading}</h1>
                 <p style="font-size: 0.9375rem; opacity: 0.85; margin: 0 0 1rem 0;">{bannerSubtext}</p>
                 <div class="slds-grid slds-gutters_large">
-                    <div class="slds-col slds-size_1-of-3">
-                        <div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 0.75rem; height: 100%;">
-                            <strong>1. Name your template</strong>
-                            <p style="font-size: 0.8125rem; opacity: 0.85; margin: 0.25rem 0 0 0;">Give it a name and select your output type.</p>
-                        </div>
-                    </div>
-                    <div class="slds-col slds-size_1-of-3">
-                        <div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 0.75rem; height: 100%;">
-                            <strong>2. Pick your data</strong>
-                            <p style="font-size: 0.8125rem; opacity: 0.85; margin: 0.25rem 0 0 0;">Choose fields, or import from a report.</p>
-                        </div>
-                    </div>
-                    <div class="slds-col slds-size_1-of-3">
-                        <div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 0.75rem; height: 100%;">
-                            <strong>3. Upload your template</strong>
-                            <p style="font-size: 0.8125rem; opacity: 0.85; margin: 0.25rem 0 0 0;">Upload your Word file with merge tags.</p>
-                        </div>
-                    </div>
+                    <div class="slds-col slds-size_1-of-3"><div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 0.75rem;"><strong>1. Name your template</strong><p style="font-size: 0.8125rem; opacity: 0.85; margin: 0.25rem 0 0 0;">Give it a name and select output type.</p></div></div>
+                    <div class="slds-col slds-size_1-of-3"><div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 0.75rem;"><strong>2. Pick your data</strong><p style="font-size: 0.8125rem; opacity: 0.85; margin: 0.25rem 0 0 0;">Choose fields, or import from a report.</p></div></div>
+                    <div class="slds-col slds-size_1-of-3"><div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 0.75rem;"><strong>3. Upload your template</strong><p style="font-size: 0.8125rem; opacity: 0.85; margin: 0.25rem 0 0 0;">Word file with merge tags like &#123;Name&#125;.</p></div></div>
                 </div>
             </div>
         </template>
 
-        <!-- ==================== HOW IT WORKS (collapsible) ==================== -->
-        <template if:true={showHelp}>
-            <div class="slds-box slds-theme_default slds-var-m-bottom_medium" style="border-radius: 8px;">
-                <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-var-m-bottom_small">
-                    <h2 style="font-size: 1.125rem; font-weight: 700; margin: 0;">How It Works</h2>
-                    <lightning-button-icon icon-name="utility:close" variant="bare" size="small" alternative-text="Close" onclick={handleToggleHelp}></lightning-button-icon>
-                </div>
-
-                <div class="slds-grid slds-wrap slds-gutters_small slds-var-m-bottom_small">
-                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
-                        <div class="tag-card"><code class="tag-code" data-tag="\{Name}" onclick={handleCopyTag}>&#123;Name&#125;</code><p class="tag-desc">Simple field</p></div>
-                    </div>
-                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
-                        <div class="tag-card"><code class="tag-code" data-tag="\{Account.Name}" onclick={handleCopyTag}>&#123;Account.Name&#125;</code><p class="tag-desc">Parent field</p></div>
-                    </div>
-                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
-                        <div class="tag-card"><code class="tag-code" data-tag="loop-contacts" onclick={handleCopyTag}>&#123;#Contacts&#125;...&#123;/Contacts&#125;</code><p class="tag-desc">Child loop</p></div>
-                    </div>
-                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
-                        <div class="tag-card"><code class="tag-code" data-tag="\{%Logo__c:200x60}" onclick={handleCopyTag}>&#123;%ImageField:WxH&#125;</code><p class="tag-desc">Image from ContentVersion</p></div>
-                    </div>
-                </div>
-
-                <div class="slds-grid slds-wrap slds-gutters_small">
-                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
-                        <div class="info-card"><strong>Template images</strong><p class="tag-desc">Embedded in .docx — auto-extracted, zero heap.</p></div>
-                    </div>
-                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
-                        <div class="info-card"><strong>Rich Text</strong><p class="tag-desc">&#123;FieldName&#125; on a Rich Text field renders bold, italic, images.</p></div>
-                    </div>
-                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
-                        <div class="info-card"><strong>Test Record</strong><p class="tag-desc">Set a Test Record ID on your template (Settings tab) to preview samples before bulk generation.</p></div>
-                    </div>
-                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
-                        <div class="info-card"><strong>Report Filters</strong><p class="tag-desc">Import from a report and filters auto-save as a bulk generation WHERE clause.</p></div>
-                    </div>
-                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
-                        <div class="info-card"><strong>Record Page</strong><p class="tag-desc">Edit Page → drag docGenRunner → Save. Users see a Generate button on every record.</p></div>
-                    </div>
-                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
-                        <div class="info-card"><strong>Flows</strong><p class="tag-desc">DocGenFlowAction (single) or DocGenBulkFlowAction (bulk) invocable actions.</p></div>
-                    </div>
-                </div>
-            </div>
-        </template>
-
-        <!-- ==================== TEMPLATES (always visible) ==================== -->
+        <!-- Tab Cards -->
         <template if:true={isLoaded}>
-            <c-doc-gen-admin></c-doc-gen-admin>
-
-            <!-- ==================== BULK GENERATION (always visible below) ==================== -->
-            <div class="slds-var-m-top_medium">
-                <c-doc-gen-bulk-runner></c-doc-gen-bulk-runner>
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                <div class={templatesTabClass} onclick={handleShowTemplates} style="flex: 1; cursor: pointer; padding: 0.75rem 1rem; border-radius: 8px; text-align: center;">
+                    <lightning-icon icon-name="standard:template" size="small" class="slds-var-m-bottom_xx-small"></lightning-icon>
+                    <div style="font-weight: 700; font-size: 0.875rem;">Your Templates</div>
+                    <div style="font-size: 0.75rem; color: #706e6b;">{templateCountLabel}</div>
+                </div>
+                <div class={bulkTabClass} onclick={handleShowBulk} style="flex: 1; cursor: pointer; padding: 0.75rem 1rem; border-radius: 8px; text-align: center;">
+                    <lightning-icon icon-name="standard:record_create" size="small" class="slds-var-m-bottom_xx-small"></lightning-icon>
+                    <div style="font-weight: 700; font-size: 0.875rem;">Bulk Generate</div>
+                    <div style="font-size: 0.75rem; color: #706e6b;">Many records at once</div>
+                </div>
+                <div class={helpTabClass} onclick={handleShowHelp} style="flex: 1; cursor: pointer; padding: 0.75rem 1rem; border-radius: 8px; text-align: center;">
+                    <lightning-icon icon-name="standard:question_best" size="small" class="slds-var-m-bottom_xx-small"></lightning-icon>
+                    <div style="font-weight: 700; font-size: 0.875rem;">How It Works</div>
+                    <div style="font-size: 0.75rem; color: #706e6b;">Tags, images, Flows</div>
+                </div>
             </div>
+
+            <!-- TEMPLATES -->
+            <template if:true={isTemplates}>
+                <c-doc-gen-admin></c-doc-gen-admin>
+            </template>
+
+            <!-- BULK -->
+            <template if:true={isBulk}>
+                <c-doc-gen-bulk-runner></c-doc-gen-bulk-runner>
+            </template>
+
+            <!-- HELP -->
+            <template if:true={isHelp}>
+                <div class="slds-box slds-theme_default" style="border-radius: 8px;">
+                    <div class="slds-grid slds-wrap slds-gutters_small slds-var-m-bottom_small">
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small"><div class="tag-card"><code class="tag-code" data-tag="\{Name}" onclick={handleCopyTag}>&#123;Name&#125;</code><p class="tag-desc">Simple field</p></div></div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small"><div class="tag-card"><code class="tag-code" data-tag="\{Account.Name}" onclick={handleCopyTag}>&#123;Account.Name&#125;</code><p class="tag-desc">Parent field</p></div></div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small"><div class="tag-card"><code class="tag-code" data-tag="loop-contacts" onclick={handleCopyTag}>&#123;#Contacts&#125;...&#123;/Contacts&#125;</code><p class="tag-desc">Child loop</p></div></div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small"><div class="tag-card"><code class="tag-code" data-tag="\{%Logo__c:200x60}" onclick={handleCopyTag}>&#123;%ImageField:WxH&#125;</code><p class="tag-desc">Image from ContentVersion</p></div></div>
+                    </div>
+                    <div class="slds-grid slds-wrap slds-gutters_small">
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small"><div class="info-card"><strong>Template images</strong><p class="tag-desc">Embedded in .docx — auto-extracted, zero heap.</p></div></div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small"><div class="info-card"><strong>Rich Text</strong><p class="tag-desc">&#123;FieldName&#125; on a Rich Text field renders bold, italic, images.</p></div></div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small"><div class="info-card"><strong>Sample Record</strong><p class="tag-desc">Set a Test Record ID on your template (Settings tab) to preview before bulk runs.</p></div></div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small"><div class="info-card"><strong>Report Filters</strong><p class="tag-desc">Import from a report — filters auto-save as a bulk WHERE clause.</p></div></div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small"><div class="info-card"><strong>Record Page</strong><p class="tag-desc">Edit Page → drag docGenRunner → Save.</p></div></div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small"><div class="info-card"><strong>Flows</strong><p class="tag-desc">DocGenFlowAction (single) or DocGenBulkFlowAction (bulk).</p></div></div>
+                    </div>
+                </div>
+            </template>
         </template>
     </div>
 </template>

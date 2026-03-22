@@ -1,12 +1,12 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v1.6.0 - Multi-object query builder, report import, Command Hub",
-      "versionNumber": "1.6.0.NEXT",
+      "versionName": "Apollo — Full-stack document platform",
+      "versionNumber": "2.0.0.NEXT",
       "path": "force-app",
       "default": true,
       "package": "Document Generation",
-      "versionDescription": "Free, native document generation for Salesforce. Create DOCX, PPTX, and PDF documents from any record using merge tags, child loops, rich text with embedded images, and server-side PDF rendering. Includes bulk generation, Flow integration, and template versioning."
+      "versionDescription": "Free, native document generation for Salesforce. Create PDF and DOCX documents from any record with merge tags, unlimited-depth relationships, images, and rich text. Visual query builder, report import, bulk generation, Flow actions, zero-heap PDF rendering, and self-contained E2E testing. No external dependencies."
     }
   ],
   "name": "Document Generation",
@@ -49,6 +49,7 @@
     "Document Generation@1.6.0-4": "04tdL000000RnRFQA0",
     "Document Generation@1.6.0-5": "04tdL000000RnSrQAK",
     "Document Generation@1.6.0-6": "04tdL000000RnUTQA0",
-    "Document Generation@1.6.0-7": "04tdL000000RnW5QAK"
+    "Document Generation@1.6.0-7": "04tdL000000RnW5QAK",
+    "Document Generation@2.0.0-1": "04tdL000000RnavQAC"
   }
 }
