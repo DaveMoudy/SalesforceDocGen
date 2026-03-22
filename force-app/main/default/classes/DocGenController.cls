@@ -873,6 +873,11 @@ public with sharing class DocGenController {
             }
         }
 
+        Integer totalChildFields = 0;
+        for (String relKey : childFields.keySet()) {
+            totalChildFields += childFields.get(relKey).size();
+        }
+
         return new Map<String, Object>{
             'baseObject' => baseObject,
             'fields' => normalizedFields,
@@ -881,7 +886,7 @@ public with sharing class DocGenController {
             'childFields' => childFields,
             'filters' => filters,
             'reportName' => metadata.getName(),
-            'fieldCount' => normalizedFields.size() + parentFields.size(),
+            'fieldCount' => normalizedFields.size() + parentFields.size() + totalChildFields,
             'filterCount' => filters.size()
         };
     }

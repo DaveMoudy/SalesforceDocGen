@@ -655,27 +655,48 @@ export default class DocGenColumnBuilder extends LightningElement {
             this._notifyChange();
         });
 
-        // Add child nodes from import
+        // Add child nodes from import (direct children AND junction objects)
         if (result.childFields) {
-            for (const relName of Object.keys(result.childFields)) {
-                if (relName.startsWith('__junction_')) continue;
-                const fields = result.childFields[relName];
-                getChildRelationships({ objectName: result.baseObject }).then(rels => {
-                    const rel = rels.find(r => r.value === relName);
-                    if (rel) {
-                        const childNode = this._createNode(rel.childObjectApiName, rel.label, false,
-                            rootNode.id, this._guessLookupField(result.baseObject, relName), relName);
-                        getObjectFields({ objectName: rel.childObjectApiName }).then(fieldData => {
-                            childNode.availableFields = fieldData;
-                            childNode.filteredFields = fieldData.slice(0, 200);
-                            const validChild = new Set(fieldData.map(f => f.value));
-                            childNode.selectedFields = fields.filter(f => validChild.has(f));
-                            this.treeNodes = [...this.treeNodes, childNode];
+            getChildRelationships({ objectName: result.baseObject }).then(rels => {
+                for (const relName of Object.keys(result.childFields)) {
+                    const fields = result.childFields[relName];
+
+                    if (relName.startsWith('__junction_')) {
+                        // Junction object — create a tab for the TARGET object
+                        // e.g., __junction_Contact → Contact fields
+                        const targetObjName = relName.replace('__junction_', '');
+                        const junctionNode = this._createNode(targetObjName,
+                            targetObjName + ' (linked)', false, rootNode.id,
+                            null, null, // No direct lookup — junction
+                            { junctionRel: 'unknown', targetObject: targetObjName, targetIdField: 'unknown', targetFields: fields }
+                        );
+                        // Load target object fields and auto-check
+                        getObjectFields({ objectName: targetObjName }).then(fieldData => {
+                            junctionNode.availableFields = fieldData;
+                            junctionNode.filteredFields = fieldData.slice(0, 200);
+                            const validFields = new Set(fieldData.map(f => f.value));
+                            junctionNode.selectedFields = fields.filter(f => validFields.has(f));
+                            this.treeNodes = [...this.treeNodes, junctionNode];
                             this._notifyChange();
-                        });
+                        }).catch(() => {});
+                    } else {
+                        // Direct child relationship
+                        const rel = rels.find(r => r.value === relName);
+                        if (rel) {
+                            const childNode = this._createNode(rel.childObjectApiName, rel.label, false,
+                                rootNode.id, this._guessLookupField(result.baseObject, relName), relName);
+                            getObjectFields({ objectName: rel.childObjectApiName }).then(fieldData => {
+                                childNode.availableFields = fieldData;
+                                childNode.filteredFields = fieldData.slice(0, 200);
+                                const validChild = new Set(fieldData.map(f => f.value));
+                                childNode.selectedFields = fields.filter(f => validChild.has(f));
+                                this.treeNodes = [...this.treeNodes, childNode];
+                                this._notifyChange();
+                            }).catch(() => {});
+                        }
                     }
-                });
-            }
+                }
+            });
         }
 
         this.dispatchEvent(new ShowToastEvent({
