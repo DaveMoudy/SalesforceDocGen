@@ -619,7 +619,7 @@ public with sharing class DocGenController {
      * Returns available reports the user can access.
      * Searches by name if a search term is provided.
      */
-    @AuraEnabled(cacheable=true)
+    @AuraEnabled
     public static List<Map<String, String>> getAvailableReports(String searchTerm) {
         String query = 'SELECT Id, Name, DeveloperName, FolderName FROM Report';
         if (String.isNotBlank(searchTerm)) {

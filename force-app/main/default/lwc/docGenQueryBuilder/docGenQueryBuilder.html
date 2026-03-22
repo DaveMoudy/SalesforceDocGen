@@ -455,7 +455,9 @@
              </div>
         </div>
 
-    <!-- Report Import Modal -->
+    </template>
+
+    <!-- Report Import Modal (renders at root level so it overlays everything) -->
     <template if:true={showReportModal}>
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
             <div class="slds-modal__container">
@@ -499,7 +501,5 @@
             </div>
         </section>
         <div class="slds-backdrop slds-backdrop_open"></div>
-    </template>
-
     </template>
 </template>

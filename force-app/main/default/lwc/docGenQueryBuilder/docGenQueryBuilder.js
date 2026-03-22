@@ -181,6 +181,14 @@ export default class DocGenQueryBuilder extends LightningElement {
         if (data) {
             this._fieldOptions = data;
             this.filterFields();
+
+            // Apply pending report import fields if waiting
+            if (this._pendingReportFields && this._pendingReportFields.length > 0) {
+                const validValues = new Set(data.map(opt => opt.value));
+                this.baseFieldSelection = this._pendingReportFields.filter(f => validValues.has(f));
+                this._pendingReportFields = null;
+                this.updateCombinedSelection();
+            }
         } else if (error) {
             this._fieldOptions = [];
             this.filteredFieldOptions = [];
@@ -1283,31 +1291,32 @@ export default class DocGenQueryBuilder extends LightningElement {
         }));
     }
 
+    // Pending report import fields — set after wire reloads field options
+    _pendingReportFields = null;
+
     handleImportReport() {
         if (!this.selectedReportId) return;
         this.isImportingReport = true;
 
         importReportConfig({ reportId: this.selectedReportId })
             .then(result => {
-                // Set the base object
+                this.showReportModal = false;
+
+                // Store fields to apply after the wire reloads
+                this._pendingReportFields = result.fields || [];
+
+                // Set the base object — this triggers the @wire(getObjectFields) to reload
                 if (result.baseObject) {
+                    // Reset downstream first
+                    this.baseFieldSelection = [];
+                    this.parentFieldSelection = [];
+                    this.childConfigs = [];
+
                     this.selectedObject = result.baseObject;
                     const objOpt = this.objectOptions.find(o => o.value === result.baseObject);
                     this.selectedObjectLabel = objOpt ? objOpt.label : result.baseObject;
                 }
 
-                // Set the fields after object fields load
-                if (result.fields && result.fields.length > 0) {
-                    // Wait for field options to load after object change
-                    // eslint-disable-next-line @lwc/lwc/no-async-operation
-                    setTimeout(() => {
-                        this.baseFieldSelection = result.fields;
-                        this.updateCombinedSelection();
-                        this.notifyChange();
-                    }, 1000);
-                }
-
-                this.showReportModal = false;
                 this.dispatchEvent(new ShowToastEvent({
                     title: 'Report Imported',
                     message: `Imported ${result.fieldCount} fields from "${result.reportName}"`,
