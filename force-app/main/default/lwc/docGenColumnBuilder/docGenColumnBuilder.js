@@ -55,11 +55,7 @@ export default class DocGenColumnBuilder extends LightningElement {
         if (data) {
             this.objectOptions = data;
             this.isLoaded = true;
-            if (this.selectedObject && this.treeNodes.length === 0) {
-                const opt = data.find(o => o.value === this.selectedObject);
-                this.selectedObjectLabel = opt ? opt.label : this.selectedObject;
-                this._initRootNode(this.selectedObject, this.selectedObjectLabel);
-            }
+            // Always start with the object search — user picks the root
         }
     }
 
@@ -67,7 +63,7 @@ export default class DocGenColumnBuilder extends LightningElement {
     get hasNodes() { return this.treeNodes.length > 0; }
     get rootNode() { return this.treeNodes.find(n => !n.parentNodeId); }
     get activeNode() { return this.treeNodes.find(n => n.id === this.activeNodeId); }
-    get showObjectSelector() { return !this.selectedObject && !this.hasNodes; }
+    get showObjectSelector() { return !this.hasNodes; }
 
     get filteredObjectOptions() {
         const term = (this.objectSearchTerm || '').toLowerCase();
