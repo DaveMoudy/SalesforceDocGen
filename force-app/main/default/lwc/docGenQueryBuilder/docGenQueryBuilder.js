@@ -5,6 +5,8 @@ import getObjectFields from '@salesforce/apex/DocGenController.getObjectFields';
 import getChildRelationships from '@salesforce/apex/DocGenController.getChildRelationships';
 import getParentRelationships from '@salesforce/apex/DocGenController.getParentRelationships';
 import previewRecordData from '@salesforce/apex/DocGenController.previewRecordData';
+import getAvailableReports from '@salesforce/apex/DocGenController.getAvailableReports';
+import importReportConfig from '@salesforce/apex/DocGenController.importReportConfig';
 import { refreshApex } from '@salesforce/apex';
 
 export default class DocGenQueryBuilder extends LightningElement {
@@ -1220,6 +1222,112 @@ export default class DocGenQueryBuilder extends LightningElement {
             this.childConfigs = [...this.childConfigs];
             this.notifyChange();
         }
+    }
+
+    // --- Report Import ---
+    @track showReportModal = false;
+    @track reportSearchResults = [];
+    @track reportSearchTerm = '';
+    @track selectedReportId = null;
+    @track selectedReportName = '';
+    @track isImportingReport = false;
+
+    handleOpenReportImport() {
+        this.showReportModal = true;
+        this.reportSearchResults = [];
+        this.reportSearchTerm = '';
+        this.selectedReportId = null;
+        this.selectedReportName = '';
+        // Load initial reports
+        this._searchReports('');
+    }
+
+    handleCloseReportModal() {
+        this.showReportModal = false;
+    }
+
+    handleReportSearch(event) {
+        const term = event.target.value;
+        this.reportSearchTerm = term;
+        window.clearTimeout(this._reportSearchTimeout);
+        this._reportSearchTimeout = window.setTimeout(() => {
+            this._searchReports(term);
+        }, 300);
+    }
+
+    _searchReports(term) {
+        getAvailableReports({ searchTerm: term })
+            .then(data => {
+                this.reportSearchResults = data.map(r => ({
+                    ...r,
+                    label: r.name + (r.folder ? ' (' + r.folder + ')' : ''),
+                    isSelected: r.id === this.selectedReportId,
+                    optionClass: 'slds-media slds-listbox__option slds-listbox__option_plain slds-media_small' +
+                        (r.id === this.selectedReportId ? ' slds-is-selected' : '')
+                }));
+            })
+            .catch(() => {
+                this.reportSearchResults = [];
+            });
+    }
+
+    handleReportSelect(event) {
+        this.selectedReportId = event.currentTarget.dataset.id;
+        this.selectedReportName = event.currentTarget.dataset.name;
+        // Update selection state
+        this.reportSearchResults = this.reportSearchResults.map(r => ({
+            ...r,
+            isSelected: r.id === this.selectedReportId,
+            optionClass: 'slds-media slds-listbox__option slds-listbox__option_plain slds-media_small' +
+                (r.id === this.selectedReportId ? ' slds-is-selected' : '')
+        }));
+    }
+
+    handleImportReport() {
+        if (!this.selectedReportId) return;
+        this.isImportingReport = true;
+
+        importReportConfig({ reportId: this.selectedReportId })
+            .then(result => {
+                // Set the base object
+                if (result.baseObject) {
+                    this.selectedObject = result.baseObject;
+                    const objOpt = this.objectOptions.find(o => o.value === result.baseObject);
+                    this.selectedObjectLabel = objOpt ? objOpt.label : result.baseObject;
+                }
+
+                // Set the fields after object fields load
+                if (result.fields && result.fields.length > 0) {
+                    // Wait for field options to load after object change
+                    // eslint-disable-next-line @lwc/lwc/no-async-operation
+                    setTimeout(() => {
+                        this.baseFieldSelection = result.fields;
+                        this.updateCombinedSelection();
+                        this.notifyChange();
+                    }, 1000);
+                }
+
+                this.showReportModal = false;
+                this.dispatchEvent(new ShowToastEvent({
+                    title: 'Report Imported',
+                    message: `Imported ${result.fieldCount} fields from "${result.reportName}"`,
+                    variant: 'success'
+                }));
+            })
+            .catch(error => {
+                this.dispatchEvent(new ShowToastEvent({
+                    title: 'Import Failed',
+                    message: error.body ? error.body.message : error.message,
+                    variant: 'error'
+                }));
+            })
+            .finally(() => {
+                this.isImportingReport = false;
+            });
+    }
+
+    get isImportDisabled() {
+        return !this.selectedReportId || this.isImportingReport;
     }
 
     get generatedQuery() {

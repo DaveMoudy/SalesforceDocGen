@@ -4,11 +4,12 @@
         <lightning-card title="Visual Query Builder" icon-name="standard:search">
             <div class="slds-var-p-around_medium" onclick={handleOutsideClick}>
                 <!-- 1. Object Search -->
-                 <div class="slds-box slds-var-m-bottom_medium slds-theme_shade">
-                    <p class="slds-text-body_small">
-                        <strong>Instructions:</strong> Select a base object, then pick the fields you want to include in your document template. 
-                        You can also include fields from parent records or related child lists.
+                 <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-box slds-var-m-bottom_medium slds-theme_shade">
+                    <p class="slds-text-body_small slds-col">
+                        Select a base object, then pick the fields you want in your document.
+                        You can include parent fields and related child lists.
                     </p>
+                    <lightning-button label="Import from Report" variant="neutral" icon-name="utility:upload" onclick={handleOpenReportImport} class="slds-col slds-shrink-none slds-var-m-left_small"></lightning-button>
                  </div>
 
                  <div class="slds-form-element slds-var-m-bottom_medium">
@@ -453,5 +454,52 @@
                  </lightning-accordion>
              </div>
         </div>
+
+    <!-- Report Import Modal -->
+    <template if:true={showReportModal}>
+        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <lightning-button-icon icon-name="utility:close" alternative-text="Close" variant="bare-inverse" class="slds-modal__close" onclick={handleCloseReportModal}></lightning-button-icon>
+                    <h2 class="slds-text-heading_medium">Import from Report</h2>
+                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">Select a report to import its columns as template fields.</p>
+                </header>
+                <div class="slds-modal__content slds-var-p-around_medium">
+                    <lightning-input type="search" label="Search reports" placeholder="Type a report name..." value={reportSearchTerm} onchange={handleReportSearch}></lightning-input>
+                    <div class="slds-scrollable_y slds-var-m-top_small" style="max-height: 300px;">
+                        <template if:true={reportSearchResults.length}>
+                            <ul class="slds-listbox slds-listbox_vertical slds-has-dividers_bottom-space">
+                                <template for:each={reportSearchResults} for:item="report">
+                                    <li key={report.id} class="slds-listbox__item">
+                                        <div class={report.optionClass}
+                                             data-id={report.id} data-name={report.name} onclick={handleReportSelect}>
+                                            <span class="slds-media__figure">
+                                                <lightning-icon icon-name="standard:report" size="small"></lightning-icon>
+                                            </span>
+                                            <span class="slds-media__body">
+                                                <span class="slds-truncate"><strong>{report.name}</strong></span>
+                                                <template if:true={report.folder}>
+                                                    <span class="slds-text-body_small slds-text-color_weak"> — {report.folder}</span>
+                                                </template>
+                                            </span>
+                                        </div>
+                                    </li>
+                                </template>
+                            </ul>
+                        </template>
+                        <template if:false={reportSearchResults.length}>
+                            <p class="slds-text-body_regular slds-text-color_weak slds-var-p-around_medium slds-text-align_center">No reports found. Try a different search.</p>
+                        </template>
+                    </div>
+                </div>
+                <footer class="slds-modal__footer">
+                    <lightning-button label="Cancel" onclick={handleCloseReportModal}></lightning-button>
+                    <lightning-button label="Import" variant="brand" disabled={isImportDisabled} onclick={handleImportReport} class="slds-var-m-left_x-small"></lightning-button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
+
     </template>
 </template>

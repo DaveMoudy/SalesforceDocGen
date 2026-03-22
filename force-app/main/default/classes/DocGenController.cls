@@ -602,8 +602,6 @@ public with sharing class DocGenController {
     private static String normalizeImageUrls(String html) {
         try {
             String baseUrl = URL.getOrgDomainUrl().toExternalForm();
-            // Replace relative paths with absolute, handling both & and &amp; forms
-            // Pattern: src="/servlet/..." or src="/sfc/..."
             html = html.replaceAll('(?i)(src\\s*=\\s*["\'])(/servlet/)', '$1' + baseUrl + '$2');
             html = html.replaceAll('(?i)(src\\s*=\\s*["\'])(/sfc/)', '$1' + baseUrl + '$2');
             return html;
@@ -611,5 +609,230 @@ public with sharing class DocGenController {
             System.debug(LoggingLevel.WARN, 'DocGen: normalizeImageUrls failed: ' + e.getMessage());
             return html;
         }
+    }
+
+    // =========================================================================
+    // Report Import — extract columns and filters from existing Salesforce Reports
+    // =========================================================================
+
+    /**
+     * Returns available reports the user can access.
+     * Searches by name if a search term is provided.
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<Map<String, String>> getAvailableReports(String searchTerm) {
+        String query = 'SELECT Id, Name, DeveloperName, FolderName FROM Report';
+        if (String.isNotBlank(searchTerm)) {
+            String safeTerm = '%' + String.escapeSingleQuotes(searchTerm.trim()) + '%';
+            query += ' WHERE Name LIKE :safeTerm';
+        }
+        query += ' ORDER BY Name LIMIT 50';
+
+        List<Map<String, String>> results = new List<Map<String, String>>();
+        for (Report r : Database.query(query)) {
+            results.add(new Map<String, String>{
+                'id' => r.Id,
+                'name' => r.Name,
+                'folder' => r.FolderName
+            });
+        }
+        return results;
+    }
+
+    /**
+     * Imports a report's columns and filters as a DocGen query config.
+     * Uses the Reports API to describe the report, then normalizes
+     * column names to SOQL field API names.
+     */
+    @AuraEnabled
+    public static Map<String, Object> importReportConfig(Id reportId) {
+        if (reportId == null) {
+            throw new AuraHandledException('Report ID is required.');
+        }
+
+        Reports.ReportDescribeResult describe = Reports.ReportManager.describeReport(reportId);
+        Reports.ReportMetadata metadata = describe.getReportMetadata();
+        Reports.ReportExtendedMetadata extMeta = describe.getReportExtendedMetadata();
+
+        // Determine base object from report type
+        String reportTypeName = metadata.getReportType().getType();
+        String baseObject = resolveReportBaseObject(reportTypeName);
+        if (baseObject == null) {
+            throw new AuraHandledException('Could not determine the base object for this report. Report type: ' + reportTypeName);
+        }
+
+        // Get the field map for normalization
+        SObjectType objType = Schema.getGlobalDescribe().get(baseObject);
+        if (objType == null) {
+            throw new AuraHandledException('Object not found: ' + baseObject);
+        }
+        Map<String, SObjectField> fieldMap = objType.getDescribe().fields.getMap();
+
+        // Normalize report columns to SOQL field names
+        List<String> detailColumns = metadata.getDetailColumns();
+        Map<String, Reports.DetailColumn> columnInfo = extMeta.getDetailColumnInfo();
+        List<String> normalizedFields = new List<String>();
+
+        for (String colKey : detailColumns) {
+            String fieldName = normalizeReportColumn(colKey, fieldMap);
+            if (fieldName != null && !normalizedFields.contains(fieldName)) {
+                normalizedFields.add(fieldName);
+            }
+        }
+
+        // Convert report filters to a simple list
+        List<Map<String, String>> filters = new List<Map<String, String>>();
+        for (Reports.ReportFilter rf : metadata.getReportFilters()) {
+            String filterField = normalizeReportColumn(rf.getColumn(), fieldMap);
+            if (filterField != null) {
+                filters.add(new Map<String, String>{
+                    'field' => filterField,
+                    'operator' => mapReportOperator(rf.getOperator()),
+                    'value' => rf.getValue()
+                });
+            }
+        }
+
+        return new Map<String, Object>{
+            'baseObject' => baseObject,
+            'fields' => normalizedFields,
+            'filters' => filters,
+            'reportName' => metadata.getName(),
+            'fieldCount' => normalizedFields.size(),
+            'filterCount' => filters.size()
+        };
+    }
+
+    /**
+     * Resolves a report type name to a base object API name.
+     * Handles standard patterns like 'AccountList', 'OpportunityList', 'Contact', etc.
+     */
+    private static String resolveReportBaseObject(String reportTypeName) {
+        if (String.isBlank(reportTypeName)) return null;
+
+        // Common standard report type mappings
+        Map<String, String> standardMappings = new Map<String, String>{
+            'AccountList' => 'Account',
+            'OpportunityList' => 'Opportunity',
+            'ContactList' => 'Contact',
+            'LeadList' => 'Lead',
+            'CaseList' => 'Case',
+            'TaskList' => 'Task',
+            'EventList' => 'Event',
+            'ContractList' => 'Contract',
+            'CampaignList' => 'Campaign',
+            'ProductList' => 'Product2',
+            'SolutionList' => 'Solution',
+            'UserList' => 'User',
+            'AccountContactRole' => 'Account',
+            'OpportunityLineItem' => 'Opportunity'
+        };
+
+        if (standardMappings.containsKey(reportTypeName)) {
+            return standardMappings.get(reportTypeName);
+        }
+
+        // Try stripping 'List' suffix
+        if (reportTypeName.endsWith('List')) {
+            String stripped = reportTypeName.removeEnd('List');
+            if (Schema.getGlobalDescribe().containsKey(stripped)) {
+                return stripped;
+            }
+        }
+
+        // Try direct match
+        if (Schema.getGlobalDescribe().containsKey(reportTypeName)) {
+            return reportTypeName;
+        }
+
+        // Try with __c suffix for custom report types
+        if (Schema.getGlobalDescribe().containsKey(reportTypeName + '__c')) {
+            return reportTypeName + '__c';
+        }
+
+        return null;
+    }
+
+    /**
+     * Normalizes a report column key to a SOQL field API name.
+     * Report columns come as 'ACCOUNT.NAME', 'CUST_FIELD__c', 'CREATED_DATE', etc.
+     */
+    private static String normalizeReportColumn(String columnKey, Map<String, SObjectField> fieldMap) {
+        if (String.isBlank(columnKey)) return null;
+
+        // Direct match
+        if (fieldMap.containsKey(columnKey)) return columnKey;
+
+        // Strip object prefix: 'ACCOUNT.NAME' → 'NAME'
+        String fieldPart = columnKey;
+        if (columnKey.contains('.')) {
+            fieldPart = columnKey.substringAfter('.');
+        }
+
+        // Try direct match on field part
+        if (fieldMap.containsKey(fieldPart)) return fieldPart;
+
+        // Case-insensitive match
+        for (String key : fieldMap.keySet()) {
+            if (key.equalsIgnoreCase(fieldPart)) return key;
+        }
+
+        // Common report-to-SOQL mappings
+        Map<String, String> commonMappings = new Map<String, String>{
+            'CREATED_DATE' => 'CreatedDate',
+            'LAST_UPDATE' => 'LastModifiedDate',
+            'CREATED' => 'CreatedDate',
+            'DUE_DATE' => 'CloseDate',
+            'CLOSE_DATE' => 'CloseDate',
+            'AMOUNT' => 'Amount',
+            'ACCOUNT_NAME' => 'Account.Name',
+            'CONTACT_NAME' => 'Contact.Name',
+            'FULL_NAME' => 'Name',
+            'FIRST_NAME' => 'FirstName',
+            'LAST_NAME' => 'LastName',
+            'TITLE' => 'Title',
+            'EMAIL' => 'Email',
+            'PHONE' => 'Phone',
+            'STAGE_NAME' => 'StageName',
+            'TYPE' => 'Type',
+            'DESCRIPTION' => 'Description',
+            'INDUSTRY' => 'Industry',
+            'OWNER' => 'Owner.Name',
+            'RECORDTYPE' => 'RecordType.Name'
+        };
+
+        if (commonMappings.containsKey(fieldPart.toUpperCase())) {
+            return commonMappings.get(fieldPart.toUpperCase());
+        }
+
+        // Try with __c suffix
+        if (!fieldPart.endsWithIgnoreCase('__c') && fieldMap.containsKey(fieldPart + '__c')) {
+            return fieldPart + '__c';
+        }
+
+        System.debug(LoggingLevel.FINE, 'DocGen: Could not normalize report column: ' + columnKey);
+        return null;
+    }
+
+    /**
+     * Maps report filter operators to SOQL operators.
+     */
+    private static String mapReportOperator(String reportOperator) {
+        if (String.isBlank(reportOperator)) return '=';
+
+        Map<String, String> operatorMap = new Map<String, String>{
+            'equals' => '=',
+            'notEqual' => '!=',
+            'greaterThan' => '>',
+            'lessThan' => '<',
+            'greaterOrEqual' => '>=',
+            'lessOrEqual' => '<=',
+            'contains' => 'LIKE',
+            'startsWith' => 'LIKE',
+            'includes' => 'IN',
+            'excludes' => 'NOT IN'
+        };
+
+        return operatorMap.containsKey(reportOperator) ? operatorMap.get(reportOperator) : '=';
     }
 }
