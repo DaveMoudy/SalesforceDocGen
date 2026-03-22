@@ -24,9 +24,28 @@ public with sharing class DocGenDataRetriever {
      *   Name, (SELECT Name, (SELECT Quantity FROM OpportunityLineItems) FROM Opportunities)
      * are decomposed into separate queries per level and stitched together.
      */
+    /**
+     * Represents a junction object configuration for two-hop queries.
+     * E.g., Opportunity → OpportunityContactRoles → Contact
+     */
+    private class JunctionSpec {
+        String junctionRel;        // 'OpportunityContactRoles'
+        List<String> junctionFields; // ['Role'] — fields from junction record itself
+        String targetObject;       // 'Contact'
+        String targetIdField;      // 'ContactId' — lookup field on junction to target
+        List<String> targetFields; // ['FirstName', 'LastName', 'Email']
+        String targetWhere;
+        String targetOrderBy;
+    }
+
     public static Map<String, Object> getRecordData(Id recordId, String baseObject, String fieldsConfig) {
         if (String.isBlank(baseObject) || String.isBlank(fieldsConfig) || recordId == null) {
             throw new AuraHandledException('Invalid parameters for data retrieval.');
+        }
+
+        // JSON v2 config: starts with '{', contains version field
+        if (fieldsConfig.trim().startsWith('{')) {
+            return getRecordDataV2(recordId, baseObject, fieldsConfig);
         }
 
         SObjectType objType = Schema.getGlobalDescribe().get(baseObject);
