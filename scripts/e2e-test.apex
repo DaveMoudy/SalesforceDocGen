@@ -8,17 +8,20 @@ Integer pass = 0;
 Integer fail = 0;
 
 // === 1. DATA SETUP ===
-Account acc = new Account(Name='E2E-' + DateTime.now().getTime(), Industry='Technology', Phone='(555) 999-0000', Website='www.test.com', BillingStreet='100 Test Dr', BillingCity='San Francisco', BillingState='CA', BillingPostalCode='94105');
-insert acc;
+Account acc = new Account(Name='E2E-' + DateTime.now().getTime(), Industry='Technology', Phone='(555) 999-' + String.valueOf(Math.mod(Math.abs(Crypto.getRandomInteger()), 10000)).leftPad(4, '0'), Website='www.test.com', BillingStreet='100 Test Dr', BillingCity='San Francisco', BillingState='CA', BillingPostalCode='94105');
+Database.DMLOptions dml = new Database.DMLOptions();
+dml.DuplicateRuleHeader.allowSave = true;
+Database.insert(acc, dml);
 
+String uid = String.valueOf(Math.mod(Math.abs(Crypto.getRandomInteger()), 100000));
 List<Contact> cons = new List<Contact>{
-    new Contact(AccountId=acc.Id, FirstName='Alice', LastName='Johnson', Title='CEO', Email='alice@test.com'),
-    new Contact(AccountId=acc.Id, FirstName='Bob', LastName='Smith', Title='CTO', Email='bob@test.com')
+    new Contact(AccountId=acc.Id, FirstName='Alice', LastName='Johnson-'+uid, Title='CEO', Email='alice'+uid+'@test.com'),
+    new Contact(AccountId=acc.Id, FirstName='Bob', LastName='Smith-'+uid, Title='CTO', Email='bob'+uid+'@test.com')
 };
-insert cons;
+Database.insert(cons, dml);
 
-Opportunity opp = new Opportunity(Name='Test Deal', AccountId=acc.Id, Amount=100000, StageName='Proposal/Price Quote', CloseDate=Date.today().addDays(30));
-insert opp;
+Opportunity opp = new Opportunity(Name='Test Deal-'+uid, AccountId=acc.Id, Amount=100000, StageName='Proposal/Price Quote', CloseDate=Date.today().addDays(30));
+Database.insert(opp, dml);
 
 List<Pricebook2> pbs = [SELECT Id FROM Pricebook2 WHERE IsStandard = true LIMIT 1];
 if (!pbs.isEmpty()) {
