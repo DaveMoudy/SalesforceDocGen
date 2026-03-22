@@ -2,7 +2,7 @@ public with sharing class DocGenBulkController {
 
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Template__c> getBulkTemplates() {
-        return [SELECT Id, Name, Base_Object_API__c, Description__c, Output_Format__c FROM DocGen_Template__c WITH SYSTEM_MODE ORDER BY Name];
+        return [SELECT Id, Name, Base_Object_API__c, Description__c, Output_Format__c, Query_Config__c FROM DocGen_Template__c WITH SYSTEM_MODE ORDER BY Name];
     }
 
     @AuraEnabled

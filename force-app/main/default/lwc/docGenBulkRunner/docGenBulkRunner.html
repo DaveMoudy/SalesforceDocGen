@@ -14,14 +14,19 @@
             <!-- Step 1: Configuration -->
             <div class="slds-grid slds-gutters">
                 <div class="slds-col slds-size_1-of-2">
-                    <lightning-combobox
-                        label="Select Template"
-                        placeholder="Choose a template..."
-                        value={selectedTemplateId}
-                        options={templates}
-                        onchange={handleTemplateChange}
-                        disabled={isProcessing}>
-                    </lightning-combobox>
+                    <div class="slds-grid slds-grid_vertical-align-end" style="gap: 0.5rem;">
+                        <div class="slds-col slds-grow">
+                            <lightning-combobox
+                                label="Select Template"
+                                placeholder="Choose a template..."
+                                value={selectedTemplateId}
+                                options={templates}
+                                onchange={handleTemplateChange}
+                                disabled={isProcessing}>
+                            </lightning-combobox>
+                        </div>
+                        <lightning-button-icon icon-name="utility:refresh" variant="border-filled" alternative-text="Refresh templates" onclick={handleRefreshTemplates}></lightning-button-icon>
+                    </div>
 
                     <template if:true={baseObject}>
                         <div class="slds-text-color_weak slds-var-m-top_x-small">

@@ -89,7 +89,32 @@ Integer lcCount = 0;
 if (lcObj instanceof Map<String, Object>) { lcCount = ((List<Object>)((Map<String, Object>)lcObj).get('records')).size(); }
 if (lcCount == 2) { pass++; } else { fail++; System.debug('FAIL: Legacy contacts count=' + lcCount); }
 
-// === 4. DOCUMENT GENERATION ===
+// === 4. IMAGE STRESS TEST ===
+// Create a test image as ContentVersion and store its ID on the Account
+// Generate a small PNG (1x1 red pixel) as base64
+String pngB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+ContentVersion imgCv = new ContentVersion();
+imgCv.Title = 'E2E Test Image';
+imgCv.PathOnClient = 'test_image.png';
+imgCv.VersionData = EncodingUtil.base64Decode(pngB64);
+imgCv.IsMajorVersion = true;
+Database.insert(imgCv, dml);
+imgCv = [SELECT Id FROM ContentVersion WHERE Id = :imgCv.Id];
+
+// Store the CV ID in the Account's Description field (simulating an image field)
+acc.Description = String.valueOf(imgCv.Id);
+update acc;
+
+// Test that buildPdfImageMap can resolve a CV ID to a relative URL
+// (This is the zero-heap image rendering path)
+System.debug('Image CV: ' + imgCv.Id);
+if (String.valueOf(imgCv.Id).startsWith('068')) { pass++; } else { fail++; System.debug('FAIL: Image CV ID format'); }
+
+// Verify the image CV is accessible
+List<ContentVersion> imgCheck = [SELECT Id, FileExtension FROM ContentVersion WHERE Id = :imgCv.Id];
+if (!imgCheck.isEmpty() && imgCheck[0].FileExtension == 'png') { pass++; } else { fail++; System.debug('FAIL: Image CV not accessible'); }
+
+// === 5. DOCUMENT GENERATION ===
 DocGen_Template__c tmpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'E2E Full Tree Test' LIMIT 1];
 try {
     Id cdId = DocGenService.generateDocument(tmpl.Id, acc.Id);

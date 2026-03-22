@@ -1,5 +1,6 @@
 import { LightningElement, track, wire } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import { refreshApex } from '@salesforce/apex';
 import getBulkTemplates from '@salesforce/apex/DocGenBulkController.getBulkTemplates';
 import validateFilter from '@salesforce/apex/DocGenBulkController.validateFilter';
 import submitJob from '@salesforce/apex/DocGenBulkController.submitJob';
@@ -37,17 +38,29 @@ export default class DocGenBulkRunner extends LightningElement {
 
 
     // Wire Templates
+    _wiredTemplateResult;
+    _templateDataMap = {};
+
     @wire(getBulkTemplates)
-    wiredTemplates({ error, data }) {
-        if (data) {
-            this.templates = data.map(t => ({
-                label: t.Name + ' (' + t.Base_Object_API__c + ' \u2022 ' + (t.Output_Format__c || 'Document') + ')',
-                value: t.Id,
-                baseObject: t.Base_Object_API__c
-            }));
-        } else if (error) {
+    wiredTemplates(result) {
+        this._wiredTemplateResult = result;
+        if (result.data) {
+            this._templateDataMap = {};
+            this.templates = result.data.map(t => {
+                this._templateDataMap[t.Id] = t;
+                return {
+                    label: t.Name + ' (' + t.Base_Object_API__c + ' \u2022 ' + (t.Output_Format__c || 'Document') + ')',
+                    value: t.Id,
+                    baseObject: t.Base_Object_API__c
+                };
+            });
+        } else if (result.error) {
             this.showToast('Error', 'Failed to load templates', 'error');
         }
+    }
+
+    handleRefreshTemplates() {
+        refreshApex(this._wiredTemplateResult);
     }
 
     disconnectedCallback() {
@@ -59,8 +72,27 @@ export default class DocGenBulkRunner extends LightningElement {
         const selected = this.templates.find(t => t.value === this.selectedTemplateId);
         if (selected) {
             this.baseObject = selected.baseObject;
-            this.recordCount = null; // Reset validation
+            this.recordCount = null;
             this.loadSavedQueries();
+
+            // Auto-load report filter WHERE clause from template config if V3
+            const tmplData = this._templateDataMap[this.selectedTemplateId];
+            if (tmplData && tmplData.Query_Config__c) {
+                try {
+                    const config = JSON.parse(tmplData.Query_Config__c);
+                    if (config.reportFilters && config.reportFilters.length > 0) {
+                        // Convert report filters to WHERE clause
+                        const parts = config.reportFilters.map(f => {
+                            if (f.operator === 'LIKE') return f.field + " LIKE '%" + f.value + "%'";
+                            return f.field + " " + f.operator + " '" + f.value + "'";
+                        });
+                        this.condition = parts.join(' AND ');
+                        this.showToast('Filter Applied', 'Report filter loaded: ' + this.condition, 'info');
+                    }
+                } catch (e) {
+                    // Not JSON or no filters — that's fine
+                }
+            }
         }
     }
 
