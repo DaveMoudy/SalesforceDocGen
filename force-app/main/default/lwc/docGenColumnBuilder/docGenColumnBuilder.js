@@ -663,12 +663,26 @@ export default class DocGenColumnBuilder extends LightningElement {
 
                     if (relName.startsWith('__junction_')) {
                         // Junction object — create a tab for the TARGET object
-                        // e.g., __junction_Contact → Contact fields
+                        // e.g., __junction_Contact → Contact via OpportunityContactRoles
                         const targetObjName = relName.replace('__junction_', '');
+
+                        // Find junction metadata from the import result
+                        let junctionRel = '';
+                        let junctionLabel = targetObjName + ' (linked)';
+                        if (result.junctions) {
+                            const jInfo = result.junctions.find(j => j.targetObject === targetObjName);
+                            if (jInfo) {
+                                junctionRel = jInfo.junctionRel || '';
+                                if (junctionRel) {
+                                    junctionLabel = targetObjName + ' (via ' + junctionRel + ')';
+                                }
+                            }
+                        }
+
                         const junctionNode = this._createNode(targetObjName,
-                            targetObjName + ' (linked)', false, rootNode.id,
-                            null, null, // No direct lookup — junction
-                            { junctionRel: 'unknown', targetObject: targetObjName, targetIdField: 'unknown', targetFields: fields }
+                            junctionLabel, false, rootNode.id,
+                            null, null,
+                            { junctionRel: junctionRel, targetObject: targetObjName, targetIdField: 'ContactId', targetFields: fields }
                         );
                         // Load target object fields and auto-check
                         getObjectFields({ objectName: targetObjName }).then(fieldData => {
@@ -699,9 +713,13 @@ export default class DocGenColumnBuilder extends LightningElement {
             });
         }
 
+        let toastMsg = result.fieldCount + ' fields from "' + result.reportName + '" applied.';
+        if (result.bulkWhereClause) {
+            toastMsg += ' Filter: ' + result.bulkWhereClause;
+        }
         this.dispatchEvent(new ShowToastEvent({
             title: 'Report Imported',
-            message: 'Fields from "' + result.reportName + '" applied.',
+            message: toastMsg,
             variant: 'success'
         }));
     }

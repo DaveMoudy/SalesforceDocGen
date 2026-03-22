@@ -720,9 +720,41 @@ public with sharing class DocGenController {
                 // If not a direct child (e.g., Contact via OpportunityContactRole), skip SOQL routing
                 // but still build the field map for label-based column detection
                 if (!found) {
-                    // Contact on Opportunity goes through OpportunityContactRoles
-                    // We'll detect its fields but can't auto-build a subquery
-                    childRelNameByObject.put(childObjName, '__junction_' + childObjName);
+                    // Not a direct child — find the known junction relationship
+                    // Known junction paths by base+target object
+                    Map<String, String> knownJunctions = new Map<String, String>{
+                        'Opportunity:Contact' => 'OpportunityContactRoles',
+                        'Account:Contact' => 'AccountContactRelations',
+                        'Campaign:Contact' => 'CampaignMembers',
+                        'Campaign:Lead' => 'CampaignMembers'
+                    };
+                    String junctionKey = baseObject + ':' + childObjName;
+                    String junctionRelName = knownJunctions.get(junctionKey);
+
+                    // Fallback: scan child relationships for a junction object
+                    if (junctionRelName == null) {
+                        for (Schema.ChildRelationship cr : objType.getDescribe().getChildRelationships()) {
+                            if (cr.getRelationshipName() == null) continue;
+                            String jObjName = cr.getChildSObject().getDescribe().getName();
+                            // Skip known non-junction objects
+                            if (jObjName.endsWith('History') || jObjName.endsWith('Share') || jObjName.endsWith('Feed')) continue;
+                            for (Schema.SObjectField jf : cr.getChildSObject().getDescribe().fields.getMap().values()) {
+                                Schema.DescribeFieldResult jdfr = jf.getDescribe();
+                                if (jdfr.getType() == Schema.DisplayType.REFERENCE && jdfr.getReferenceTo() != null) {
+                                    for (Schema.SObjectType ref : jdfr.getReferenceTo()) {
+                                        if (ref.getDescribe().getName() == childObjName) {
+                                            junctionRelName = cr.getRelationshipName();
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (junctionRelName != null) break;
+                            }
+                            if (junctionRelName != null) break;
+                        }
+                    }
+                    childRelNameByObject.put(childObjName,
+                        junctionRelName != null ? '__junction_' + childObjName + ':' + junctionRelName : '__junction_' + childObjName);
                 }
 
                 // Build field maps for label matching regardless
@@ -864,12 +896,83 @@ public with sharing class DocGenController {
             }
         }
 
+        // Capture standard date filter as a WHERE clause
+        Reports.StandardDateFilter stdDateFilter = metadata.getStandardDateFilter();
+        String whereClause = '';
+        if (stdDateFilter != null) {
+            String dateCol = stdDateFilter.getColumn();
+            String dateField = normalizeReportColumn(dateCol, null, fieldMap, labelToApiName, properCaseMap);
+            if (dateField == null) {
+                // Common date column mappings
+                Map<String, String> dateMap = new Map<String, String>{
+                    'CREATED_DATE' => 'CreatedDate',
+                    'CLOSE_DATE' => 'CloseDate',
+                    'LAST_UPDATE' => 'LastModifiedDate'
+                };
+                dateField = dateMap.get(dateCol);
+            }
+            if (dateField != null) {
+                String duration = stdDateFilter.getDurationValue();
+                String startDate = stdDateFilter.getStartDate();
+                String endDate = stdDateFilter.getEndDate();
+
+                if (duration != null && duration != 'CUSTOM') {
+                    // Relative date: THIS_MONTH, LAST_YEAR, etc.
+                    whereClause = dateField + ' = ' + duration;
+                } else {
+                    if (String.isNotBlank(startDate) && String.isNotBlank(endDate)) {
+                        whereClause = dateField + ' >= ' + startDate + ' AND ' + dateField + ' <= ' + endDate;
+                    } else if (String.isNotBlank(startDate)) {
+                        whereClause = dateField + ' >= ' + startDate;
+                    } else if (String.isNotBlank(endDate)) {
+                        whereClause = dateField + ' <= ' + endDate;
+                    }
+                }
+            }
+        }
+
+        // Build WHERE string from custom filters too
+        List<String> filterParts = new List<String>();
+        if (String.isNotBlank(whereClause)) filterParts.add(whereClause);
+        for (Map<String, String> f : filters) {
+            String op = f.get('operator');
+            String val = f.get('value');
+            if (op == 'LIKE') {
+                filterParts.add(f.get('field') + ' LIKE \'%' + String.escapeSingleQuotes(val) + '%\'');
+            } else {
+                filterParts.add(f.get('field') + ' ' + op + ' \'' + String.escapeSingleQuotes(val) + '\'');
+            }
+        }
+        String bulkWhereClause = String.join(filterParts, ' AND ');
+
         // Build child subqueries for the query config (skip junction-based children)
         List<String> childSubqueries = new List<String>();
         for (String relName : childFields.keySet()) {
             List<String> fields = childFields.get(relName);
             if (!fields.isEmpty() && !relName.startsWith('__junction_')) {
                 childSubqueries.add('(SELECT ' + String.join(fields, ', ') + ' FROM ' + relName + ')');
+            }
+        }
+
+        // Build junction info for the LWC
+        List<Map<String, String>> junctionInfo = new List<Map<String, String>>();
+        for (String relName : childFields.keySet()) {
+            if (relName.startsWith('__junction_')) {
+                // Parse: __junction_Contact or __junction_Contact:OpportunityContactRoles
+                String remainder = relName.substring(11); // strip '__junction_'
+                String targetObj;
+                String junctionRel = '';
+                if (remainder.contains(':')) {
+                    targetObj = remainder.substringBefore(':');
+                    junctionRel = remainder.substringAfter(':');
+                } else {
+                    targetObj = remainder;
+                }
+                junctionInfo.add(new Map<String, String>{
+                    'targetObject' => targetObj,
+                    'junctionRel' => junctionRel,
+                    'fields' => String.join(childFields.get(relName), ',')
+                });
             }
         }
 
@@ -884,7 +987,9 @@ public with sharing class DocGenController {
             'parentFields' => parentFields,
             'childSubqueries' => childSubqueries,
             'childFields' => childFields,
+            'junctions' => junctionInfo,
             'filters' => filters,
+            'bulkWhereClause' => bulkWhereClause,
             'reportName' => metadata.getName(),
             'fieldCount' => normalizedFields.size() + parentFields.size() + totalChildFields,
             'filterCount' => filters.size()
