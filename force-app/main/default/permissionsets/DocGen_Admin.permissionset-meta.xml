@@ -51,6 +51,11 @@
     <description>Full access to all Document Generation features and administration.</description>
     <fieldPermissions>
         <editable>true</editable>
+        <field>Product2.Product_Image__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>DocGen_Job__c.Error_Count__c</field>
         <readable>true</readable>
     </fieldPermissions>

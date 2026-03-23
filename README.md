@@ -77,6 +77,7 @@ Generate your document with DocGen. Send it to a signature provider. Best tool f
 | **Flow Integration** | `DocGenFlowAction` (single) and `DocGenBulkFlowAction` (bulk) invocable actions |
 | **Image Injection** | Dynamic images from ContentVersion IDs, rich text fields, or template-embedded graphics |
 | **Template Versioning** | Full history with preview, download, restore, and sample generation |
+| **PDF Merger** | Merge generated PDFs with existing PDFs on the record — client-side, no heap limits |
 | **Zero External Dependencies** | No HTTP callouts, no JavaScript libraries, no external services |
 
 ---
@@ -90,6 +91,7 @@ Salesforce gives each transaction 6 MB of memory. DocGen uses three techniques t
 | **Pre-decomposition** | When you save a template, DocGen unzips the .docx and stores each piece separately. At generation time, it loads only the XML — never the full ZIP. | ~75% heap reduction |
 | **Zero-heap images** | Images are passed to the PDF engine by URL, not loaded into memory. 20+ large images render without using any of your 6 MB. | Unlimited images in PDFs |
 | **Client-side DOCX** | For Word output, the browser assembles the final file. Each image gets its own request with fresh memory. | No size limit on DOCX |
+| **Client-side PDF merge** | Existing PDFs are fetched one at a time (fresh heap each call), merged in the browser via a pure JS PDF engine. | Unlimited merge size |
 | **Multi-level queries** | Deep relationships (grandchildren) use one SOQL query per level, not per record. Results are stitched together in Apex. | 3 levels = 3 queries |
 
 ---
@@ -125,6 +127,17 @@ Template (.docx) → Decompress → Merge XML tags → Recompress → DOCX/PDF
 | `DocGenDataRetriever` | Dynamic SOQL with multi-level stitching |
 | `DocGenController` | LWC controller — template CRUD, generation |
 | `DocGenBatch` | Batch Apex for bulk jobs |
+
+### PDF Merger
+
+Generate a document from your template and merge it with existing PDFs already attached to the record — all in one step.
+
+1. Select a PDF template from the record page
+2. Check **Merge with existing PDFs on this record**
+3. Pick which PDFs to append
+4. Click **Generate & Merge** — downloads or saves a single combined PDF
+
+The merge runs entirely client-side using `docGenPdfMerger.js` (pure JS, no external libraries). Each source PDF is fetched via its own Apex call with fresh 6 MB heap, then the browser handles the binary merge — no server-side size constraints.
 
 ### PDF Font Support
 

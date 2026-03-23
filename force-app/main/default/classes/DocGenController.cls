@@ -616,6 +616,32 @@ public with sharing class DocGenController {
     // =========================================================================
 
     /**
+     * Returns PDF files attached to a record (for PDF merger).
+     * Each entry has a label (file title) and value (ContentVersion ID).
+     */
+    @AuraEnabled
+    public static List<Map<String, String>> getRecordPdfs(Id recordId) {
+        List<ContentDocumentLink> links = [
+            SELECT ContentDocumentId, ContentDocument.LatestPublishedVersionId,
+                   ContentDocument.Title, ContentDocument.FileExtension
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :recordId
+            AND ContentDocument.FileExtension = 'pdf'
+            WITH SYSTEM_MODE
+            ORDER BY ContentDocument.Title
+        ];
+
+        List<Map<String, String>> result = new List<Map<String, String>>();
+        for (ContentDocumentLink link : links) {
+            result.add(new Map<String, String>{
+                'label' => link.ContentDocument.Title + '.pdf',
+                'value' => link.ContentDocument.LatestPublishedVersionId
+            });
+        }
+        return result;
+    }
+
+    /**
      * Returns available reports the user can access.
      * Searches by name if a search term is provided.
      */

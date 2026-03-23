@@ -6,7 +6,9 @@ import generateDocumentParts from '@salesforce/apex/DocGenController.generateDoc
 import getContentVersionBase64 from '@salesforce/apex/DocGenController.getContentVersionBase64';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import saveGeneratedDocument from '@salesforce/apex/DocGenController.saveGeneratedDocument';
+import getRecordPdfs from '@salesforce/apex/DocGenController.getRecordPdfs';
 import { buildDocx } from './docGenZipWriter';
+import { mergePdfs } from './docGenPdfMerger';
 
 export default class DocGenRunner extends LightningElement {
     @api recordId;
@@ -16,6 +18,11 @@ export default class DocGenRunner extends LightningElement {
     @track selectedTemplateId;
     @track outputMode = 'download';
     @track templateOutputFormat = 'Document';
+
+    // PDF Merge state
+    @track mergeEnabled = false;
+    @track recordPdfOptions = [];
+    @track selectedPdfCvIds = [];
 
     isLoading = false;
     error;
@@ -32,6 +39,22 @@ export default class DocGenRunner extends LightningElement {
             options.push({ label: `Save to Record (${formatLabel})`, value: 'save' });
         }
         return options;
+    }
+
+    /** Show merge option only for PDF output templates */
+    get showMergeOption() {
+        return this.templateOutputFormat === 'PDF';
+    }
+
+    get hasRecordPdfs() {
+        return this.recordPdfOptions.length > 0;
+    }
+
+    get generateButtonLabel() {
+        if (this.mergeEnabled && this.selectedPdfCvIds.length > 0) {
+            return 'Generate & Merge (' + (this.selectedPdfCvIds.length + 1) + ' PDFs)';
+        }
+        return 'Generate Document';
     }
 
     @wire(getTemplatesForObject, { objectApiName: '$objectApiName' })
@@ -68,11 +91,40 @@ export default class DocGenRunner extends LightningElement {
             if (this.templateOutputFormat !== 'PDF' && this.outputMode === 'save') {
                 this.outputMode = 'download';
             }
+            // Reset merge state when switching templates
+            if (this.templateOutputFormat !== 'PDF') {
+                this.mergeEnabled = false;
+                this.selectedPdfCvIds = [];
+            }
         }
     }
 
     handleOutputModeChange(event) {
         this.outputMode = event.detail.value;
+    }
+
+    handleMergeToggle(event) {
+        this.mergeEnabled = event.target.checked;
+        if (this.mergeEnabled && this.recordPdfOptions.length === 0) {
+            this._loadRecordPdfs();
+        }
+    }
+
+    handlePdfSelection(event) {
+        this.selectedPdfCvIds = event.detail.value;
+    }
+
+    async _loadRecordPdfs() {
+        try {
+            const pdfs = await getRecordPdfs({ recordId: this.recordId });
+            this.recordPdfOptions = pdfs.map(p => ({
+                label: p.label,
+                value: p.value
+            }));
+        } catch (e) {
+            console.warn('DocGen: Failed to load record PDFs', e);
+            this.recordPdfOptions = [];
+        }
     }
 
     get isGenerateDisabled() {
@@ -89,23 +141,29 @@ export default class DocGenRunner extends LightningElement {
             const isPPT = templateType === 'PowerPoint';
             const isPDF = this.templateOutputFormat === 'PDF' && !isPPT;
             const saveToRecord = this.outputMode === 'save';
+            const shouldMerge = isPDF && this.mergeEnabled && this.selectedPdfCvIds.length > 0;
 
             if (isPDF) {
-                // Unified PDF path — same backend as bulk generation
-                this.showToast('Info', 'Generating PDF...', 'info');
+                if (shouldMerge) {
+                    // PDF merge path — generate template PDF + fetch selected PDFs + merge client-side
+                    await this._generateMergedPdf(saveToRecord);
+                } else {
+                    // Standard PDF path — same backend as bulk generation
+                    this.showToast('Info', 'Generating PDF...', 'info');
 
-                const result = await generatePdf({
-                    templateId: this.selectedTemplateId,
-                    recordId: this.recordId,
-                    saveToRecord: saveToRecord
-                });
+                    const result = await generatePdf({
+                        templateId: this.selectedTemplateId,
+                        recordId: this.recordId,
+                        saveToRecord: saveToRecord
+                    });
 
-                if (result.saved) {
-                    this.showToast('Success', 'PDF saved to record.', 'success');
-                } else if (result.base64) {
-                    const docTitle = result.title || 'Document';
-                    this.downloadBase64(result.base64, docTitle + '.pdf', 'application/pdf');
-                    this.showToast('Success', 'PDF downloaded.', 'success');
+                    if (result.saved) {
+                        this.showToast('Success', 'PDF saved to record.', 'success');
+                    } else if (result.base64) {
+                        const docTitle = result.title || 'Document';
+                        this.downloadBase64(result.base64, docTitle + '.pdf', 'application/pdf');
+                        this.showToast('Success', 'PDF downloaded.', 'success');
+                    }
                 }
             } else if (!isPPT) {
                 // Word DOCX — client-side assembly for zero heap
@@ -150,6 +208,59 @@ export default class DocGenRunner extends LightningElement {
             this.error = 'Generation Error: ' + msg;
         } finally {
             this.isLoading = false;
+        }
+    }
+
+    /**
+     * Generates the template PDF, fetches selected existing PDFs,
+     * and merges them all client-side. Each PDF fetch is a separate
+     * Apex call with fresh 6MB heap — no server-side size limit.
+     */
+    async _generateMergedPdf(saveToRecord) {
+        const totalPdfs = this.selectedPdfCvIds.length + 1;
+        this.showToast('Info', `Generating and merging ${totalPdfs} PDFs...`, 'info');
+
+        // 1. Generate the template PDF (always download mode — we merge client-side)
+        const result = await generatePdf({
+            templateId: this.selectedTemplateId,
+            recordId: this.recordId,
+            saveToRecord: false
+        });
+
+        if (!result || !result.base64) {
+            throw new Error('Template PDF generation returned empty result.');
+        }
+
+        const docTitle = result.title || 'Document';
+
+        // Convert template PDF base64 to Uint8Array
+        const pdfBytesArray = [this._base64ToUint8Array(result.base64)];
+
+        // 2. Fetch each selected PDF — one Apex call each = fresh 6MB heap
+        for (const cvId of this.selectedPdfCvIds) {
+            const b64 = await getContentVersionBase64({ contentVersionId: cvId });
+            if (b64) {
+                pdfBytesArray.push(this._base64ToUint8Array(b64));
+            }
+        }
+
+        // 3. Merge all PDFs client-side — zero heap, browser handles it
+        const mergedBytes = mergePdfs(pdfBytesArray);
+
+        // 4. Download or save
+        const mergedBase64 = this._uint8ArrayToBase64(mergedBytes);
+        if (saveToRecord) {
+            this.showToast('Info', 'Saving merged PDF to record...', 'info');
+            await saveGeneratedDocument({
+                recordId: this.recordId,
+                fileName: docTitle,
+                base64Data: mergedBase64,
+                extension: 'pdf'
+            });
+            this.showToast('Success', 'Merged PDF saved to record.', 'success');
+        } else {
+            this.downloadBase64(mergedBase64, docTitle + '.pdf', 'application/pdf');
+            this.showToast('Success', 'Merged PDF downloaded.', 'success');
         }
     }
 
@@ -205,7 +316,12 @@ export default class DocGenRunner extends LightningElement {
         // 6. Download or save
         if (saveToRecord) {
             this.showToast('Info', 'Saving to Record...', 'info');
-            await this._saveDocxViaRestApi(docxBytes, docTitle);
+            await saveGeneratedDocument({
+                recordId: this.recordId,
+                fileName: docTitle,
+                base64Data: docxBase64,
+                extension: 'docx'
+            });
             this.showToast('Success', 'DOCX saved to record.', 'success');
         } else {
             this.downloadBase64(docxBase64, docTitle + '.docx', 'application/octet-stream');
@@ -213,49 +329,17 @@ export default class DocGenRunner extends LightningElement {
         }
     }
 
+
     /**
-     * Uploads a DOCX file to Salesforce via REST API and links it to the record.
-     * Bypasses Aura payload limits — the browser sends the binary directly.
+     * Converts a base64 string to a Uint8Array.
      */
-    async _saveDocxViaRestApi(docxBytes, docTitle) {
-        const fileName = docTitle + '.docx';
-        const boundary = '----DocGenBoundary' + Date.now();
-
-        // Build multipart/form-data body
-        const header = '--' + boundary + '\r\n' +
-            'Content-Disposition: form-data; name="entity_content"\r\n' +
-            'Content-Type: application/json\r\n\r\n' +
-            JSON.stringify({
-                Title: docTitle,
-                PathOnClient: fileName,
-                FirstPublishLocationId: this.recordId
-            }) + '\r\n' +
-            '--' + boundary + '\r\n' +
-            'Content-Disposition: form-data; name="VersionData"; filename="' + fileName + '"\r\n' +
-            'Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n';
-        const footer = '\r\n--' + boundary + '--';
-
-        const headerBytes = new TextEncoder().encode(header);
-        const footerBytes = new TextEncoder().encode(footer);
-        const bodyArray = new Uint8Array(headerBytes.length + docxBytes.length + footerBytes.length);
-        bodyArray.set(headerBytes, 0);
-        bodyArray.set(docxBytes, headerBytes.length);
-        bodyArray.set(footerBytes, headerBytes.length + docxBytes.length);
-
-        const response = await fetch('/services/data/v66.0/sobjects/ContentVersion/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'multipart/form-data; boundary=' + boundary,
-                'X-SFDC-Request-Id': Date.now().toString()
-            },
-            credentials: 'include',
-            body: bodyArray.buffer
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error('Failed to save document: ' + response.status + ' ' + errorText);
+    _base64ToUint8Array(base64) {
+        const binaryStr = atob(base64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
         }
+        return bytes;
     }
 
     /**

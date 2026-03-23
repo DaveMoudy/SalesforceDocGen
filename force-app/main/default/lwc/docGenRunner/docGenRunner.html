@@ -11,7 +11,7 @@
             <template lwc:if={isLoading}>
                  <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
             </template>
-            
+
             <template lwc:else>
                 <lightning-combobox
                     name="template"
@@ -34,15 +34,51 @@
                     </lightning-radio-group>
                 </div>
 
-                <lightning-button 
-                    variant="brand" 
-                    label="Generate Document" 
-                    onclick={generateDocument} 
+                <!-- PDF Merge Toggle — only visible for PDF templates -->
+                <template lwc:if={showMergeOption}>
+                    <div class="slds-var-m-bottom_medium">
+                        <lightning-input
+                            type="checkbox"
+                            label="Merge with existing PDFs on this record"
+                            checked={mergeEnabled}
+                            onchange={handleMergeToggle}>
+                        </lightning-input>
+                    </div>
+
+                    <!-- PDF file picker — shown when merge is enabled -->
+                    <template lwc:if={mergeEnabled}>
+                        <div class="slds-var-m-bottom_medium slds-box slds-theme_shade slds-var-p-around_small">
+                            <template lwc:if={hasRecordPdfs}>
+                                <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                    Select PDFs to append after the generated document:
+                                </p>
+                                <lightning-checkbox-group
+                                    name="pdfSelection"
+                                    label="Available PDFs"
+                                    options={recordPdfOptions}
+                                    value={selectedPdfCvIds}
+                                    onchange={handlePdfSelection}
+                                    variant="label-hidden">
+                                </lightning-checkbox-group>
+                            </template>
+                            <template lwc:else>
+                                <p class="slds-text-body_small slds-text-color_weak">
+                                    No PDF files found on this record.
+                                </p>
+                            </template>
+                        </div>
+                    </template>
+                </template>
+
+                <lightning-button
+                    variant="brand"
+                    label={generateButtonLabel}
+                    onclick={generateDocument}
                     disabled={isGenerateDisabled}
                     class="slds-var-m-top_medium">
                 </lightning-button>
             </template>
-            
+
         </div>
     </lightning-card>
 </template>
