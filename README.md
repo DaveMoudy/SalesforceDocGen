@@ -1,6 +1,6 @@
 # DocGen — Free Document Generation for Salesforce
 
-Turn any Word template into a merged PDF or DOCX, straight from your Salesforce records.
+Generate PDFs, Word docs, Excel spreadsheets, and PowerPoint presentations from any Salesforce record. Merge PDFs, add barcodes and QR codes, compute totals — 100% native, zero external dependencies, completely free.
 
 [![Version](https://img.shields.io/badge/version-2.4.0_Apollo+-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -9,134 +9,125 @@ Turn any Word template into a merged PDF or DOCX, straight from your Salesforce 
 
 ---
 
-## Install (2 minutes)
-
-**Latest (v2.3.0 — Apollo+)**: `04tdL000000RwBBQA0`
+## Install
 
 ```bash
 sf package install --package 04tdL000000RwBBQA0 --wait 10 --installation-key-bypass
 ```
 
-Or click: [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RwBBQA0) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RwBBQA0)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RwBBQA0) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RwBBQA0)
 
-**Previous (v2.0.0 — Apollo)**: `04tdL000000RnavQAC`
-
-```bash
-sf package install --package 04tdL000000RnavQAC --wait 10 --installation-key-bypass
-```
-
-Or click: [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RnavQAC) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RnavQAC)
-
-**After install:**
-1. Assign the **DocGen Admin** permission set to yourself (Setup > Permission Sets)
-2. Enable the **Blob.toPdf() Release Update** (Setup > Release Updates > "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations")
-3. Open the **DocGen** app — the getting started guide walks you from there
+**Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
 ---
 
-## How It Works
+## Quick Start
 
-1. **Name your template** — pick a name, output type (PDF, Word, Excel, or PowerPoint), and the Salesforce object
-2. **Pick your data** — use the visual query builder to select fields, parent lookups, and child lists (supports deep nesting: Account → Opportunities → Line Items)
-3. **Upload your template file** — add merge tags like `{Name}`, `{Account.Name}`, or `{#Contacts}...{/Contacts}` where you want data
-4. **Generate** — from any record page, or in bulk, or from a Flow
-
-That's it. DocGen handles the rest — merging data, injecting images, computing totals, rendering output.
+1. **Create a template** — pick Word, Excel, or PowerPoint. Choose your Salesforce object.
+2. **Select your fields** — use the visual query builder to pick fields, parent lookups, and child records.
+3. **Add tags and upload** — type `{Name}` where you want data. Upload the file.
+4. **Generate** — from any record page, in bulk, or from a Flow.
 
 ---
 
-## What You Can Put in Your Templates
+## Merge Tags
 
 | Tag | What It Does | Example |
 |-----|-------------|---------|
-| `{FieldName}` | Inserts a field value | `{Name}`, `{Email}`, `{Phone}` |
-| `{Parent.Field}` | Pulls from a related record | `{Account.Name}`, `{Owner.Email}` |
-| `{#ChildList}...{/ChildList}` | Repeats for each child record | `{#Contacts}{FirstName}{/Contacts}` |
-| `{#Child}{#Grandchild}...` | Nested loops (deep relationships) | `{#Opportunities}{#OpportunityLineItems}{Name}{/OpportunityLineItems}{/Opportunities}` |
-| `{Field:format}` | Formatted date | `{CloseDate:MM/dd/yyyy}` |
-| `{%ImageField:WxH}` | Dynamic image from ContentVersion | `{%Logo__c:200x60}` |
+| `{FieldName}` | Insert a field value | `{Name}`, `{Email}`, `{Phone}` |
+| `{Parent.Field}` | Pull from a related record | `{Account.Name}`, `{Owner.Email}` |
+| `{#ChildList}...{/ChildList}` | Repeat for each child record | `{#Contacts}{FirstName}{/Contacts}` |
 | `{#BoolField}...{/BoolField}` | Show/hide based on field value | `{#IsActive}Active member{/IsActive}` |
-| `{RichTextField}` | Full rich text (bold, italic, images) | `{Description}` on a Rich Text Area |
-| `{SUM:List.Field}` | Aggregate — sum, count, avg, min, max | `{SUM:QuoteLineItems.TotalPrice}`, `{COUNT:Contacts}` |
-| `{*FieldName}` | Code 128 barcode (PDF only) | `{*ProductCode}`, `{*OrderNumber}` |
-| `{*FieldName:qr}` | QR code (PDF only, up to 255 chars) | `{*Website:qr}`, `{*TrackingUrl:qr:200}` |
-| `{Field:currency}` | Currency formatting | `{Amount:currency}` → $500,000.00 |
-| `{Field:#,##0.00}` | Number formatting | `{Price:#,##0.00}` → 1,234.56 |
+| `{RichTextField}` | Rich text with formatting and images | `{Description}` on a Rich Text Area |
 
-Tags inherit the formatting from your template — whatever font, color, and size the tag has is what the output gets.
+### Formatting
 
-### Template Formats
+| Tag | Output | Works In |
+|-----|--------|----------|
+| `{CloseDate:MM/dd/yyyy}` | 03/18/2026 | All formats |
+| `{Amount:currency}` | $500,000.00 | All formats |
+| `{Rate:percent}` | 15.5% | All formats |
+| `{Quantity:number}` | 1,234 | All formats |
+| `{Price:#,##0.00}` | 1,234.56 | All formats |
 
-| Format | Template File | Output | Merge Tags | Images | Loops | Notes |
-|--------|--------------|--------|------------|--------|-------|-------|
-| **Word** | `.docx` | PDF or DOCX | All tags | Yes | Yes (table row expansion) | Full feature support. Custom fonts in DOCX output. |
-| **Excel** | `.xlsx` | XLSX | Field tags, loops, aggregates | No | Yes (row duplication) | Tags go in cells. Shared strings are inlined automatically. No PDF output. |
-| **PowerPoint** | `.pptx` | PPTX | Field tags, loops | No | Yes | Tags in text boxes/shapes. No image injection. No PDF output. |
+### Aggregates
 
-**Excel tips:** Put `{FieldName}` directly in a cell. For loops, use `{#ChildList}` in one row, your field tags in the next row, and `{/ChildList}` in the row after — each child record duplicates the middle row. Aggregate tags like `{SUM:QuoteLineItems.TotalPrice}` work outside loops to compute totals.
+Place these **outside** the loop to compute totals from child records:
 
-**PowerPoint tips:** Place merge tags inside text boxes or shapes. Loops duplicate the slide content for each record. Image injection and rich text are not supported in PPTX — use Word for those.
+| Tag | Example |
+|-----|---------|
+| `{SUM:List.Field}` | `{SUM:QuoteLineItems.TotalPrice}` |
+| `{COUNT:List}` | `{COUNT:Contacts}` |
+| `{AVG:List.Field}` | `{AVG:OpportunityLineItems.UnitPrice}` |
+| `{MIN:List.Field}` / `{MAX:List.Field}` | `{MIN:QuoteLineItems.Quantity}` |
 
----
+Zero extra SOQL — computed from child data already in memory.
 
-## Why No Signatures?
+### Barcodes & QR Codes
 
-DocGen generates documents. That's it.
+Rendered as CSS in PDF output. No fonts, no images, no external services.
 
-Electronic signatures carry legal requirements (ESIGN Act, eIDAS) that change by jurisdiction. Getting it wrong exposes you to liability. Dedicated providers like DocuSign and Adobe Sign carry their own compliance certifications. We don't, and we won't pretend to.
+| Tag | What You Get |
+|-----|-------------|
+| `{*ProductCode}` | Code 128 barcode |
+| `{*ProductCode:code128:300x80}` | Barcode at 300px wide, 80px tall |
+| `{*Website:qr}` | QR code at 150px (default) |
+| `{*TrackingUrl:qr:200}` | QR code at 200px square |
 
-Generate your document with DocGen. Send it to a signature provider. Best tool for each job.
+QR codes support up to **255 characters** — enough for a full Salesforce text field or URL.
 
----
+### Images
 
-## Features
+| Tag | What It Does |
+|-----|-------------|
+| `{%Logo__c:200x60}` | Insert image at 200x60px from ContentVersion ID |
+| `{%Photo__c}` | Insert image at default size (4" x 3") |
 
-| Feature | Description |
-|---------|-------------|
-| **Command Hub** | One-tab experience: create templates, generate in bulk, get help — all in one place |
-| **Visual Query Builder** | Point-and-click field selection with parent lookups and nested child lists |
-| **Deep Relationships** | Account → Opportunities → Line Items → Schedules. No depth limit in templates. |
-| **PDF Generation** | Server-side via `Blob.toPdf()` with zero-heap image rendering |
-| **DOCX Output** | Client-side assembly for unlimited file sizes. Custom fonts carry through. |
-| **XLSX Output** | Excel templates with merge tags in cells. Shared strings inlined automatically. |
-| **PPTX Output** | PowerPoint templates with merge tags in text boxes and shapes. |
-| **Aggregate Tags** | `{SUM:...}`, `{COUNT:...}`, `{AVG:...}`, `{MIN:...}`, `{MAX:...}` — computed from child records |
-| **Barcodes & QR Codes** | Code 128 (`{*Field}`) and QR codes (`{*Field:qr}`) in PDF. Custom sizing. Up to 255 chars. |
-| **Number Formatting** | `{Field:currency}`, `{Field:percent}`, `{Field:#,##0.00}` — commas, decimals, dollar signs |
-| **PDF Merger** | Merge generated PDFs with existing PDFs on the record — client-side, no heap limits |
-| **Merge-Only Mode** | Combine existing PDFs without generating a template. Dual-listbox reordering. |
-| **Document Packets** | Generate multiple templates into one merged PDF. Optionally append existing PDFs. |
-| **Save to Record** | All formats (PDF, DOCX, XLSX) can be saved back to the record |
-| **Bulk Generation** | Hundreds of records with real-time progress tracking |
-| **Flow Integration** | `DocGenFlowAction` (single) and `DocGenBulkFlowAction` (bulk) invocable actions |
-| **Image Injection** | Dynamic images from ContentVersion IDs, rich text fields, or template-embedded graphics |
-| **Template Versioning** | Full history with preview, download, restore, and sample generation |
-| **Zero External Dependencies** | No HTTP callouts, no JavaScript libraries, no external services |
+Store a ContentVersion ID (starts with `068`) in a text field. Works in Word templates — PDF and DOCX output.
 
 ---
 
-## How DocGen Stays Under Salesforce Limits
+## Template Formats
 
-Salesforce gives each transaction 6 MB of memory. DocGen uses three techniques to stay well under that:
+| Format | Template | Output | Images | Barcodes/QR | Rich Text | Best For |
+|--------|----------|--------|--------|-------------|-----------|----------|
+| **Word** | `.docx` | PDF or DOCX | Yes | Yes (PDF) | Yes | Contracts, proposals, letters, invoices |
+| **Excel** | `.xlsx` | XLSX | No | No | No | Data exports, reports, financial summaries |
+| **PowerPoint** | `.pptx` | PPTX | No | No | No | Presentations, slide decks |
+
+All formats support: field tags, parent lookups, child loops, aggregates, conditionals, date formatting, number/currency formatting.
+
+**Word** is the most capable — it's the only format that supports images, barcodes, QR codes, rich text, and PDF output.
+
+---
+
+## PDF Merger
+
+Three ways to combine PDFs, all running client-side in the browser:
+
+| Mode | How It Works |
+|------|-------------|
+| **Generate & Merge** | Generate from a template, then append existing PDFs from the record |
+| **Document Packets** | Select multiple templates, generate them all, merge into one PDF |
+| **Merge Only** | Combine existing PDFs on the record with drag-and-drop ordering |
+
+Each PDF is fetched in its own Apex call (fresh 6 MB heap). The merge engine (`docGenPdfMerger.js`) handles the binary work — parsing object graphs, renumbering references, flattening page trees, writing cross-reference tables. No size limits on download. Save to record up to ~3 MB.
+
+---
+
+## How It Stays Under Salesforce Limits
 
 | Technique | What It Does | Impact |
 |-----------|-------------|--------|
-| **Pre-decomposition** | When you save a template, DocGen unzips the .docx and stores each piece separately. At generation time, it loads only the XML — never the full ZIP. | ~75% heap reduction |
-| **Zero-heap images** | Images are passed to the PDF engine by URL, not loaded into memory. 20+ large images render without using any of your 6 MB. | Unlimited images in PDFs |
-| **Client-side DOCX** | For Word output, the browser assembles the final file. Each image gets its own request with fresh memory. | No size limit on DOCX |
-| **Client-side PDF merge** | Existing PDFs are fetched one at a time (fresh heap each call), merged in the browser via a pure JS PDF engine. | Unlimited merge size |
-| **Multi-level queries** | Deep relationships (grandchildren) use one SOQL query per level, not per record. Results are stitched together in Apex. | 3 levels = 3 queries |
+| **Pre-decomposition** | Templates unzipped on save; generation loads only XML, never the full ZIP | ~75% heap reduction |
+| **Zero-heap images** | PDF images referenced by URL, not loaded into memory | Unlimited images |
+| **Client-side assembly** | Browser builds DOCX/XLSX files; each image gets its own request | No size limit |
+| **Client-side PDF merge** | PDFs fetched one at a time, merged in browser via pure JS engine | Unlimited merge |
+| **Multi-level queries** | One SOQL per relationship depth, stitched in Apex | 3 levels = 3 queries |
 
 ---
 
-## For Developers
-
-### Permission Sets
-
-| Permission Set | Who | What |
-|---------------|-----|------|
-| **DocGen Admin** | Template managers | Full CRUD, template sharing, setup |
-| **DocGen User** | End users | Generate documents, view templates |
+## Automation
 
 ### Flow Actions
 
@@ -145,45 +136,54 @@ Salesforce gives each transaction 6 MB of memory. DocGen uses three techniques t
 | `DocGenFlowAction` | templateId, recordId | contentDocumentId |
 | `DocGenBulkFlowAction` | templateId, queryCondition | jobId |
 
-### Architecture
+Both work in Record-Triggered Flows, Screen Flows, and Subflows.
+
+### Bulk Generation
+
+Generate documents for hundreds of records at once. Enter a filter condition, click Submit. Real-time progress tracking via the Bulk Generate tab.
+
+### Record Page Component
+
+Drop `docGenRunner` onto any Lightning Record Page via App Builder. Full UI with template selection, output mode, PDF merging, and document packets.
+
+---
+
+## Limitations
+
+| Limitation | Details | Workaround |
+|-----------|---------|------------|
+| **PDF fonts** | Helvetica, Times, Courier, Arial Unicode MS only | Generate as DOCX for custom fonts |
+| **PDF file size** | ~3 MB per individual PDF for merge/save | Download has no limit |
+| **Barcodes/QR** | PDF output only | Not available in DOCX/XLSX/PPTX |
+| **Images** | Word templates only | Place static images directly in Excel/PPTX |
+| **Excel/PPTX output** | Native format only, no PDF conversion | Use Word template for PDF |
+| **Heap (sync)** | 6 MB per transaction | Use DOCX output for large docs (client-side assembly) |
+| **Heap (async)** | 12 MB per batch execute | Batch size 1 gives fresh heap per record |
+| **No e-signatures** | Intentionally excluded | Use DocuSign, Adobe Sign, etc. after generation |
+
+---
+
+## Architecture
 
 ```
-Template (.docx) → Decompress → Merge XML tags → Recompress → DOCX/PDF
-                                                    ↓
-                              PDF: DocGenHtmlRenderer → Blob.toPdf()
+Template (.docx/.xlsx/.pptx)
+    ↓
+Decompress → Merge XML tags → Recompress
+    ↓                              ↓
+  DOCX/XLSX/PPTX              PDF path:
+  (client-side ZIP)     DocGenHtmlRenderer → Blob.toPdf()
 ```
 
 | Class | Role |
 |-------|------|
-| `DocGenService` | Core merge engine — tags, images, ZIP |
-| `DocGenHtmlRenderer` | XML → HTML for PDF rendering |
-| `DocGenDataRetriever` | Dynamic SOQL with multi-level stitching |
-| `DocGenController` | LWC controller — template CRUD, generation |
-| `DocGenBatch` | Batch Apex for bulk jobs |
-
-### PDF Merger
-
-Generate a document from your template and merge it with existing PDFs already attached to the record — all in one step.
-
-1. Select a PDF template from the record page
-2. Check **Merge with existing PDFs on this record**
-3. Pick which PDFs to append
-4. Click **Generate & Merge** — downloads or saves a single combined PDF
-
-The merge runs entirely client-side using `docGenPdfMerger.js` (pure JS, no external libraries). Each source PDF is fetched via its own Apex call with fresh 6 MB heap, then the browser handles the binary merge — no server-side size constraints.
-
-### PDF Font Support
-
-PDF output supports **Helvetica**, **Times**, **Courier**, and **Arial Unicode MS** only — this is a Salesforce platform limitation (`Blob.toPdf()` does not support `@font-face`). For custom fonts, generate as DOCX.
-
-### Known Limits
-
-| Limit | Value | Notes |
-|-------|-------|-------|
-| Heap (synchronous) | 6 MB | Single record generation from UI or Flow |
-| Heap (asynchronous) | 12 MB | Bulk generation via Batch Apex |
-| SOQL queries | 100 | ~3 used per relationship depth level |
-| Query rows | 50,000 | Watch child loops with thousands of records |
+| `DocGenService` | Core merge engine — tags, loops, images, aggregates, barcodes |
+| `DocGenHtmlRenderer` | DOCX XML → HTML for PDF rendering, barcode/QR CSS |
+| `DocGenDataRetriever` | Multi-level SOQL with query tree stitching |
+| `BarcodeGenerator` | Code 128 + QR code generation (pure Apex, Reed-Solomon) |
+| `DocGenController` | LWC controller — template CRUD, generation endpoints |
+| `DocGenBatch` | Batch Apex for bulk document generation |
+| `docGenPdfMerger.js` | Client-side PDF merge engine (pure JS) |
+| `docGenZipWriter.js` | Client-side Office Open XML assembly (pure JS) |
 
 ---
 
@@ -195,7 +195,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
 ## Contributing
 
-Open-source under Apache 2.0. We welcome contributions:
+Open-source under Apache 2.0. Contributions welcome:
 
 1. Fork the repo
 2. Create a feature branch
