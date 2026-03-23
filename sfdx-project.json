@@ -1,8 +1,8 @@
 {
   "packageDirectories": [
     {
-      "versionName": "Apollo — Full-stack document platform",
-      "versionNumber": "2.0.0.NEXT",
+      "versionName": "Apollo+ — PDF Merger",
+      "versionNumber": "2.1.0.NEXT",
       "path": "force-app",
       "default": true,
       "package": "Document Generation",
@@ -50,6 +50,7 @@
     "Document Generation@1.6.0-5": "04tdL000000RnSrQAK",
     "Document Generation@1.6.0-6": "04tdL000000RnUTQA0",
     "Document Generation@1.6.0-7": "04tdL000000RnW5QAK",
-    "Document Generation@2.0.0-1": "04tdL000000RnavQAC"
+    "Document Generation@2.0.0-1": "04tdL000000RnavQAC",
+    "Document Generation@2.1.0-1": "04tdL000000RrBVQA0"
   }
 }
