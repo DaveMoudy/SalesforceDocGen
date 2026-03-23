@@ -36,7 +36,7 @@ private class DocGenBulkTests {
     static void testSubmitJob() {
         DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         Test.startTest();
-        Id jobId = DocGenBulkController.submitJob(t.Id, 'Name = \'Test Account\'');
+        Id jobId = DocGenBulkController.submitJob(t.Id, 'Name = \'Test Account\'', 'Test Job');
         Test.stopTest();
         
         DocGen_Job__c job = [SELECT Id, Status__c FROM DocGen_Job__c WHERE Id = :jobId];

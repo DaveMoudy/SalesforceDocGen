@@ -7,6 +7,8 @@ import getContentVersionBase64 from '@salesforce/apex/DocGenController.getConten
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import saveGeneratedDocument from '@salesforce/apex/DocGenController.saveGeneratedDocument';
 import getRecordPdfs from '@salesforce/apex/DocGenController.getRecordPdfs';
+import getChildRelationships from '@salesforce/apex/DocGenController.getChildRelationships';
+import getChildRecordPdfs from '@salesforce/apex/DocGenController.getChildRecordPdfs';
 import { buildDocx } from './docGenZipWriter';
 import { mergePdfs } from './docGenPdfMerger';
 
@@ -31,6 +33,14 @@ export default class DocGenRunner extends LightningElement {
     @track packetIncludeExisting = false;
     @track packetExistingPdfIds = [];
 
+    // Merge Children mode state
+    @track childRelOptions = [];
+    @track selectedChildRel = null;
+    @track childFilterClause = '';
+    @track childRecordGroups = [];
+    @track selectedChildPdfCvIds = [];
+    @track childPdfsLoaded = false;
+
     isLoading = false;
     error;
     _templateData = [];
@@ -41,7 +51,8 @@ export default class DocGenRunner extends LightningElement {
         return [
             { label: 'Generate', value: 'generate' },
             { label: 'Document Packet', value: 'packet' },
-            { label: 'Merge PDFs', value: 'mergeOnly' }
+            { label: 'Merge PDFs', value: 'mergeOnly' },
+            { label: 'Child Record PDFs', value: 'mergeChildren' }
         ];
     }
 
@@ -55,6 +66,10 @@ export default class DocGenRunner extends LightningElement {
 
     get isMergeOnlyMode() {
         return this.appMode === 'mergeOnly';
+    }
+
+    get isMergeChildrenMode() {
+        return this.appMode === 'mergeChildren';
     }
 
     /** PDF templates available for packet mode */
@@ -162,6 +177,9 @@ export default class DocGenRunner extends LightningElement {
         if ((this.appMode === 'mergeOnly' || this.appMode === 'packet') && this.recordPdfOptions.length === 0) {
             this._loadRecordPdfs();
         }
+        if (this.appMode === 'mergeChildren' && this.childRelOptions.length === 0) {
+            this._loadChildRelationships();
+        }
     }
 
     handlePacketTemplateSelection(event) {
@@ -208,6 +226,172 @@ export default class DocGenRunner extends LightningElement {
         } catch (e) {
             console.warn('DocGen: Failed to load record PDFs', e);
             this.recordPdfOptions = [];
+        }
+    }
+
+    // --- Merge Children mode ---
+
+    async _loadChildRelationships() {
+        try {
+            const rels = await getChildRelationships({ objectName: this.objectApiName });
+            this.childRelOptions = rels.map(r => ({
+                label: r.label,
+                value: r.value,
+                childObjectApiName: r.childObjectApiName,
+                lookupField: r.lookupField
+            }));
+        } catch (e) {
+            console.warn('DocGen: Failed to load child relationships', e);
+            this.childRelOptions = [];
+        }
+    }
+
+    get childRelComboboxOptions() {
+        return this.childRelOptions.map(r => ({ label: r.label, value: r.value }));
+    }
+
+    handleChildRelChange(event) {
+        const relName = event.detail.value;
+        this.selectedChildRel = this.childRelOptions.find(r => r.value === relName);
+        this.childRecordGroups = [];
+        this.selectedChildPdfCvIds = [];
+        this.childPdfsLoaded = false;
+    }
+
+    handleChildFilterChange(event) {
+        this.childFilterClause = event.target.value;
+    }
+
+    async handleLoadChildPdfs() {
+        if (!this.selectedChildRel) return;
+        this.isLoading = true;
+        this.error = null;
+        try {
+            const groups = await getChildRecordPdfs({
+                parentRecordId: this.recordId,
+                childObject: this.selectedChildRel.childObjectApiName,
+                lookupField: this.selectedChildRel.lookupField,
+                filterClause: this.childFilterClause || ''
+            });
+            this.childRecordGroups = groups.map(g => ({
+                ...g,
+                pdfs: g.pdfs || []
+            }));
+            this.childPdfsLoaded = true;
+            this.selectedChildPdfCvIds = [];
+        } catch (e) {
+            let msg = e.body ? e.body.message : e.message;
+            this.error = 'Error loading child PDFs: ' + msg;
+        } finally {
+            this.isLoading = false;
+        }
+    }
+
+    handleChildPdfCheckbox(event) {
+        const cvId = event.target.dataset.cvid;
+        const checked = event.target.checked;
+        if (checked) {
+            this.selectedChildPdfCvIds = [...this.selectedChildPdfCvIds, cvId];
+        } else {
+            this.selectedChildPdfCvIds = this.selectedChildPdfCvIds.filter(id => id !== cvId);
+        }
+    }
+
+    handleSelectAllChildPdfs(event) {
+        if (event.target.checked) {
+            const allCvIds = [];
+            for (const group of this.childRecordGroups) {
+                for (const pdf of group.pdfs) {
+                    allCvIds.push(pdf.value);
+                }
+            }
+            this.selectedChildPdfCvIds = allCvIds;
+        } else {
+            this.selectedChildPdfCvIds = [];
+        }
+    }
+
+    get totalChildPdfs() {
+        let count = 0;
+        for (const g of this.childRecordGroups) count += (g.pdfs || []).length;
+        return count;
+    }
+
+    get allChildPdfsSelected() {
+        return this.totalChildPdfs > 0 && this.selectedChildPdfCvIds.length === this.totalChildPdfs;
+    }
+
+    get mergeChildrenButtonLabel() {
+        const count = this.selectedChildPdfCvIds.length;
+        return count > 0 ? 'Merge ' + count + ' PDFs' : 'Merge Child PDFs';
+    }
+
+    get isMergeChildrenDisabled() {
+        return this.selectedChildPdfCvIds.length < 1 || this.isLoading;
+    }
+
+    get hasChildRecordGroups() {
+        return this.childRecordGroups.length > 0;
+    }
+
+    get childRecordGroupsWithState() {
+        return this.childRecordGroups.map(g => ({
+            ...g,
+            pdfs: (g.pdfs || []).map(p => ({
+                ...p,
+                checked: this.selectedChildPdfCvIds.includes(p.value)
+            })),
+            hasPdfs: (g.pdfs || []).length > 0
+        }));
+    }
+
+    async mergeChildrenDocument() {
+        this.isLoading = true;
+        this.error = null;
+        try {
+            const count = this.selectedChildPdfCvIds.length;
+            this.showToast('Info', `Merging ${count} PDFs from child records...`, 'info');
+
+            const pdfBytesArray = [];
+            for (const cvId of this.selectedChildPdfCvIds) {
+                const b64 = await getContentVersionBase64({ contentVersionId: cvId });
+                if (b64) {
+                    pdfBytesArray.push(this._base64ToUint8Array(b64));
+                }
+            }
+
+            if (pdfBytesArray.length < 1) {
+                throw new Error('No PDFs could be loaded.');
+            }
+
+            let finalBytes;
+            if (pdfBytesArray.length === 1) {
+                finalBytes = pdfBytesArray[0];
+            } else {
+                finalBytes = mergePdfs(pdfBytesArray);
+            }
+
+            const finalBase64 = this._uint8ArrayToBase64(finalBytes);
+            const saveToRecord = this.outputMode === 'save';
+
+            if (saveToRecord) {
+                this.showToast('Info', 'Saving merged PDF to record...', 'info');
+                await saveGeneratedDocument({
+                    recordId: this.recordId,
+                    fileName: 'Merged Child PDFs',
+                    base64Data: finalBase64,
+                    extension: 'pdf'
+                });
+                this.showToast('Success', 'Merged PDF saved to record.', 'success');
+            } else {
+                this.downloadBase64(finalBase64, 'Merged Child PDFs.pdf', 'application/pdf');
+                this.showToast('Success', 'Merged PDF downloaded.', 'success');
+            }
+        } catch (e) {
+            let msg = e.body ? e.body.message : e.message || 'Unknown error';
+            this.error = 'Merge Error: ' + msg;
+        } finally {
+            this.isLoading = false;
         }
     }
 

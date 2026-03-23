@@ -1,6 +1,0 @@
-<apex:page controller="DocGenPdfRendererController" renderAs="pdf"
-           applyHtmlTag="false" showHeader="false" sidebar="false"
-           standardStylesheets="false" cache="false">
-    <!-- Unescaped output intentional: htmlContent is server-generated HTML for PDF rendering, not user input -->
-    <apex:outputText value="{!htmlContent}" escape="false"/>
-</apex:page>

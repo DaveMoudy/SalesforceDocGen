@@ -253,6 +253,46 @@ if (ocrObj instanceof Map<String, Object>) {
 } else { fail++; System.debug('FAIL T13: No OpportunityContactRoles in data'); }
 
 // =====================================================================
+// 8. AGGREGATE TAG TESTS (processXml with aggregate tags)
+// =====================================================================
+
+// Build a simple XML string with aggregate tags and run through processXml
+// Data: Account with Contacts (2) and Opportunities (1) with LineItems (2: Qty=10,UnitPrice=5000 + Qty=5,UnitPrice=1000)
+// LineItem TotalPrice = Quantity * UnitPrice: 50000 + 5000 = 55000
+
+// Test 14: COUNT:Contacts
+String countXml = '<w:t>{COUNT:Contacts}</w:t>';
+String countResult = DocGenService.processXmlForTest(countXml, data);
+if (countResult.contains('2')) { pass++; } else { fail++; System.debug('FAIL T14: COUNT:Contacts expected 2, got: ' + countResult); }
+
+// Test 15: SUM on line items (via Opportunities child data — need to test at Opportunity level)
+// Get the first opportunity's data for line item aggregates
+Map<String, Object> oppData = (Map<String, Object>) ((List<Object>) ((Map<String, Object>) data.get('Opportunities')).get('records'))[0];
+String sumXml = '<w:t>{SUM:OpportunityLineItems.TotalPrice}</w:t>';
+String sumResult = DocGenService.processXmlForTest(sumXml, oppData);
+// TotalPrice = 10*5000 + 5*1000 = 55000
+if (sumResult.contains('55000')) { pass++; } else { fail++; System.debug('FAIL T15: SUM:LineItems.TotalPrice expected 55000, got: ' + sumResult); }
+
+// Test 16: SUM with format specifier
+String sumFmtXml = '<w:t>{SUM:OpportunityLineItems.TotalPrice:currency}</w:t>';
+String sumFmtResult = DocGenService.processXmlForTest(sumFmtXml, oppData);
+if (sumFmtResult.contains('$55,000.00')) { pass++; } else { fail++; System.debug('FAIL T16: SUM:currency expected $55,000.00, got: ' + sumFmtResult); }
+
+// Test 17: AVG
+String avgXml = '<w:t>{AVG:OpportunityLineItems.UnitPrice}</w:t>';
+String avgResult = DocGenService.processXmlForTest(avgXml, oppData);
+if (avgResult.contains('3000')) { pass++; } else { fail++; System.debug('FAIL T17: AVG:UnitPrice expected 3000, got: ' + avgResult); }
+
+// Test 18: MIN/MAX
+String minXml = '<w:t>{MIN:OpportunityLineItems.Quantity}</w:t>';
+String minResult = DocGenService.processXmlForTest(minXml, oppData);
+if (minResult.contains('5')) { pass++; } else { fail++; System.debug('FAIL T18: MIN:Quantity expected 5, got: ' + minResult); }
+
+String maxXml = '<w:t>{MAX:OpportunityLineItems.Quantity}</w:t>';
+String maxResult = DocGenService.processXmlForTest(maxXml, oppData);
+if (maxResult.contains('10')) { pass++; } else { fail++; System.debug('FAIL T19: MAX:Quantity expected 10, got: ' + maxResult); }
+
+// =====================================================================
 // RESULTS
 // =====================================================================
 
@@ -265,7 +305,8 @@ System.debug('Tests: T1 Account name, T2 Owner.Name, T3 Contacts(2),');
 System.debug('  T4 Opps(1), T5 Product2.Name, T6 LineItems(2),');
 System.debug('  T7 Description CV, T8 Legacy V1, T9 Image CV format,');
 System.debug('  T10 Image CV access, T11 Doc generation, T12 Doc not empty,');
-System.debug('  T13 Junction stitching');
+System.debug('  T13 Junction stitching, T14 COUNT, T15 SUM,');
+System.debug('  T16 SUM:currency, T17 AVG, T18 MIN, T19 MAX');
 
 // =====================================================================
 // CLEANUP — delete everything we created

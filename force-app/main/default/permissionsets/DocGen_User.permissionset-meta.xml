@@ -29,10 +29,6 @@
         <enabled>true</enabled>
     </classAccesses>
     <classAccesses>
-        <apexClass>DocGenPdfRendererController</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
         <apexClass>DocGenService</apexClass>
         <enabled>true</enabled>
     </classAccesses>
@@ -183,10 +179,6 @@
         <viewAllFields>false</viewAllFields>
         <viewAllRecords>false</viewAllRecords>
     </objectPermissions>
-    <pageAccesses>
-        <apexPage>DocGenPdfRenderer</apexPage>
-        <enabled>true</enabled>
-    </pageAccesses>
     <tabSettings>
         <tab>DocGen_Command_Hub</tab>
         <visibility>Visible</visibility>

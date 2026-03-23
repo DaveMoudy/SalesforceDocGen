@@ -115,14 +115,28 @@
                             </template>
 
                             <template if:true={isJobFinished}>
-                                <div class="slds-var-m-top_small">
-                                    <lightning-button
-                                        label="Start New Job"
-                                        icon-name="utility:add"
-                                        variant="brand"
-                                        onclick={handleNewJob}
-                                        class="slds-size_full">
-                                    </lightning-button>
+                                <div class="slds-var-m-top_small slds-grid slds-gutters_x-small">
+                                    <div class="slds-col">
+                                        <lightning-button
+                                            label="Start New Job"
+                                            icon-name="utility:add"
+                                            variant="brand"
+                                            onclick={handleNewJob}
+                                            class="slds-size_full">
+                                        </lightning-button>
+                                    </div>
+                                    <template lwc:if={showMergeAllButton}>
+                                        <div class="slds-col">
+                                            <lightning-button
+                                                label={mergeAllButtonLabel}
+                                                icon-name="utility:merge"
+                                                variant="neutral"
+                                                onclick={handleMergeAllJobPdfs}
+                                                disabled={isMerging}
+                                                class="slds-size_full">
+                                            </lightning-button>
+                                        </div>
+                                    </template>
                                 </div>
                             </template>
                         </div>
@@ -215,33 +229,74 @@
                 </div>
             </template>
 
-            <div class="slds-var-m-top_medium slds-align_absolute-center">
-                <lightning-button
-                    label="Run Bulk Generation"
-                    variant="brand"
-                    onclick={handleRun}
-                    disabled={isRunDisabled}
-                    class="slds-var-p-horizontal_medium">
-                </lightning-button>
+            <div class="slds-var-m-top_medium slds-grid slds-grid_align-center slds-grid_vertical-align-end slds-gutters_small">
+                <div class="slds-col slds-size_1-of-3">
+                    <lightning-input
+                        label="Job Name (optional)"
+                        value={jobLabel}
+                        onchange={handleJobLabelChange}
+                        placeholder="e.g. March Receipts"
+                        disabled={isProcessing}>
+                    </lightning-input>
+                </div>
+                <div class="slds-col">
+                    <lightning-button
+                        label="Run Bulk Generation"
+                        variant="brand"
+                        onclick={handleRun}
+                        disabled={isRunDisabled}
+                        class="slds-var-p-horizontal_medium">
+                    </lightning-button>
+                </div>
             </div>
 
             <!-- Recent Jobs History -->
-            <template if:true={hasRecentJobs}>
+            <template lwc:if={recentJobs.length}>
                 <div class="slds-var-m-top_medium">
-                    <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">Recent Jobs</h3>
+                    <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-end slds-var-m-bottom_x-small">
+                        <h3 class="slds-text-heading_small">Recent Jobs</h3>
+                        <div class="slds-size_1-of-3">
+                            <lightning-input
+                                type="search"
+                                label="Search Jobs"
+                                variant="label-hidden"
+                                placeholder="Search by name..."
+                                value={jobSearchTerm}
+                                onchange={handleJobSearchChange}>
+                            </lightning-input>
+                        </div>
+                    </div>
                     <div class="slds-box slds-box_x-small slds-theme_default" style="border-radius: 6px;">
-                        <template for:each={recentJobs} for:item="rj">
+                        <template for:each={filteredRecentJobs} for:item="rj">
                             <div key={rj.id} class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-var-p-vertical_xx-small" style="border-bottom: 1px solid #e5e5e5;">
-                                <div class="slds-col">
+                                <div class="slds-col slds-size_5-of-12">
                                     <lightning-badge label={rj.status}></lightning-badge>
-                                    <span class="slds-text-body_small slds-var-m-left_x-small"><strong>{rj.templateName}</strong></span>
+                                    <span class="slds-text-body_small slds-var-m-left_x-small"><strong>{rj.displayName}</strong></span>
+                                    <template lwc:if={rj.label}>
+                                        <span class="slds-text-body_small slds-text-color_weak slds-var-m-left_xx-small">({rj.templateName})</span>
+                                    </template>
                                 </div>
                                 <div class="slds-col slds-text-align_right slds-text-body_small">
                                     <span class="slds-text-color_success">{rj.success}</span> / {rj.total}
-                                    <template if:true={rj.error}><span class="slds-text-color_error slds-var-m-left_xx-small">({rj.error} errors)</span></template>
+                                    <template lwc:if={rj.error}><span class="slds-text-color_error slds-var-m-left_xx-small">({rj.error} errors)</span></template>
                                     <span class="slds-text-color_weak slds-var-m-left_x-small">{rj.date}</span>
+                                    <template lwc:if={rj.showMerge}>
+                                        <lightning-button-icon
+                                            icon-name="utility:merge"
+                                            alternative-text="Merge All PDFs"
+                                            title="Download Merged PDF"
+                                            variant="bare"
+                                            size="small"
+                                            data-jobid={rj.id}
+                                            onclick={handleMergeJobPdfs}
+                                            class="slds-var-m-left_x-small">
+                                        </lightning-button-icon>
+                                    </template>
                                 </div>
                             </div>
+                        </template>
+                        <template lwc:if={hasNoSearchResults}>
+                            <p class="slds-text-body_small slds-text-color_weak slds-var-p-around_small">No jobs match your search.</p>
                         </template>
                     </div>
                 </div>

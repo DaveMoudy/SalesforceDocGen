@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.5.0 — "Apollo+"
+- **Child Record PDF Merge** — New "Child Record PDFs" mode in the document generator. Pick a child relationship (e.g., Opportunities from Account), optionally filter with a WHERE clause, browse PDFs attached to each child record with grouped checkboxes and Select All, merge selected PDFs into one document. Download or save to parent record.
+- **Bulk Generate + Merge** — After a bulk PDF job completes, merge all generated PDFs into a single downloadable document. Merge icon button on each completed job in the Recent Jobs list for easy access later.
+- **Named Bulk Jobs** — Give bulk jobs a custom name (e.g., "March Receipts") for easy identification. Search bar filters the Recent Jobs list by name, template, or status.
+- **Aggregate Format Specifiers** — Aggregate tags now support format suffixes: `{SUM:LineItems.TotalPrice:currency}` → $55,000.00. Works with `:currency`, `:percent`, `:number`, and custom patterns like `:#,##0.00`.
+- **Aggregate Bug Fix** — Fixed silent failure when format specifiers (`:currency`, etc.) were appended to aggregate tags. The format suffix was being included in the field name lookup, causing the tag to resolve to "0" or disappear.
+- **VF Fallback Removed** — Removed `DocGenPdfRenderer` VF page and `DocGenPdfRendererController`. `Blob.toPdf()` with the Spring '26 Release Update handles all PDF rendering. Eliminates the last security scan violation and reduces attack surface.
+- **Security Hardening** — Zero PMD security violations. All 22 findings resolved: SOQL injection (validated inputs + NOPMD), CRUD (package-internal objects with permission sets), XSS (ID validation + escaping).
+- **Page Breaks in Loops** — README now documents how to use Word page breaks inside child loops for one-page-per-record output (receipts, invoices, certificates).
+- **E2E Test Coverage** — 6 new aggregate tests (T14-T19): COUNT, SUM, SUM:currency, AVG, MIN, MAX. Total: 19 tests.
+
 ## v2.4.0 — "Apollo+"
 - **QR Codes** — `{*Field:qr}` generates QR codes in PDF output. Supports up to 255 characters (full text field). Custom sizing: `{*Field:qr:200}` for 200px square. Version 1-14 with Level M error correction and Reed-Solomon.
 - **Barcode Sizing** — `{*Field:code128:300x80}` for custom barcode dimensions.

@@ -6,6 +6,11 @@ public with sharing class DocGenService {
     private static String currentTemplateType = 'Word'; // Set before processXml calls
     private static String currentOutputFormat = 'Native'; // Set before processXml — PDF skips blob loading for images
 
+    /** Public wrapper for processXml — used by e2e tests to validate tag processing. */
+    public static String processXmlForTest(String xml, Map<String, Object> data) {
+        return processXml(xml, data);
+    }
+
     /**
      * Intermediate merge result containing processed XML, images, and passthrough ZIP entries.
      */
@@ -709,34 +714,8 @@ public with sharing class DocGenService {
 
         // Blob.toPdf() with the Spring '26 Release Update resolves relative Salesforce
         // ContentVersion URLs (/sfc/servlet.shepherd/...) natively via the VF rendering engine.
-        // If it fails (pre-Spring '26 or Release Update not enabled), fall back to
-        // VF page renderAs="pdf" which resolves image URLs via session.
-        try {
-            return Blob.toPdf(html);
-        } catch (Exception e) {
-            System.debug(LoggingLevel.INFO, 'DocGen: Blob.toPdf() failed, using VF page fallback: ' + e.getMessage());
-        }
-
-        PageReference pdfPage = Page.DocGenPdfRenderer;
-        pdfPage.getParameters().put('mode', 'document');
-        pdfPage.getParameters().put('templateId', String.valueOf(templateId));
-        pdfPage.getParameters().put('recordId', String.valueOf(recordId));
-        return pdfPage.getContentAsPDF();
-    }
-
-    /**
-     * Generates HTML for a document PDF using pre-committed template image URLs.
-     * Called by DocGenPdfRendererController to render via VF renderAs="pdf".
-     */
-    public static String renderDocumentHtml(Id templateId, Id recordId) {
-        MergeResult mr = mergeTemplate(templateId, recordId);
-
-        if (mr.templateType == 'PowerPoint') {
-            throw new DocGenException('Server-side PDF generation is only supported for Word templates.');
-        }
-
-        Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
-        return DocGenHtmlRenderer.convertToHtml(mr.documentXml, pdfImages);
+        // Requires: Spring '26 Release Update "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations"
+        return Blob.toPdf(html);
     }
 
     /**
@@ -764,7 +743,7 @@ public with sharing class DocGenService {
             if (url != null && url.contains('/version/download/')) {
                 String cvId = url.substringAfterLast('/');
                 try {
-                    ContentVersion cv = [SELECT VersionData, FileExtension FROM ContentVersion WHERE Id = :cvId LIMIT 1];
+                    ContentVersion cv = [SELECT VersionData, FileExtension FROM ContentVersion WHERE Id = :cvId LIMIT 1]; // NOPMD ApexCRUDViolation - ContentVersion read access required for PDF image preview; gated by template ownership
                     String ext = cv.FileExtension != null ? cv.FileExtension.toLowerCase() : 'png';
                     String mime = (ext == 'jpg' || ext == 'jpeg') ? 'image/jpeg' : 'image/png';
                     previewImages.put(relId, 'data:' + mime + ';base64,' + EncodingUtil.base64Encode(cv.VersionData));
@@ -1446,10 +1425,30 @@ public with sharing class DocGenService {
         String fn = tagContent.substring(0, colonIdx).trim().toUpperCase();
         String path = tagContent.substring(colonIdx + 1).trim();
 
+        // Strip optional format specifier: "List.Field:currency" → path="List.Field", fmt="currency"
+        String numberFormat = null;
+        Integer dotIdx = path.indexOf('.');
+        if (dotIdx > 0) {
+            // Check for format specifier after the field name: "List.Field:format"
+            String afterDot = path.substring(dotIdx + 1);
+            Integer fmtColon = afterDot.indexOf(':');
+            if (fmtColon > 0) {
+                numberFormat = afterDot.substring(fmtColon + 1).trim();
+                path = path.substring(0, dotIdx + 1 + fmtColon);
+            }
+        } else {
+            // COUNT:List:format — format on a no-field aggregate
+            Integer fmtColon = path.indexOf(':');
+            if (fmtColon > 0) {
+                numberFormat = path.substring(fmtColon + 1).trim();
+                path = path.substring(0, fmtColon);
+            }
+        }
+
         // Split path into list name and optional field: "QuoteLineItems.TotalPrice" → ["QuoteLineItems", "TotalPrice"]
         String listName;
         String fieldName = null;
-        Integer dotIdx = path.indexOf('.');
+        dotIdx = path.indexOf('.');
         if (dotIdx > 0) {
             listName = path.substring(0, dotIdx);
             fieldName = path.substring(dotIdx + 1);
@@ -1460,7 +1459,11 @@ public with sharing class DocGenService {
         // COUNT doesn't require a field
         if (fn == 'COUNT' && fieldName == null) {
             List<Object> records = getChildRecords(data, listName);
-            return records != null ? String.valueOf(records.size()) : '0';
+            String countResult = records != null ? String.valueOf(records.size()) : '0';
+            if (numberFormat != null && isNumericFormat(numberFormat)) {
+                return formatNumber(Decimal.valueOf(countResult), numberFormat);
+            }
+            return countResult;
         }
 
         if (fieldName == null) return null;
@@ -1500,12 +1503,19 @@ public with sharing class DocGenService {
             result = values[0];
             for (Decimal v : values) if (v > result) result = v;
         } else if (fn == 'COUNT') {
-            return String.valueOf(values.size());
+            String countResult = String.valueOf(values.size());
+            if (numberFormat != null && isNumericFormat(numberFormat)) {
+                return formatNumber(Decimal.valueOf(countResult), numberFormat);
+            }
+            return countResult;
         } else {
             return null;
         }
 
-        // Format: strip trailing zeros (25000.00 → 25000)
+        // Apply format specifier if provided, otherwise strip trailing zeros
+        if (numberFormat != null && isNumericFormat(numberFormat)) {
+            return formatNumber(result, numberFormat);
+        }
         return result.stripTrailingZeros().toPlainString();
     }
 

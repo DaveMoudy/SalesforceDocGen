@@ -10,6 +10,9 @@ import saveQuery from '@salesforce/apex/DocGenBulkController.saveQuery';
 import deleteQuery from '@salesforce/apex/DocGenBulkController.deleteQuery';
 import getRecentJobs from '@salesforce/apex/DocGenBulkController.getRecentJobs';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
+import getJobGeneratedPdfs from '@salesforce/apex/DocGenBulkController.getJobGeneratedPdfs';
+import getContentVersionBase64 from '@salesforce/apex/DocGenController.getContentVersionBase64';
+import { mergePdfs } from './docGenPdfMerger';
 
 const POLL_INTERVAL_MS = 5000;
 const TERMINAL_STATUSES = ['Completed', 'Failed', 'Completed with Errors'];
@@ -38,6 +41,8 @@ export default class DocGenBulkRunner extends LightningElement {
 
     _pollTimer;
 
+    // Merge state
+    @track isMerging = false;
 
     // Wire Templates
     _wiredTemplateResult;
@@ -71,6 +76,9 @@ export default class DocGenBulkRunner extends LightningElement {
 
     // Recent jobs from server
     @track recentJobs = [];
+    @track jobLabel = '';
+    @track jobSearchTerm = '';
+    @track mergingJobId = null;
 
     get filteredTemplates() {
         const term = (this.templateSearchTerm || '').toLowerCase();
@@ -208,19 +216,95 @@ export default class DocGenBulkRunner extends LightningElement {
                 this.recentJobs = data.map(j => ({
                     id: j.Id,
                     name: j.Name,
+                    label: j.Label__c || '',
                     templateName: j.Template__r ? j.Template__r.Name : '',
+                    outputFormat: j.Template__r ? j.Template__r.Output_Format__c : '',
                     status: j.Status__c,
                     success: j.Success_Count__c || 0,
                     error: j.Error_Count__c || 0,
                     total: j.Total_Records__c || 0,
-                    date: new Date(j.CreatedDate).toLocaleDateString()
+                    date: new Date(j.CreatedDate).toLocaleDateString(),
+                    isPdf: j.Template__r && j.Template__r.Output_Format__c === 'PDF',
+                    isCompleted: j.Status__c === 'Completed' || j.Status__c === 'Completed with Errors',
+                    showMerge: j.Template__r && j.Template__r.Output_Format__c === 'PDF' &&
+                        (j.Status__c === 'Completed' || j.Status__c === 'Completed with Errors') &&
+                        (j.Success_Count__c || 0) > 0,
+                    displayName: j.Label__c || (j.Template__r ? j.Template__r.Name : j.Name)
                 }));
             })
             .catch(() => {});
     }
 
     get hasRecentJobs() {
-        return this.recentJobs.length > 0;
+        return this.filteredRecentJobs.length > 0;
+    }
+
+    get hasNoSearchResults() {
+        return this.jobSearchTerm && this.filteredRecentJobs.length === 0;
+    }
+
+    handleJobLabelChange(event) {
+        this.jobLabel = event.target.value;
+    }
+
+    handleJobSearchChange(event) {
+        this.jobSearchTerm = event.target.value;
+    }
+
+    get filteredRecentJobs() {
+        if (!this.jobSearchTerm) return this.recentJobs;
+        const term = this.jobSearchTerm.toLowerCase();
+        return this.recentJobs.filter(j =>
+            j.displayName.toLowerCase().includes(term) ||
+            j.templateName.toLowerCase().includes(term) ||
+            j.status.toLowerCase().includes(term)
+        );
+    }
+
+    async handleMergeJobPdfs(event) {
+        const jobId = event.target.dataset.jobid;
+        const job = this.recentJobs.find(j => j.id === jobId);
+        if (!job) return;
+
+        this.mergingJobId = jobId;
+        try {
+            this.showToast('Info', 'Loading generated PDFs...', 'info');
+            const pdfs = await getJobGeneratedPdfs({ jobId });
+            if (!pdfs || pdfs.length === 0) {
+                this.showToast('Warning', 'No generated PDFs found for this job.', 'warning');
+                return;
+            }
+
+            this.showToast('Info', `Merging ${pdfs.length} PDFs...`, 'info');
+            const pdfBytesArray = [];
+            for (const pdf of pdfs) {
+                const b64 = await getContentVersionBase64({ contentVersionId: pdf.value });
+                if (b64) {
+                    pdfBytesArray.push(this._base64ToUint8Array(b64));
+                }
+            }
+
+            if (pdfBytesArray.length === 0) {
+                throw new Error('No PDFs could be loaded.');
+            }
+
+            let finalBytes;
+            if (pdfBytesArray.length === 1) {
+                finalBytes = pdfBytesArray[0];
+            } else {
+                finalBytes = mergePdfs(pdfBytesArray);
+            }
+
+            const fileName = (job.label || job.templateName || 'Bulk Merged') + '.pdf';
+            const finalBase64 = this._uint8ArrayToBase64(finalBytes);
+            this._downloadBase64(finalBase64, fileName, 'application/pdf');
+            this.showToast('Success', `Merged ${pdfBytesArray.length} PDFs and downloaded.`, 'success');
+        } catch (e) {
+            const msg = e.body ? e.body.message : (e.message || 'Unknown error');
+            this.showToast('Error', 'Merge failed: ' + msg, 'error');
+        } finally {
+            this.mergingJobId = null;
+        }
     }
 
     handleTemplateChange(event) {
@@ -389,7 +473,7 @@ export default class DocGenBulkRunner extends LightningElement {
         this.jobProgress = { success: 0, error: 0, total: 0, percent: 0 };
 
         try {
-            this.jobId = await submitJob({ templateId: this.selectedTemplateId, condition: this.condition });
+            this.jobId = await submitJob({ templateId: this.selectedTemplateId, condition: this.condition, jobLabel: this.jobLabel });
             this.showToast('Success', 'Job started. Status will auto-refresh every 5 seconds.', 'success');
             this.startPolling();
         } catch (error) {
@@ -474,6 +558,98 @@ export default class DocGenBulkRunner extends LightningElement {
         if (this.jobStatus === 'Failed') return 'error';
         if (this.jobStatus === 'Completed with Errors') return 'warning';
         return 'inverse';
+    }
+
+    // --- Merge All Generated PDFs ---
+
+    get showMergeAllButton() {
+        if (!this.jobId || !this.jobStatus) return false;
+        if (this.jobStatus === 'Failed') return false;
+        // Only for PDF templates
+        const tmpl = this._templateDataMap[this.selectedTemplateId];
+        return tmpl && tmpl.Output_Format__c === 'PDF' &&
+               (this.jobStatus === 'Completed' || this.jobStatus === 'Completed with Errors');
+    }
+
+    get mergeAllButtonLabel() {
+        return this.isMerging ? 'Merging...' : 'Merge All PDFs';
+    }
+
+    async handleMergeAllJobPdfs() {
+        this.isMerging = true;
+        try {
+            this.showToast('Info', 'Loading generated PDFs...', 'info');
+
+            const pdfs = await getJobGeneratedPdfs({ jobId: this.jobId });
+            if (!pdfs || pdfs.length === 0) {
+                this.showToast('Warning', 'No generated PDFs found for this job.', 'warning');
+                return;
+            }
+
+            this.showToast('Info', `Merging ${pdfs.length} PDFs...`, 'info');
+
+            const pdfBytesArray = [];
+            for (const pdf of pdfs) {
+                const b64 = await getContentVersionBase64({ contentVersionId: pdf.value });
+                if (b64) {
+                    pdfBytesArray.push(this._base64ToUint8Array(b64));
+                }
+            }
+
+            if (pdfBytesArray.length === 0) {
+                throw new Error('No PDFs could be loaded.');
+            }
+
+            let finalBytes;
+            if (pdfBytesArray.length === 1) {
+                finalBytes = pdfBytesArray[0];
+            } else {
+                finalBytes = mergePdfs(pdfBytesArray);
+            }
+
+            const finalBase64 = this._uint8ArrayToBase64(finalBytes);
+            this._downloadBase64(finalBase64, 'Bulk Merged.pdf', 'application/pdf');
+            this.showToast('Success', `Merged ${pdfBytesArray.length} PDFs and downloaded.`, 'success');
+        } catch (e) {
+            const msg = e.body ? e.body.message : (e.message || 'Unknown error');
+            this.showToast('Error', 'Merge failed: ' + msg, 'error');
+        } finally {
+            this.isMerging = false;
+        }
+    }
+
+    _base64ToUint8Array(base64) {
+        const binaryStr = atob(base64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+        }
+        return bytes;
+    }
+
+    _uint8ArrayToBase64(bytes) {
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    _downloadBase64(base64Data, fileName, mimeType) {
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     showToast(title, message, variant) {

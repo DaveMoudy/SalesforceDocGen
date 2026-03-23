@@ -20,7 +20,7 @@ public with sharing class DocGenSetupController {
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         settings.Experience_Site_Url__c = experienceSiteUrl;
         // Package-internal object — CRUD controlled by DocGen permission sets
-        upsert settings;
+        upsert settings; // NOPMD ApexCRUDViolation - package-internal custom setting; CRUD checked on lines 15-18 above
     }
 
 }

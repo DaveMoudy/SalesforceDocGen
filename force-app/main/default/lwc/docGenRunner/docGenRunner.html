@@ -197,6 +197,99 @@
                     </lightning-button>
                 </template>
 
+                <!-- MERGE CHILD RECORD PDFs MODE -->
+                <template lwc:if={isMergeChildrenMode}>
+                    <lightning-combobox
+                        name="childRelationship"
+                        label="Child Relationship"
+                        placeholder="Select a child object..."
+                        options={childRelComboboxOptions}
+                        onchange={handleChildRelChange}
+                        class="slds-var-m-bottom_medium">
+                    </lightning-combobox>
+
+                    <template lwc:if={selectedChildRel}>
+                        <lightning-input
+                            label="Filter (optional WHERE clause)"
+                            placeholder="e.g. StageName = 'Closed Won' AND CloseDate = THIS_MONTH"
+                            value={childFilterClause}
+                            onchange={handleChildFilterChange}
+                            class="slds-var-m-bottom_small">
+                        </lightning-input>
+
+                        <lightning-button
+                            label="Load Child PDFs"
+                            onclick={handleLoadChildPdfs}
+                            class="slds-var-m-bottom_medium">
+                        </lightning-button>
+                    </template>
+
+                    <template lwc:if={childPdfsLoaded}>
+                        <div class="slds-var-m-bottom_medium slds-box slds-theme_shade slds-var-p-around_small">
+                            <template lwc:if={hasChildRecordGroups}>
+                                <div class="slds-var-m-bottom_small">
+                                    <lightning-input
+                                        type="checkbox"
+                                        label="Select All"
+                                        checked={allChildPdfsSelected}
+                                        onchange={handleSelectAllChildPdfs}>
+                                    </lightning-input>
+                                </div>
+
+                                <template for:each={childRecordGroupsWithState} for:item="group">
+                                    <div key={group.childRecordId} class="slds-var-m-bottom_small">
+                                        <p class="slds-text-title_bold slds-var-m-bottom_xx-small">
+                                            {group.childRecordName}
+                                        </p>
+                                        <template lwc:if={group.hasPdfs}>
+                                            <template for:each={group.pdfs} for:item="pdf">
+                                                <div key={pdf.value} class="slds-var-p-left_medium">
+                                                    <lightning-input
+                                                        type="checkbox"
+                                                        label={pdf.label}
+                                                        checked={pdf.checked}
+                                                        data-cvid={pdf.value}
+                                                        onchange={handleChildPdfCheckbox}>
+                                                    </lightning-input>
+                                                </div>
+                                            </template>
+                                        </template>
+                                        <template lwc:else>
+                                            <p class="slds-text-body_small slds-text-color_weak slds-var-p-left_medium">
+                                                No PDFs attached
+                                            </p>
+                                        </template>
+                                    </div>
+                                </template>
+                            </template>
+                            <template lwc:else>
+                                <p class="slds-text-body_small slds-text-color_weak">
+                                    No child records found matching your criteria.
+                                </p>
+                            </template>
+                        </div>
+
+                        <div class="slds-var-m-bottom_medium">
+                            <lightning-radio-group
+                                name="childMergeOutput"
+                                label="Action"
+                                options={mergeOnlyOutputOptions}
+                                value={outputMode}
+                                onchange={handleOutputModeChange}
+                                type="button">
+                            </lightning-radio-group>
+                        </div>
+
+                        <lightning-button
+                            variant="brand"
+                            label={mergeChildrenButtonLabel}
+                            onclick={mergeChildrenDocument}
+                            disabled={isMergeChildrenDisabled}
+                            class="slds-var-m-top_medium">
+                        </lightning-button>
+                    </template>
+                </template>
+
             </template>
 
         </div>

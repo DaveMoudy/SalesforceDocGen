@@ -73,7 +73,7 @@ public with sharing class DocGenDataRetriever {
 
         Map<String, Object> data;
         try {
-            List<SObject> results = Database.query(query, AccessLevel.USER_MODE);
+            List<SObject> results = Database.query(query, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - field names from template config validated by Schema describe; base object escaped; runs with USER_MODE
             if (results.isEmpty()) return null;
             data = mapSObject(results[0]);
         } catch (Exception e) {
@@ -193,7 +193,7 @@ public with sharing class DocGenDataRetriever {
 
         Map<String, Object> data;
         try {
-            List<SObject> results = Database.query(query, AccessLevel.USER_MODE);
+            List<SObject> results = Database.query(query, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - field names from V2 query config; base object escaped; runs with USER_MODE
             if (results.isEmpty()) return null;
             data = mapSObject(results[0]);
         } catch (Exception e) {
@@ -249,7 +249,7 @@ public with sharing class DocGenDataRetriever {
 
         Map<Id, Map<String, Object>> targetMap = new Map<Id, Map<String, Object>>();
         try {
-            for (SObject targetRec : Database.query(targetQuery, AccessLevel.USER_MODE)) {
+            for (SObject targetRec : Database.query(targetQuery, AccessLevel.USER_MODE)) { // NOPMD ApexSOQLInjection - junction target fields from V2 config; clauses sanitized by sanitizeClause(); runs with USER_MODE
                 targetMap.put(targetRec.Id, mapSObject(targetRec));
             }
         } catch (Exception e) {
@@ -357,7 +357,7 @@ public with sharing class DocGenDataRetriever {
 
         Map<String, Object> rootData;
         try {
-            List<SObject> results = Database.query(rootQuery, AccessLevel.USER_MODE);
+            List<SObject> results = Database.query(rootQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - V3 tree node fields from query config; object name escaped; runs with USER_MODE
             if (results.isEmpty()) return null;
             rootData = mapSObject(results[0]);
         } catch (Exception e) {
@@ -432,7 +432,7 @@ public with sharing class DocGenDataRetriever {
 
             List<SObject> childResults;
             try {
-                childResults = Database.query(childQuery, AccessLevel.USER_MODE);
+                childResults = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - V3 child node fields from query config; clauses sanitized by sanitizeClause(); runs with USER_MODE
             } catch (Exception e) {
                 System.debug(LoggingLevel.WARN, 'DocGen: V3 child query error for ' + child.objectApiName + ': ' + e.getMessage());
                 continue;
@@ -508,7 +508,7 @@ public with sharing class DocGenDataRetriever {
 
         Map<Id, Map<String, Object>> targetMap = new Map<Id, Map<String, Object>>();
         try {
-            for (SObject rec : Database.query(tQuery, AccessLevel.USER_MODE)) {
+            for (SObject rec : Database.query(tQuery, AccessLevel.USER_MODE)) { // NOPMD ApexSOQLInjection - V3 junction target fields from query config; object name escaped; runs with USER_MODE
                 targetMap.put(rec.Id, mapSObject(rec));
             }
         } catch (Exception e) {
@@ -792,7 +792,7 @@ public with sharing class DocGenDataRetriever {
 
             List<SObject> gcResults;
             try {
-                gcResults = Database.query(gcQuery, AccessLevel.USER_MODE);
+                gcResults = Database.query(gcQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - grandchild fields from query config; runs with USER_MODE
             } catch (Exception e) {
                 System.debug(LoggingLevel.WARN, 'DocGen: Grandchild query failed: ' + e.getMessage());
                 continue;
