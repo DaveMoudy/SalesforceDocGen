@@ -246,7 +246,7 @@
                     <p class="slds-var-m-bottom_small">DocGen uses <strong>plain text replacement</strong>. When a document is generated, each merge tag in your template is replaced with the corresponding field value from the Salesforce record. That's it — simple, predictable, and reliable.</p>
                     <p class="slds-text-title_bold slds-var-m-bottom_x-small">What this means in practice:</p>
                     <ul class="slds-list_dotted">
-                        <li class="slds-var-p-bottom_x-small">Tags are replaced with <strong>plain text values only</strong>. They will not insert images, charts, or other media into your document. If you need an image in your output, place it directly in the Word/PowerPoint template file itself.</li>
+                        <li class="slds-var-p-bottom_x-small">Most tags are replaced with <strong>plain text values</strong>. Special prefixes enable other content: <code>&#123;%Field&#125;</code> inserts images, <code>&#123;*Field&#125;</code> renders barcodes, and <code>&#123;SUM:...&#125;</code> computes aggregates.</li>
                         <li class="slds-var-p-bottom_x-small">Tables do not dynamically expand or resize. If you need repeating rows, use <strong>loop tags</strong> (<code>&#123;#ListName&#125;</code> / <code>&#123;/ListName&#125;</code>) — each child record creates a new row by duplicating the row containing the loop tags.</li>
                         <li class="slds-var-p-bottom_x-small">Formatting (bold, font size, color) comes from your template, not from the data. The replaced text inherits whatever formatting the tag had in the original document.</li>
                         <li class="slds-var-p-bottom_x-small"><strong>Rich Text fields</strong> automatically preserve basic formatting (bold, italic, underline) and embedded images in Word and PDF output. See the <strong>Rich Text Fields</strong> section below for details.</li>
@@ -256,7 +256,7 @@
 
                 <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
                     <h3 class="slds-text-heading_small slds-var-m-bottom_small">Basic Field Tags</h3>
-                    <p class="slds-var-m-bottom_small">Place merge tags in your Word or PowerPoint template wherever you want Salesforce data to appear:</p>
+                    <p class="slds-var-m-bottom_small">Place merge tags in your Word, Excel, or PowerPoint template wherever you want Salesforce data to appear:</p>
                     <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
                         <code>&#123;Name&#125;</code> — Inserts the record's Name field<br/>
                         <code>&#123;Account.Name&#125;</code> — Inserts a parent field value<br/>
@@ -395,6 +395,81 @@
                     </div>
 
                     <p class="slds-text-body_small slds-text-color_weak"><strong>How it works:</strong> DocGen detects HTML tags in the field value and converts them to native Word XML (bold, italic, underline runs, paragraph breaks). Images are extracted from <code>&lt;img&gt;</code> tags and embedded in the document. For PDF output, the same formatting carries through the DOCX-to-HTML-to-PDF pipeline.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Aggregate Tags</h3>
+                    <p class="slds-var-m-bottom_small">Compute totals, counts, and averages from child record lists — no formula fields needed:</p>
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                        <code>&#123;SUM:QuoteLineItems.TotalPrice&#125;</code> — Sum of all line item totals<br/>
+                        <code>&#123;COUNT:Contacts&#125;</code> — Number of contacts<br/>
+                        <code>&#123;AVG:OpportunityLineItems.UnitPrice&#125;</code> — Average unit price<br/>
+                        <code>&#123;MIN:QuoteLineItems.Quantity&#125;</code> — Minimum quantity<br/>
+                        <code>&#123;MAX:QuoteLineItems.Discount&#125;</code> — Maximum discount
+                    </div>
+                    <p class="slds-var-m-bottom_small">Place aggregate tags <strong>outside</strong> the loop block, typically below the table. The syntax is <code>&#123;FUNCTION:ChildList.FieldName&#125;</code>. COUNT does not require a field — <code>&#123;COUNT:Contacts&#125;</code> returns the number of records.</p>
+                    <p class="slds-text-body_small slds-text-color_weak">Aggregates use the child record data already loaded for loops — zero extra SOQL queries. Non-numeric values are silently skipped. AVG rounds to 2 decimal places.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Barcode Tags</h3>
+                    <p class="slds-var-m-bottom_small">Render scannable Code 128 barcodes from any field value:</p>
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                        <code>&#123;*ProductCode&#125;</code> — Barcode from Product Code field<br/>
+                        <code>&#123;*OrderNumber&#125;</code> — Barcode from Order Number field
+                    </div>
+                    <p class="slds-var-m-bottom_small">Barcodes render as CSS bars in <strong>PDF output only</strong>. No barcode fonts or external images needed — <code>Blob.toPdf()</code> renders the bars natively. Barcodes do not appear in DOCX, XLSX, or PPTX output.</p>
+                    <p class="slds-text-body_small slds-text-color_weak">Supports any printable ASCII text. The barcode includes a checksum character for scanner reliability.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Excel Templates (.xlsx)</h3>
+                    <p class="slds-var-m-bottom_small">Create spreadsheet output by uploading an Excel file with merge tags in cells. All standard tags work — fields, parent lookups, loops, conditionals, and aggregates.</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">How to set up an Excel template</h4>
+                    <ol class="slds-list_ordered slds-var-m-bottom_small">
+                        <li>Create a new template and select <strong>Excel</strong> as the type</li>
+                        <li>Upload a <code>.xlsx</code> file with merge tags directly in cells: <code>&#123;Name&#125;</code>, <code>&#123;Account.Name&#125;</code>, etc.</li>
+                        <li>For repeating rows, put <code>&#123;#ChildList&#125;</code> in a cell on one row, your field tags in the next row, and <code>&#123;/ChildList&#125;</code> on the row after. Each child record duplicates the middle row.</li>
+                        <li>For totals, use <code>&#123;SUM:ChildList.Field&#125;</code> in a cell below the loop.</li>
+                    </ol>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Limitations</h4>
+                    <ul class="slds-list_dotted slds-var-m-bottom_small">
+                        <li>Excel output is <strong>XLSX only</strong> — no PDF conversion. Use a Word template if you need PDF output.</li>
+                        <li>Dynamic images (<code>&#123;%Field&#125;</code>) and barcodes (<code>&#123;*Field&#125;</code>) are not supported in Excel.</li>
+                        <li>Rich text HTML is output as plain text in cells.</li>
+                        <li>Cell formatting (colors, borders, number formats) from the template is preserved. Merged tags inherit the cell's format.</li>
+                    </ul>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">PowerPoint Templates (.pptx)</h3>
+                    <p class="slds-var-m-bottom_small">Place merge tags in text boxes and shapes. All field tags, parent lookups, date formatting, loops, and aggregates work in PowerPoint.</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Limitations</h4>
+                    <ul class="slds-list_dotted slds-var-m-bottom_small">
+                        <li>PowerPoint output is <strong>PPTX only</strong> — no PDF conversion.</li>
+                        <li>Dynamic images (<code>&#123;%Field&#125;</code>) are not supported — they would corrupt the slide XML. Place static images directly in your template.</li>
+                        <li>Barcodes (<code>&#123;*Field&#125;</code>) are not supported.</li>
+                        <li>Rich text fields are rendered as plain text (HTML tags stripped).</li>
+                    </ul>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">PDF Merger</h3>
+                    <p class="slds-var-m-bottom_small">Combine multiple PDFs into a single document — directly from any record page. Three modes available from the mode toggle in the Document Generator:</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Generate &amp; Merge</h4>
+                    <p class="slds-var-m-bottom_small">Generate a document from a PDF template, then append existing PDFs from the record. Check "Merge with existing PDFs" on the generate screen, select the files to include, and click Generate &amp; Merge.</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Document Packets</h4>
+                    <p class="slds-var-m-bottom_small">Select multiple PDF templates and generate them all for the same record, merged into one combined document. Use the dual-listbox to choose templates and set the order. Optionally append existing PDFs at the end.</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Merge Only</h4>
+                    <p class="slds-var-m-bottom_small">Combine existing PDFs already attached to the record without generating from a template. Use the dual-listbox to select files and drag them into the desired order. Requires at least 2 PDFs.</p>
+
+                    <p class="slds-text-body_small slds-text-color_weak">All merging runs client-side in the browser. Each PDF is fetched via a separate Apex call with fresh heap — no file size limits. The merged result can be downloaded or saved back to the record.</p>
                 </div>
             </template>
 
