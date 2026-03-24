@@ -319,7 +319,9 @@ public with sharing class DocGenHtmlRenderer {
 
         // Empty paragraph with bottom border = horizontal rule
         if (String.isBlank(content) && String.isNotBlank(pPr) && pPr.contains('<w:pBdr')) {
-            if (pPr.contains('<w:bottom ')) {
+            String bottomBdr = extractElement(pPr, 'w:bottom');
+            String bdrVal = extractAttr(bottomBdr, 'w:bottom', 'w:val');
+            if (String.isNotBlank(bottomBdr) && bdrVal != 'nil' && bdrVal != 'none') {
                 return (pageBreakBefore ? '<div style="page-break-before:always"></div>' : '') + '<hr/>';
             }
         }
@@ -424,11 +426,16 @@ public with sharing class DocGenHtmlRenderer {
                 String bottomBdr = parseBorderSide(pBdr, 'w:bottom');
                 String leftBdr = parseBorderSide(pBdr, 'w:left');
                 String rightBdr = parseBorderSide(pBdr, 'w:right');
-                                if (topBdr != null) { styles.add('border-top:' + topBdr); }
-                                if (bottomBdr != null) { styles.add('border-bottom:' + bottomBdr); }
-                                if (leftBdr != null) { styles.add('border-left:' + leftBdr); }
-                                if (rightBdr != null) { styles.add('border-right:' + rightBdr); }
-                if (topBdr != null || bottomBdr != null || leftBdr != null || rightBdr != null) {
+                
+                if (String.isNotBlank(topBdr) && topBdr != 'none' && topBdr != 'nil') { styles.add('border-top:' + topBdr); }
+                if (String.isNotBlank(bottomBdr) && bottomBdr != 'none' && bottomBdr != 'nil') { styles.add('border-bottom:' + bottomBdr); }
+                if (String.isNotBlank(leftBdr) && leftBdr != 'none' && leftBdr != 'nil') { styles.add('border-left:' + leftBdr); }
+                if (String.isNotBlank(rightBdr) && rightBdr != 'none' && rightBdr != 'nil') { styles.add('border-right:' + rightBdr); }
+                
+                if ((String.isNotBlank(topBdr) && topBdr != 'none' && topBdr != 'nil') || 
+                    (String.isNotBlank(bottomBdr) && bottomBdr != 'none' && bottomBdr != 'nil') || 
+                    (String.isNotBlank(leftBdr) && leftBdr != 'none' && leftBdr != 'nil') || 
+                    (String.isNotBlank(rightBdr) && rightBdr != 'none' && rightBdr != 'nil')) {
                     styles.add('padding:4pt');
                 }
             }
@@ -1058,18 +1065,30 @@ public with sharing class DocGenHtmlRenderer {
      */
     private static String extractAttr(String xml, String tagName, String attrName) {
         Integer tagStart = xml.indexOf('<' + tagName);
-                if (tagStart == -1) { return null; }
+        if (tagStart == -1) { return null; }
 
         Integer tagEnd = xml.indexOf('>', tagStart);
-                if (tagEnd == -1) { return null; }
+        if (tagEnd == -1) { return null; }
 
         String tagContent = xml.substring(tagStart, tagEnd + 1);
-        Integer attrStart = tagContent.indexOf(attrName + '="');
-                if (attrStart == -1) { return null; }
+        
+        // Try double quotes
+        String searchDouble = attrName + '="';
+        Integer attrStart = tagContent.indexOf(searchDouble);
+        String quoteUsed = '"';
+        
+        if (attrStart == -1) {
+            // Try single quotes
+            String searchSingle = attrName + '=\'';
+            attrStart = tagContent.indexOf(searchSingle);
+            quoteUsed = '\'';
+        }
+        
+        if (attrStart == -1) { return null; }
 
-        Integer valueStart = attrStart + attrName.length() + 2; // skip attr="
-        Integer valueEnd = tagContent.indexOf('"', valueStart);
-                if (valueEnd == -1) { return null; }
+        Integer valueStart = attrStart + attrName.length() + 2; // skip attr=" or attr='
+        Integer valueEnd = tagContent.indexOf(quoteUsed, valueStart);
+        if (valueEnd == -1) { return null; }
 
         return tagContent.substring(valueStart, valueEnd);
     }

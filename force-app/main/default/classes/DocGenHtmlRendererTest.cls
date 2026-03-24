@@ -705,4 +705,1194 @@ private class DocGenHtmlRendererTest {
             System.assert(html.contains('AutoFill'), 'Should contain text');
         }
     }
+
+    // =========================================================================
+    // Barcode rendering — renderBarcodeHtml, renderCode128Html
+    // =========================================================================
+
+    @IsTest
+    static void testRenderBarcodeCode128() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Build XML with a barcode marker in the text content
+            String barcodeMarker = '##BARCODE:code128::ABC-123##';
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:t>' + barcodeMarker + '</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            // Should render CSS bars, not the raw marker text
+            System.assert(html.contains('display:inline-block'), 'Should render as CSS bars');
+            System.assert(html.contains('background:'), 'Should contain bar colors');
+            System.assert(!html.contains('##BARCODE:'), 'Should not contain raw marker');
+        }
+    }
+
+    @IsTest
+    static void testRenderBarcodeCode128WithSize() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String barcodeMarker = '##BARCODE:code128:300x80:TEST##';
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:t>' + barcodeMarker + '</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('height:80px'), 'Should use custom height 80px');
+            System.assert(html.contains('display:inline-block'), 'Should render as bars');
+        }
+    }
+
+    // =========================================================================
+    // QR code rendering — renderQrHtml
+    // =========================================================================
+
+    @IsTest
+    static void testRenderBarcodeQr() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String barcodeMarker = '##BARCODE:qr::Hello##';
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:t>' + barcodeMarker + '</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            // QR renders as position:relative container with absolute spans
+            System.assert(html.contains('position:relative'), 'Should render QR with position:relative container');
+            System.assert(html.contains('position:absolute'), 'Should render QR modules as absolute spans');
+            System.assert(!html.contains('##BARCODE:'), 'Should not contain raw marker');
+        }
+    }
+
+    @IsTest
+    static void testRenderBarcodeQrWithSize() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String barcodeMarker = '##BARCODE:qr:200:TestQR##';
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:t>' + barcodeMarker + '</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('position:relative'), 'Should render QR container');
+        }
+    }
+
+    @IsTest
+    static void testRenderBarcodeSurroundingText() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Text before and after barcode marker
+            String barcodeMarker = 'Before##BARCODE:code128::VAL##After';
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:t>' + barcodeMarker + '</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('Before'), 'Should preserve text before barcode');
+            System.assert(html.contains('After'), 'Should preserve text after barcode');
+        }
+    }
+
+    // =========================================================================
+    // List rendering — <w:numPr> for bulleted/numbered lists
+    // =========================================================================
+
+    @IsTest
+    static void testBulletedList() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // w:numPr with odd numId = bullet list
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>' +
+                '<w:r><w:t>Bullet One</w:t></w:r></w:p>' +
+                '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>' +
+                '<w:r><w:t>Bullet Two</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<ul>'), 'Should contain unordered list');
+            System.assert(html.contains('<li'), 'Should contain list items');
+            System.assert(html.contains('Bullet One'), 'Should contain first item');
+            System.assert(html.contains('Bullet Two'), 'Should contain second item');
+            System.assert(html.contains('</ul>'), 'Should close list');
+        }
+    }
+
+    @IsTest
+    static void testNumberedList() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // w:numPr with even numId = numbered list
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr></w:pPr>' +
+                '<w:r><w:t>Step One</w:t></w:r></w:p>' +
+                '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr></w:pPr>' +
+                '<w:r><w:t>Step Two</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<ol>'), 'Should contain ordered list');
+            System.assert(html.contains('<li'), 'Should contain list items');
+            System.assert(html.contains('Step One'), 'Should contain first item');
+            System.assert(html.contains('</ol>'), 'Should close ordered list');
+        }
+    }
+
+    @IsTest
+    static void testListStyleParagraph() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // ListParagraph style without numPr
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>' +
+                '<w:r><w:t>List Item</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<ul>') || html.contains('<ol>'), 'Should render as list');
+            System.assert(html.contains('List Item'), 'Should contain list text');
+        }
+    }
+
+    @IsTest
+    static void testListNumIdZero() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // numId 0 means "no list" in OOXML
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr></w:pPr>' +
+                '<w:r><w:t>Not a list</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(!html.contains('<ul>') && !html.contains('<ol>'), 'numId 0 should not produce a list');
+            System.assert(html.contains('Not a list'), 'Should contain text');
+        }
+    }
+
+    // =========================================================================
+    // Tab stops — processTabRun
+    // =========================================================================
+
+    @IsTest
+    static void testTabStop() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:tab/></w:r><w:r><w:t>After tab</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('width:36pt'), 'Should render tab as fixed-width space');
+            System.assert(html.contains('After tab'), 'Should contain text after tab');
+        }
+    }
+
+    @IsTest
+    static void testTabStopWithStyledText() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Tab run that also contains text with run properties
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:rPr><w:b/></w:rPr><w:tab/><w:t>TabText</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('width:36pt'), 'Should render tab space');
+            System.assert(html.contains('TabText'), 'Should contain text after tab');
+        }
+    }
+
+    // =========================================================================
+    // Subscript/Superscript — w:vertAlign
+    // =========================================================================
+
+    @IsTest
+    static void testSubscript() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:rPr><w:vertAlign w:val="subscript"/></w:rPr><w:t>2</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<sub>'), 'Should contain subscript tag');
+            System.assert(html.contains('</sub>'), 'Should close subscript tag');
+        }
+    }
+
+    @IsTest
+    static void testSuperscript() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:t>TM</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<sup>'), 'Should contain superscript tag');
+            System.assert(html.contains('</sup>'), 'Should close superscript tag');
+        }
+    }
+
+    // =========================================================================
+    // Cell borders — addBorderStyles with <w:tcBorders>
+    // =========================================================================
+
+    @IsTest
+    static void testCellBorders() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:tbl><w:tblPr></w:tblPr>' +
+                '<w:tr><w:tc><w:tcPr>' +
+                '<w:tcBorders>' +
+                '<w:top w:val="single" w:sz="8" w:color="FF0000"/>' +
+                '<w:bottom w:val="dashed" w:sz="4" w:color="00FF00"/>' +
+                '<w:left w:val="dotted" w:sz="4" w:color="0000FF"/>' +
+                '<w:right w:val="double" w:sz="12" w:color="000000"/>' +
+                '</w:tcBorders>' +
+                '</w:tcPr>' +
+                '<w:p><w:r><w:t>Bordered</w:t></w:r></w:p></w:tc></w:tr>' +
+                '</w:tbl>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('border-top:'), 'Should have top border');
+            System.assert(html.contains('border-bottom:'), 'Should have bottom border');
+            System.assert(html.contains('border-left:'), 'Should have left border');
+            System.assert(html.contains('border-right:'), 'Should have right border');
+            System.assert(html.contains('#FF0000'), 'Should have red top border');
+            System.assert(html.contains('dashed'), 'Should have dashed bottom border');
+            System.assert(html.contains('dotted'), 'Should have dotted left border');
+            System.assert(html.contains('double'), 'Should have double right border');
+        }
+    }
+
+    @IsTest
+    static void testCellBordersStartEnd() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // w:start and w:end instead of w:left and w:right
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:tbl><w:tblPr></w:tblPr>' +
+                '<w:tr><w:tc><w:tcPr>' +
+                '<w:tcBorders>' +
+                '<w:start w:val="single" w:sz="4" w:color="111111"/>' +
+                '<w:end w:val="single" w:sz="4" w:color="222222"/>' +
+                '</w:tcBorders>' +
+                '</w:tcPr>' +
+                '<w:p><w:r><w:t>StartEnd</w:t></w:r></w:p></w:tc></w:tr>' +
+                '</w:tbl>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('border-left:'), 'Should have left border from w:start');
+            System.assert(html.contains('border-right:'), 'Should have right border from w:end');
+        }
+    }
+
+    // =========================================================================
+    // Cell padding — addCellPaddingStyles with <w:tcMar>
+    // =========================================================================
+
+    @IsTest
+    static void testCellPadding() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:tbl><w:tblPr></w:tblPr>' +
+                '<w:tr><w:tc><w:tcPr>' +
+                '<w:tcMar>' +
+                '<w:top w:w="100" w:type="dxa"/>' +
+                '<w:bottom w:w="200" w:type="dxa"/>' +
+                '<w:left w:w="150" w:type="dxa"/>' +
+                '<w:right w:w="150" w:type="dxa"/>' +
+                '</w:tcMar>' +
+                '</w:tcPr>' +
+                '<w:p><w:r><w:t>Padded</w:t></w:r></w:p></w:tc></w:tr>' +
+                '</w:tbl>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('padding:'), 'Should have padding style');
+            System.assert(html.contains('Padded'), 'Should contain text');
+        }
+    }
+
+    @IsTest
+    static void testCellPaddingStartEnd() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // w:start and w:end instead of w:left and w:right
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:tbl><w:tblPr></w:tblPr>' +
+                '<w:tr><w:tc><w:tcPr>' +
+                '<w:tcMar>' +
+                '<w:top w:w="80" w:type="dxa"/>' +
+                '<w:bottom w:w="80" w:type="dxa"/>' +
+                '<w:start w:w="120" w:type="dxa"/>' +
+                '<w:end w:w="120" w:type="dxa"/>' +
+                '</w:tcMar>' +
+                '</w:tcPr>' +
+                '<w:p><w:r><w:t>StartEndPad</w:t></w:r></w:p></w:tc></w:tr>' +
+                '</w:tbl>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('padding:'), 'Should have padding using start/end');
+        }
+    }
+
+    // =========================================================================
+    // Cell merge — <w:gridSpan> (column span)
+    // =========================================================================
+
+    @IsTest
+    static void testCellGridSpan() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:tbl><w:tblPr></w:tblPr>' +
+                '<w:tr>' +
+                '<w:tc><w:tcPr><w:gridSpan w:val="3"/></w:tcPr>' +
+                '<w:p><w:r><w:t>Spanning 3 columns</w:t></w:r></w:p></w:tc>' +
+                '</w:tr>' +
+                '</w:tbl>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('colspan="3"'), 'Should have colspan=3');
+            System.assert(html.contains('Spanning 3 columns'), 'Should contain spanned text');
+        }
+    }
+
+    // =========================================================================
+    // fontFaceCss parameter — custom font CSS injection
+    // =========================================================================
+
+    @IsTest
+    static void testFontFaceCssInjection() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:t>Custom Font</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String fontCss = '@font-face { font-family: "CustomFont"; src: url("data:font/woff2;base64,ABC"); }';
+            String html = DocGenHtmlRenderer.convertToHtml(xml, new Map<String, String>(), fontCss);
+
+            System.assert(html.contains('@font-face'), 'Should contain custom font-face CSS');
+            System.assert(html.contains('CustomFont'), 'Should contain custom font name');
+            System.assert(html.contains('Custom Font'), 'Should contain body text');
+            // The custom CSS should come before the base styles
+            Integer fontFacePos = html.indexOf('@font-face');
+            Integer baseStylePos = html.indexOf('@page');
+            System.assert(fontFacePos < baseStylePos, 'Font-face CSS should come before base styles');
+        }
+    }
+
+    @IsTest
+    static void testFontFaceCssNull() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:t>No Custom Font</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            // Null fontFaceCss should use default prefix
+            String html = DocGenHtmlRenderer.convertToHtml(xml, new Map<String, String>(), null);
+
+            System.assert(!html.contains('@font-face'), 'Should not contain font-face when null');
+            System.assert(html.contains('No Custom Font'), 'Should contain body text');
+        }
+    }
+
+    // =========================================================================
+    // Image with Salesforce URL — exercises URL-based img rendering
+    // =========================================================================
+
+    @IsTest
+    static void testImageWithSfcUrl() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Map<String, String> images = new Map<String, String>{
+                'rIdSfc1' => '/sfc/servlet.shepherd/version/download/068000000000001'
+            };
+
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:drawing>' +
+                '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">' +
+                '<wp:extent cx="1905000" cy="952500"/>' +
+                '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+                '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+                '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+                '<pic:blipFill><a:blip r:embed="rIdSfc1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></pic:blipFill>' +
+                '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml, images);
+
+            System.assert(html.contains('<img'), 'Should contain img tag');
+            System.assert(html.contains('/sfc/servlet.shepherd'), 'Should use Salesforce URL directly');
+            System.assert(!html.contains('data:image'), 'Should not use data URI for SF URLs');
+        }
+    }
+
+    // =========================================================================
+    // Heading styles
+    // =========================================================================
+
+    @IsTest
+    static void testHeadingStyles() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Title</w:t></w:r></w:p>' +
+                '<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Section</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<h1'), 'Should contain h1 tag');
+            System.assert(html.contains('<h2'), 'Should contain h2 tag');
+            System.assert(html.contains('Title'), 'Should contain heading text');
+        }
+    }
+
+    @IsTest
+    static void testTitleStyle() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>Doc Title</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<h1'), 'Title style should render as h1');
+            System.assert(html.contains('26pt'), 'Title should have 26pt font size');
+            System.assert(html.contains('Doc Title'), 'Should contain title text');
+        }
+    }
+
+    // =========================================================================
+    // All caps and small caps
+    // =========================================================================
+
+    @IsTest
+    static void testAllCaps() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:rPr><w:caps/></w:rPr><w:t>lowercase text</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('LOWERCASE TEXT'), 'Should uppercase text with w:caps');
+        }
+    }
+
+    @IsTest
+    static void testSmallCaps() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:rPr><w:smallCaps/></w:rPr><w:t>small caps</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('SMALL CAPS'), 'Should uppercase text with smallCaps');
+            System.assert(html.contains('font-variant:small-caps'), 'Should add small-caps font variant');
+        }
+    }
+
+    // =========================================================================
+    // Page break rendering
+    // =========================================================================
+
+    @IsTest
+    static void testPageBreakInParagraph() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>After Break</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('page-break-before:always'), 'Should contain page break');
+            System.assert(html.contains('After Break'), 'Should contain text after break');
+        }
+    }
+
+    @IsTest
+    static void testPageBreakInRun() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:br w:type="page"/></w:r><w:r><w:t>Next Page</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('page-break-before:always'), 'Should contain page break from run');
+        }
+    }
+
+    // =========================================================================
+    // Hyperlink rendering
+    // =========================================================================
+
+    @IsTest
+    static void testHyperlink() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:hyperlink r:id="rId5" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+                '<w:r><w:t>Click Here</w:t></w:r>' +
+                '</w:hyperlink></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('Click Here'), 'Should contain link text');
+            System.assert(html.contains('color:#0563C1'), 'Should have link color');
+            System.assert(html.contains('text-decoration:underline'), 'Should have underline');
+        }
+    }
+
+    // =========================================================================
+    // Horizontal rule (empty paragraph with bottom border)
+    // =========================================================================
+
+    @IsTest
+    static void testHorizontalRule() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:color="000000"/></w:pBdr></w:pPr></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<hr/>'), 'Should render horizontal rule');
+        }
+    }
+
+    // =========================================================================
+    // Letter spacing
+    // =========================================================================
+
+    @IsTest
+    static void testLetterSpacing() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:rPr><w:spacing w:val="40"/></w:rPr><w:t>Spaced</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('letter-spacing:'), 'Should contain letter-spacing style');
+        }
+    }
+
+    // =========================================================================
+    // Header row (th)
+    // =========================================================================
+
+    @IsTest
+    static void testTableHeaderRow() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:tbl><w:tblPr></w:tblPr>' +
+                '<w:tr><w:trPr><w:tblHeader/></w:trPr>' +
+                '<w:tc><w:p><w:r><w:t>Header</w:t></w:r></w:p></w:tc></w:tr>' +
+                '<w:tr><w:tc><w:p><w:r><w:t>Data</w:t></w:r></w:p></w:tc></w:tr>' +
+                '</w:tbl>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<th'), 'Should render header cell as th');
+            System.assert(html.contains('<td'), 'Should render data cell as td');
+        }
+    }
+
+    // =========================================================================
+    // Hyperlink rendering
+    // =========================================================================
+
+    @IsTest
+    static void testHyperlinkExtended() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:hyperlink r:id="rId5" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+                '<w:r><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr><w:t>Click here</w:t></w:r>' +
+                '</w:hyperlink></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('Click here'), 'Should contain hyperlink text');
+            System.assert(html.contains('text-decoration:underline'), 'Should have underline styling');
+        }
+    }
+
+    @IsTest
+    static void testHyperlinkEmptyContent() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Hyperlink with no inner runs — should render empty
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:hyperlink></w:hyperlink></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('<body>'), 'Should produce valid HTML');
+        }
+    }
+
+    // =========================================================================
+    // convertToHtml with fontFaceCss
+    // =========================================================================
+
+    @IsTest
+    static void testConvertToHtmlWithFontFaceCss() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body><w:p><w:r><w:t>FontTest</w:t></w:r></w:p></w:body></w:document>';
+
+            String fontCss = '@font-face { font-family: "Custom"; src: url("data:;base64,abc"); }';
+            String html = DocGenHtmlRenderer.convertToHtml(xml, new Map<String, String>(), fontCss);
+
+            System.assert(html.contains('@font-face'), 'Should inject font-face CSS');
+            System.assert(html.contains('FontTest'), 'Should contain text');
+        }
+    }
+
+    // =========================================================================
+    // Page break in run (w:br type="page")
+    // =========================================================================
+
+    @IsTest
+    static void testPageBreakInRunExtended() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('page-break-before:always'), 'Should contain page break');
+        }
+    }
+
+    // =========================================================================
+    // Column break in run
+    // =========================================================================
+
+    @IsTest
+    static void testColumnBreakInRun() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:br w:type="column"/></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('<br/>'), 'Column break should render as br');
+        }
+    }
+
+    // =========================================================================
+    // Paragraph with page break before (w:pageBreakBefore)
+    // =========================================================================
+
+    @IsTest
+    static void testPageBreakBeforeParagraph() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>After break</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('page-break-before:always'), 'Should have page break before');
+            System.assert(html.contains('After break'), 'Should contain text after break');
+        }
+    }
+
+    // =========================================================================
+    // Horizontal rule (empty paragraph with bottom border)
+    // =========================================================================
+
+    @IsTest
+    static void testHorizontalRuleExtended() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:color="000000"/></w:pBdr></w:pPr></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('<hr/>'), 'Should render as horizontal rule');
+        }
+    }
+
+    // =========================================================================
+    // Heading styles (h1-h6) and Title/Subtitle
+    // =========================================================================
+
+    @IsTest
+    static void testHeadingStylesExtended() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>H1</w:t></w:r></w:p>' +
+                '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>Title</w:t></w:r></w:p>' +
+                '<w:p><w:pPr><w:pStyle w:val="Subtitle"/></w:pPr><w:r><w:t>Sub</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('<h1'), 'Should contain h1 for Heading1');
+            System.assert(html.contains('26pt'), 'Should contain Title style with 26pt');
+            System.assert(html.contains('14pt'), 'Should contain Subtitle style with 14pt');
+        }
+    }
+
+    // =========================================================================
+    // Paragraph shading
+    // =========================================================================
+
+    @IsTest
+    static void testParagraphShading() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:shd w:val="clear" w:fill="FFFF00"/></w:pPr>' +
+                '<w:r><w:t>Highlighted</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('background-color:#FFFF00'), 'Should have paragraph shading');
+        }
+    }
+
+    // =========================================================================
+    // Paragraph borders
+    // =========================================================================
+
+    @IsTest
+    static void testParagraphBorders() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:pBdr>' +
+                '<w:top w:val="single" w:sz="4" w:color="FF0000"/>' +
+                '<w:bottom w:val="dashed" w:sz="4" w:color="00FF00"/>' +
+                '<w:left w:val="dotted" w:sz="4" w:color="0000FF"/>' +
+                '<w:right w:val="double" w:sz="4" w:color="000000"/>' +
+                '</w:pBdr></w:pPr>' +
+                '<w:r><w:t>Bordered</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('border-top:'), 'Should have top border');
+            System.assert(html.contains('border-bottom:'), 'Should have bottom border');
+            System.assert(html.contains('padding:4pt'), 'Should have padding when borders exist');
+        }
+    }
+
+    // =========================================================================
+    // Keep with next / Keep lines together
+    // =========================================================================
+
+    @IsTest
+    static void testKeepWithNextAndKeepLines() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:keepNext/><w:keepLines/></w:pPr>' +
+                '<w:r><w:t>Keep</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('page-break-after:avoid'), 'Should have keepNext CSS');
+            System.assert(html.contains('page-break-inside:avoid'), 'Should have keepLines CSS');
+        }
+    }
+
+    // =========================================================================
+    // Line spacing — exact and auto modes
+    // =========================================================================
+
+    @IsTest
+    static void testLineSpacingExact() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:spacing w:line="360" w:lineRule="exact"/></w:pPr>' +
+                '<w:r><w:t>Exact spacing</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('line-height:'), 'Should have line-height for exact spacing');
+        }
+    }
+
+    @IsTest
+    static void testLineSpacingAuto() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:spacing w:line="360" w:lineRule="auto"/></w:pPr>' +
+                '<w:r><w:t>Auto spacing</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('line-height:1.5'), 'Should have 1.5x line-height for 360/240');
+        }
+    }
+
+    // =========================================================================
+    // Hanging indent
+    // =========================================================================
+
+    @IsTest
+    static void testHangingIndent() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:ind w:hanging="360"/></w:pPr>' +
+                '<w:r><w:t>Hanging</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('text-indent:-'), 'Should have negative text-indent for hanging');
+            System.assert(html.contains('padding-left:'), 'Should have compensating padding-left');
+        }
+    }
+
+    // =========================================================================
+    // All caps and small caps
+    // =========================================================================
+
+    @IsTest
+    static void testAllCapsExtended() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:rPr><w:caps/></w:rPr><w:t>hello</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('HELLO'), 'Should uppercase text for caps');
+        }
+    }
+
+    @IsTest
+    static void testSmallCapsExtended() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:rPr><w:smallCaps/></w:rPr><w:t>test</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('font-variant:small-caps'), 'Should have small-caps style');
+        }
+    }
+
+    // =========================================================================
+    // Run shading (w:shd in rPr)
+    // =========================================================================
+
+    @IsTest
+    static void testRunShading() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:rPr><w:shd w:val="clear" w:fill="00FF00"/></w:rPr><w:t>Shaded</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('background-color:#00FF00'), 'Should have run shading color');
+        }
+    }
+
+    // =========================================================================
+    // Letter spacing
+    // =========================================================================
+
+    @IsTest
+    static void testLetterSpacingExtended() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:rPr><w:spacing w:val="40"/></w:rPr><w:t>Spaced</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('letter-spacing:'), 'Should have letter spacing');
+        }
+    }
+
+    // =========================================================================
+    // Table alignment (center and right)
+    // =========================================================================
+
+    @IsTest
+    static void testTableAlignmentCenter() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:tbl><w:tblPr><w:jc w:val="center"/></w:tblPr>' +
+                '<w:tr><w:tc><w:p><w:r><w:t>Centered Table</w:t></w:r></w:p></w:tc></w:tr>' +
+                '</w:tbl>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('margin-left:auto'), 'Should center table with auto margins');
+            System.assert(html.contains('margin-right:auto'), 'Should center table with auto margins');
+        }
+    }
+
+    @IsTest
+    static void testTableAlignmentRight() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:tbl><w:tblPr><w:jc w:val="right"/></w:tblPr>' +
+                '<w:tr><w:tc><w:p><w:r><w:t>Right Table</w:t></w:r></w:p></w:tc></w:tr>' +
+                '</w:tbl>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('margin-left:auto'), 'Should right-align table with margin-left:auto');
+        }
+    }
+
+    // =========================================================================
+    // Cell colspan (w:gridSpan)
+    // =========================================================================
+
+    @IsTest
+    static void testCellColspan() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:tbl><w:tblPr></w:tblPr>' +
+                '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="3"/></w:tcPr>' +
+                '<w:p><w:r><w:t>Spanning</w:t></w:r></w:p></w:tc></w:tr>' +
+                '</w:tbl>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('colspan="3"'), 'Should have colspan attribute');
+        }
+    }
+
+    // =========================================================================
+    // Image with URL path (not base64)
+    // =========================================================================
+
+    @IsTest
+    static void testImageWithRelativeUrl() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Map<String, String> images = new Map<String, String>{
+                'rIdUrl' => '/sfc/servlet.shepherd/version/download/068000000000001'
+            };
+
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:r><w:drawing>' +
+                '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">' +
+                '<wp:extent cx="1905000" cy="952500"/>' +
+                '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+                '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+                '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+                '<pic:blipFill><a:blip r:embed="rIdUrl" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></pic:blipFill>' +
+                '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml, images);
+            System.assert(html.contains('<img'), 'Should contain img tag');
+            System.assert(html.contains('/sfc/servlet.shepherd'), 'Should use relative URL directly');
+        }
+    }
+
+    // =========================================================================
+    // ListNumber style detection
+    // =========================================================================
+
+    @IsTest
+    static void testListNumberStyle() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:pStyle w:val="ListNumber"/></w:pPr>' +
+                '<w:r><w:t>Numbered Item</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('<ol>'), 'ListNumber should render as ordered list');
+            System.assert(html.contains('Numbered Item'), 'Should contain list text');
+        }
+    }
+
+    // =========================================================================
+    // Border style nil/none renders no border
+    // =========================================================================
+
+    @IsTest
+    static void testBorderNilRendersNoBorder() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:p><w:pPr><w:pBdr>' +
+                '<w:top w:val="nil"/>' +
+                '</w:pBdr></w:pPr>' +
+                '<w:r><w:t>NoBorder</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(!html.contains('border-top:'), 'nil border should not render');
+            System.assert(html.contains('NoBorder'), 'Should contain text');
+        }
+    }
 }

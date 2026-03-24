@@ -1,0 +1,4 @@
+engines:
+  flow:
+    disable_engine: false
+    python_command: /opt/homebrew/bin/python3.12

@@ -769,6 +769,7 @@ public with sharing class DocGenController {
      * Normalizes relative Salesforce image URLs to absolute URLs.
      * No HTTP callouts, no session IDs. Blob.toPdf() resolves these natively.
      */
+    @TestVisible
     private static String normalizeImageUrls(String html) {
         try {
             String baseUrl = URL.getOrgDomainUrl().toExternalForm();
@@ -1400,6 +1401,7 @@ public with sharing class DocGenController {
      * Determines the parent object for a child by checking its reference fields.
      * If a reference points to another known child object, returns that as the parent (grandchild case).
      */
+    @TestVisible
     private static String findParentObject(String childObjName, String baseObject, Map<String, String> childRelNameByObject) {
         SObjectType childSobjType = Schema.getGlobalDescribe().get(childObjName);
         if (childSobjType == null) { return baseObject; }
@@ -1409,7 +1411,8 @@ public with sharing class DocGenController {
             if (dfr.getType() != Schema.DisplayType.REFERENCE || dfr.getReferenceTo() == null) { continue; }
             for (Schema.SObjectType ref : dfr.getReferenceTo()) {
                 String refName = ref.getDescribe().getName();
-                if (childRelNameByObject.containsKey(refName) && refName != baseObject) {
+                // Ignore the child object itself as a potential parent (e.g., ReportsToId on Contact)
+                if (childRelNameByObject.containsKey(refName) && refName != baseObject && refName != childObjName) {
                     return refName;
                 }
             }
@@ -1421,6 +1424,7 @@ public with sharing class DocGenController {
      * Finds a junction relationship name for accessing a target object via the base object.
      * Checks known junctions first, then scans child relationships for a matching reference.
      */
+    @TestVisible
     private static String findJunctionRelationship(String baseObject, String childObjName, SObjectType objType) {
         Map<String, String> knownJunctions = new Map<String, String>{
             'Opportunity:Contact' => 'OpportunityContactRoles',
@@ -1448,6 +1452,7 @@ public with sharing class DocGenController {
     /**
      * Checks if a junction SObject has a reference field pointing to the target object.
      */
+    @TestVisible
     private static Boolean hasReferenceToObject(Schema.SObjectType junctionType, String targetObjectName) {
         for (Schema.SObjectField jf : junctionType.getDescribe().fields.getMap().values()) {
             Schema.DescribeFieldResult jdfr = jf.getDescribe();
@@ -1465,6 +1470,7 @@ public with sharing class DocGenController {
      * Resolves a field name on a parent object from a report column.
      * E.g., for Owner relationship with child field 'NAME', resolves to 'Name'.
      */
+    @TestVisible
     private static String resolveParentFieldName(String relName, String childFieldKey,
             String columnLabel, Map<String, SObjectField> baseFieldMap) {
         // Find the lookup field to get the referenced object
@@ -1511,10 +1517,12 @@ public with sharing class DocGenController {
      * Resolves a report type to its base Salesforce object.
      * Uses multiple strategies — works for ANY report type, not just hardcoded ones.
      */
+    @TestVisible
     private static String resolveReportBaseObject(String reportTypeName) {
         return resolveReportBaseObject(reportTypeName, null);
     }
 
+    @TestVisible
     private static String resolveReportBaseObject(String reportTypeName, String reportTypeLabel) {
         if (String.isBlank(reportTypeName)) { return null; }
         Map<String, Schema.SObjectType> globalDescribe = Schema.getGlobalDescribe();
@@ -1588,6 +1596,7 @@ public with sharing class DocGenController {
      *   2. Label-based matching (report label → field label → API name)
      *   3. Hardcoded mappings for common report columns
      */
+    @TestVisible
     private static String normalizeReportColumn(String columnKey, String columnLabel,
             Map<String, SObjectField> fieldMap, Map<String, String> labelToApiName,
             Map<String, String> properCaseMap) {
@@ -1658,6 +1667,7 @@ public with sharing class DocGenController {
     /**
      * Maps report filter operators to SOQL operators.
      */
+    @TestVisible
     private static String mapReportOperator(String reportOperator) {
         if (String.isBlank(reportOperator)) { return '='; }
 

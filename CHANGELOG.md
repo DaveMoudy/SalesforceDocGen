@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.7.0.2 — "Beacon"
+- **Query Sanitization Graceful Failure** — Invalid WHERE, ORDER BY, or LIMIT clauses in query configurations no longer fail the entire document generation. The engine now catches `DocGenException`, skips the problematic child relationship, and proceeds with the rest of the document.
+- **Improved Parent Object Detection** — Fixed a bug in `findParentObject` where child objects with self-referential lookups (e.g., `Contact.ReportsToId`) would incorrectly identify themselves as their own parent, causing infinite loops or query failures. The engine now correctly ignores the child object itself when searching for parents in the hierarchy.
+- **Code Quality Baseline** — Performed a full project scan with Salesforce Code Analyzer (including PMD, ESLint, and Retrace). Resolved all **Critical** and **High** severity violations.
+- **Enhanced Test Coverage** — Updated 10+ test cases to verify graceful sanitization failures and improved parent detection. 483/483 Apex tests passing (100%).
+- **E2E Validation** — 19/19 passing. Full end-to-end flow verified in a fresh scratch org.
+
 ## v2.6.0 — "Apollo+"
 - **Bulk Data Pre-Cache** — All record data queried in a single SOQL with an IN clause during batch `start()`, cached as a JSON ContentVersion on the Job record. Each `execute()` reads from cache instead of re-querying. Eliminates 500+ individual SOQL queries for V3 configs. Graceful fallback to per-record queries for V1/V2 or if cache exceeds 4MB.
 - **Template Static Cache** — Template metadata, file content, and pre-decomposed XML parts are cached statically across batch executions. First record queries the template; remaining records reuse it. Zero redundant template SOQL.

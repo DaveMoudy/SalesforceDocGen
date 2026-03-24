@@ -171,27 +171,32 @@ public with sharing class DocGenDataRetriever {
                 for (Object f : fields) fieldNames.add(String.valueOf(f));
 
                 String subquery = '(SELECT ' + String.join(fieldNames, ', ') + ' FROM ' + rel;
-                String w = sanitizeClause((String) child.get('where'), 'WHERE');
-                String o = sanitizeClause((String) child.get('orderBy'), 'ORDER BY');
-                String l = sanitizeClause((String) child.get('limit'), 'LIMIT');
-                if (String.isNotBlank(w)) {
-                    subquery += ' WHERE ' + w;
-                }
-                if (String.isNotBlank(o)) {
-                    subquery += ' ORDER BY ' + o;
-                }
-                if (String.isNotBlank(l)) {
-                    subquery += ' LIMIT ' + l;
-                }
-                subquery += ')';
-                selectParts.add(subquery);
+                try {
+                    String w = sanitizeClause((String) child.get('where'), 'WHERE');
+                    String o = sanitizeClause((String) child.get('orderBy'), 'ORDER BY');
+                    String l = sanitizeClause((String) child.get('limit'), 'LIMIT');
+                    if (String.isNotBlank(w)) {
+                        subquery += ' WHERE ' + w;
+                    }
+                    if (String.isNotBlank(o)) {
+                        subquery += ' ORDER BY ' + o;
+                    }
+                    if (String.isNotBlank(l)) {
+                        subquery += ' LIMIT ' + l;
+                    }
+                    subquery += ')';
+                    selectParts.add(subquery);
 
-                // Track for grandchild stitching (if nested children exist)
-                SubquerySpec spec = new SubquerySpec();
-                spec.relationshipName = rel;
-                resolveChildSchema(spec, baseObject);
-                spec.fieldsOnly = String.join(fieldNames, ', ');
-                childSpecs.add(spec);
+                    // Track for grandchild stitching (if nested children exist)
+                    SubquerySpec spec = new SubquerySpec();
+                    spec.relationshipName = rel;
+                    resolveChildSchema(spec, baseObject);
+                    spec.fieldsOnly = String.join(fieldNames, ', ');
+                    childSpecs.add(spec);
+                } catch (Exception e) {
+                    // Invalid subquery config — skip this subquery
+                    continue;
+                }
             }
         }
 
@@ -628,12 +633,12 @@ public with sharing class DocGenDataRetriever {
             String childQuery = 'SELECT ' + String.join(selectFields, ', ') +
                 ' FROM ' + String.escapeSingleQuotes(child.objectApiName) +
                 ' WHERE ' + String.escapeSingleQuotes(child.lookupField) + ' IN :parentIds';
-            if (String.isNotBlank(child.whereClause)) childQuery += ' AND ' + sanitizeClause(child.whereClause, 'WHERE');
-            if (String.isNotBlank(child.orderByClause)) childQuery += ' ORDER BY ' + sanitizeClause(child.orderByClause, 'ORDER BY');
-            if (String.isNotBlank(child.limitClause)) childQuery += ' LIMIT ' + sanitizeClause(child.limitClause, 'LIMIT');
-
             List<SObject> childResults;
             try {
+                if (String.isNotBlank(child.whereClause)) childQuery += ' AND ' + sanitizeClause(child.whereClause, 'WHERE');
+                if (String.isNotBlank(child.orderByClause)) childQuery += ' ORDER BY ' + sanitizeClause(child.orderByClause, 'ORDER BY');
+                if (String.isNotBlank(child.limitClause)) childQuery += ' LIMIT ' + sanitizeClause(child.limitClause, 'LIMIT');
+                
                 childResults = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - V3 child node fields from query config; clauses sanitized by sanitizeClause(); runs with USER_MODE
             } catch (Exception e) {
                 // Child query failed — skip this child relationship
@@ -740,12 +745,13 @@ public with sharing class DocGenDataRetriever {
             String childQuery = 'SELECT ' + String.join(selectFields, ', ') +
                 ' FROM ' + String.escapeSingleQuotes(child.objectApiName) +
                 ' WHERE ' + String.escapeSingleQuotes(child.lookupField) + ' IN :parentIds';
-            if (String.isNotBlank(child.whereClause)) childQuery += ' AND ' + sanitizeClause(child.whereClause, 'WHERE');
-            if (String.isNotBlank(child.orderByClause)) childQuery += ' ORDER BY ' + sanitizeClause(child.orderByClause, 'ORDER BY');
-            if (String.isNotBlank(child.limitClause)) childQuery += ' LIMIT ' + sanitizeClause(child.limitClause, 'LIMIT');
 
             List<SObject> childResults;
             try {
+                if (String.isNotBlank(child.whereClause)) childQuery += ' AND ' + sanitizeClause(child.whereClause, 'WHERE');
+                if (String.isNotBlank(child.orderByClause)) childQuery += ' ORDER BY ' + sanitizeClause(child.orderByClause, 'ORDER BY');
+                if (String.isNotBlank(child.limitClause)) childQuery += ' LIMIT ' + sanitizeClause(child.limitClause, 'LIMIT');
+                
                 childResults = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - V3 child node fields from query config; clauses sanitized; runs with USER_MODE
             } catch (Exception e) {
                 // Bulk child query failed — skip this child relationship

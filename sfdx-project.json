@@ -1,8 +1,8 @@
 {
   "packageDirectories": [
     {
-      "versionName": "Beacon — QR Code Fix, Code Quality, Sample Templates",
-      "versionNumber": "2.7.0.NEXT",
+      "versionName": "Beacon — 2.7.0.2 - Code Quality and Sanitization Fixes",
+      "versionNumber": "2.7.0.2",
       "path": "force-app",
       "default": true,
       "package": "Document Generation",
@@ -60,6 +60,7 @@
     "Document Generation@2.4.0-1": "04tdL000000RwBBQA0",
     "Document Generation@2.5.0-1": "04tdL000000RxFJQA0",
     "Document Generation@2.6.0-1": "04tdL000000RyT7QAK",
-    "Document Generation@2.7.0-1": "04tdL000000S1sPQAS"
+    "Document Generation@2.7.0-1": "04tdL000000S1sPQAS",
+    "Document Generation@2.7.0-2": "04tdL000000S2ZxQAK"
   }
 }
