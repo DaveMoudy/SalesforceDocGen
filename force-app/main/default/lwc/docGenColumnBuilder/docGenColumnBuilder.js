@@ -759,26 +759,33 @@ export default class DocGenColumnBuilder extends LightningElement {
                 const fields = result.childFields[relName];
 
                 if (relName.startsWith('__junction_')) {
-                    // Junction — same as before
+                    // Junction: create a child node for the junction object (e.g., OpportunityContactRole)
+                    // with target object fields as parent fields (e.g., Contact.FirstName)
                     const targetObjName = relName.replace('__junction_', '').split(':')[0];
-                    let junctionRel = '';
-                    let targetIdField = targetObjName + 'Id';
+                    let jInfo = null;
                     if (result.junctions) {
-                        const jInfo = result.junctions.find(j => j.targetObject === targetObjName);
-                        if (jInfo) {
-                            junctionRel = jInfo.junctionRel || '';
-                            targetIdField = jInfo.targetIdField || targetObjName + 'Id';
-                        }
+                        jInfo = result.junctions.find(j => j.targetObject === targetObjName);
                     }
-                    const junctionNode = this._createNode(targetObjName,
-                        targetObjName + (junctionRel ? ' (via ' + junctionRel + ')' : ' (linked)'),
-                        false, rootNode.id, null, null,
-                        { junctionRel, targetObject: targetObjName, targetIdField, targetFields: fields });
-                    getObjectFields({ objectName: targetObjName }).then(fieldData => {
+                    const junctionRel = jInfo ? (jInfo.junctionRel || '') : '';
+                    const junctionObjName = jInfo ? (jInfo.junctionObject || junctionRel.replace(/s$/, '')) : junctionRel.replace(/s$/, '');
+                    const baseLookupField = jInfo ? (jInfo.baseLookupField || result.baseObject + 'Id') : result.baseObject + 'Id';
+                    const targetRelName = jInfo ? (jInfo.targetRelName || targetObjName) : targetObjName;
+
+                    // Create node for the junction object as a regular child
+                    const junctionNode = this._createNode(junctionObjName,
+                        junctionObjName + ' (' + junctionRel + ')',
+                        false, rootNode.id, baseLookupField, junctionRel);
+
+                    // Convert target fields to parent fields: FirstName → Contact.FirstName
+                    junctionNode.parentGroups = [{
+                        relationshipName: targetRelName,
+                        fields: [...fields]
+                    }];
+
+                    getObjectFields({ objectName: junctionObjName }).then(fieldData => {
                         junctionNode.availableFields = fieldData;
                         junctionNode.filteredFields = fieldData.slice(0, 200);
-                        const valid = new Set(fieldData.map(f => f.value));
-                        junctionNode.selectedFields = fields.filter(f => valid.has(f));
+                        junctionNode.selectedFields = []; // No direct fields, only parent fields
                         this.treeNodes = [...this.treeNodes, junctionNode];
                         processRel(relIdx + 1);
                     }).catch(() => processRel(relIdx + 1));

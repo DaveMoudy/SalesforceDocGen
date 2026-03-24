@@ -1367,12 +1367,19 @@ public with sharing class DocGenController {
                 } else {
                     targetObj = remainder;
                 }
-                // Find the lookup field on the junction object that points to the target object
+                // Resolve junction object name, lookup fields, and target relationship name
                 String targetIdField = resolveJunctionTargetIdField(junctionRel, targetObj);
+                String junctionObjName = resolveJunctionObjectName(junctionRel);
+                String baseLookupField = resolveJunctionTargetIdField(junctionRel, baseObject);
+                // Find the relationship name from junction object to target (e.g., ContactId → Contact)
+                String targetRelName = resolveJunctionTargetRelName(junctionObjName, targetObj);
                 junctionInfo.add(new Map<String, String>{
                     'targetObject' => targetObj,
                     'junctionRel' => junctionRel,
+                    'junctionObject' => junctionObjName,
+                    'baseLookupField' => baseLookupField,
                     'targetIdField' => targetIdField,
+                    'targetRelName' => targetRelName != null ? targetRelName : targetObj,
                     'fields' => String.join(childFields.get(relName), ',')
                 });
             }
@@ -1499,6 +1506,42 @@ public with sharing class DocGenController {
             }
         }
         return targetObjectName + 'Id';
+    }
+
+    /**
+     * Resolves the junction SObject API name from the relationship name.
+     * E.g., OpportunityContactRoles → OpportunityContactRole.
+     */
+    private static String resolveJunctionObjectName(String junctionRelName) {
+        if (String.isBlank(junctionRelName)) return null;
+        for (String candidate : new List<String>{
+            junctionRelName.removeEnd('s'),
+            junctionRelName.removeEnd('es'),
+            junctionRelName
+        }) {
+            if (Schema.getGlobalDescribe().containsKey(candidate)) return candidate;
+        }
+        return junctionRelName.removeEnd('s');
+    }
+
+    /**
+     * Resolves the relationship name from a junction object to its target object.
+     * E.g., on OpportunityContactRole, the ContactId field has relationship name 'Contact'.
+     */
+    private static String resolveJunctionTargetRelName(String junctionObjName, String targetObjectName) {
+        if (String.isBlank(junctionObjName) || String.isBlank(targetObjectName)) return null;
+        SObjectType juncType = Schema.getGlobalDescribe().get(junctionObjName);
+        if (juncType == null) return null;
+        for (SObjectField sof : juncType.getDescribe().fields.getMap().values()) {
+            Schema.DescribeFieldResult dfr = sof.getDescribe();
+            if (dfr.getType() != Schema.DisplayType.REFERENCE || dfr.getReferenceTo() == null) continue;
+            for (Schema.SObjectType ref : dfr.getReferenceTo()) {
+                if (ref.getDescribe().getName() == targetObjectName && dfr.getRelationshipName() != null) {
+                    return dfr.getRelationshipName();
+                }
+            }
+        }
+        return null;
     }
 
     /**
