@@ -13,10 +13,10 @@ Generate PDFs, Word docs, Excel spreadsheets, and PowerPoint presentations from 
 ## Install
 
 ```bash
-sf package install --package 04tdL000000S3KkQAK --wait 10 --installation-key-bypass
+sf package install --package 04tdL000000S3arQAC --wait 10 --installation-key-bypass
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000S3KkQAK) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000S3KkQAK)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000S3arQAC) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000S3arQAC)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
