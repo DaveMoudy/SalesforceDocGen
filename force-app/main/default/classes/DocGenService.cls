@@ -811,7 +811,7 @@ public with sharing class DocGenService {
         }
 
         Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
-        String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, pdfImages);
+        String html = DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), pdfImages);
         lastRenderedHtml = html;
 
         // Blob.toPdf() with the Spring '26 Release Update resolves relative Salesforce
@@ -861,7 +861,7 @@ public with sharing class DocGenService {
             }
         }
 
-        return DocGenHtmlRenderer.convertToHtml(mr.documentXml, previewImages);
+        return DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), previewImages);
     }
 
     /**
@@ -913,7 +913,7 @@ public with sharing class DocGenService {
             }
         }
 
-        String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, mergedMap);
+        String html = DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), mergedMap);
 
         return new Map<String, Object>{
             'html' => html,
@@ -958,6 +958,30 @@ public with sharing class DocGenService {
     }
 
     /**
+     * Combines document XML with header/footer XML from processedXmlEntries.
+     * Headers are prepended and footers are appended so the HTML renderer
+     * processes all template content (not just the main body).
+     */
+    private static String combineXmlWithHeadersFooters(MergeResult mr) {
+        String combinedXml = mr.documentXml;
+        if (mr.processedXmlEntries != null) {
+            String headers = '';
+            String footers = '';
+            List<String> keys = new List<String>(mr.processedXmlEntries.keySet());
+            keys.sort();
+            for (String key : keys) {
+                if (key.startsWith('word/header')) {
+                    headers += mr.processedXmlEntries.get(key);
+                } else if (key.startsWith('word/footer')) {
+                    footers += mr.processedXmlEntries.get(key);
+                }
+            }
+            combinedXml = headers + combinedXml + footers;
+        }
+        return combinedXml;
+    }
+
+    /**
      * Generates the HTML for a single record without calling Blob.toPdf() or saving a file.
      * Used by bulk batch to accumulate HTML for all records, then render one merged PDF at the end.
      * Accepts optional pre-loaded record data to skip per-record SOQL.
@@ -972,26 +996,8 @@ public with sharing class DocGenService {
         }
         MergeResult mr = mergeTemplate(templateId, recordId, null, 'PDF');
 
-        // Combine document XML with headers and footers for HTML conversion
-        String combinedXml = mr.documentXml;
-        if (mr.processedXmlEntries != null) {
-            // Prepend headers, append footers
-            String headers = '';
-            String footers = '';
-            List<String> keys = new List<String>(mr.processedXmlEntries.keySet());
-            keys.sort();
-            for (String key : keys) {
-                if (key.startsWith('word/header')) {
-                    headers += mr.processedXmlEntries.get(key);
-                } else if (key.startsWith('word/footer')) {
-                    footers += mr.processedXmlEntries.get(key);
-                }
-            }
-            combinedXml = headers + combinedXml + footers;
-        }
-
         Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
-        return DocGenHtmlRenderer.convertToHtml(combinedXml, pdfImages);
+        return DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), pdfImages);
     }
 
     /**
