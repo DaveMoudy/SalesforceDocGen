@@ -600,7 +600,7 @@ public with sharing class DocGenService {
         }
 
         String relsXml = null;
-        List<String> additionalRelsXmls = new List<String>(); // header/footer rels
+        Map<String, String> additionalRelsXmls = new Map<String, String>(); // partPrefix → rels XML
         Map<String, Blob> mediaEntries = new Map<String, Blob>();
         Map<String, String> xmlEntries = new Map<String, String>();
 
@@ -624,7 +624,9 @@ public with sharing class DocGenService {
             } else if (templateType == 'Word' && name.startsWith('word/_rels/') &&
                        (name.contains('header') || name.contains('footer')) && name.endsWith('.rels')) {
                 // Header/footer relationship files contain image references
-                additionalRelsXmls.add(entryBlob.toString());
+                // Derive part prefix: word/_rels/header1.xml.rels → header1
+                String partPrefix = name.substringAfterLast('/').substringBefore('.xml.rels');
+                additionalRelsXmls.put(partPrefix, entryBlob.toString());
             } else if (name.startsWith(mediaPath)) {
                 mediaEntries.put(name, entryBlob);
             }
@@ -669,10 +671,11 @@ public with sharing class DocGenService {
             newCvs.add(xmlCv);
         }
 
-        // Save rels XML for image relId mapping during PDF generation
-        // Combine document rels with header/footer rels so all image relIds are resolvable
+        // Save rels XML for image relId mapping during PDF generation.
+        // Document rels stored as-is; header/footer rels stored separately so we can
+        // namespace their relIds (header1_rId1, footer1_rId1) to avoid collisions.
         String combinedRels = relsXml != null ? relsXml : '';
-        for (String hfRels : additionalRelsXmls) {
+        for (String hfRels : additionalRelsXmls.values()) {
             combinedRels += hfRels;
         }
         if (String.isNotBlank(combinedRels)) {
@@ -684,17 +687,23 @@ public with sharing class DocGenService {
             newCvs.add(relsCv);
         }
 
-        // Parse rels (document + header/footer) and save each image as a ContentVersion
+        // Parse rels and save each image as a ContentVersion.
+        // Header/footer images are saved with namespaced relIds (e.g. header1_rId1)
+        // to avoid collisions when different parts use the same relId for different images.
         if (!mediaEntries.isEmpty()) {
             String imgPrefix = 'docgen_tmpl_img_' + versionId + '_';
-            Set<String> savedRelIds = new Set<String>();
+            Set<String> savedKeys = new Set<String>();
 
-            // Collect all rels XML to parse: main document rels + header/footer rels
-            List<String> allRelsXmls = new List<String>();
-            if (relsXml != null) allRelsXmls.add(relsXml);
-            allRelsXmls.addAll(additionalRelsXmls);
+            // Build list of (partPrefix, relsXml) pairs: document gets empty prefix
+            List<List<String>> allRelsPairs = new List<List<String>>();
+            if (relsXml != null) allRelsPairs.add(new List<String>{'', relsXml});
+            for (String partPrefix : additionalRelsXmls.keySet()) {
+                allRelsPairs.add(new List<String>{partPrefix, additionalRelsXmls.get(partPrefix)});
+            }
 
-            for (String currentRels : allRelsXmls) {
+            for (List<String> pair : allRelsPairs) {
+                String partPrefix = pair[0];
+                String currentRels = pair[1];
                 Integer relCursor = 0;
                 while (relCursor < currentRels.length()) {
                     Integer relStart = currentRels.indexOf('<Relationship ', relCursor);
@@ -713,18 +722,20 @@ public with sharing class DocGenService {
                     if (relType != null && relType.contains('/image')) {
                         String relId = extractXmlAttrValue(relTag, 'Id');
                         String target = extractXmlAttrValue(relTag, 'Target');
-                        if (relId != null && target != null && target.startsWith('media/') && !savedRelIds.contains(relId)) {
+                        // Namespace the key: document images use bare relId, header/footer use prefix
+                        String saveKey = String.isNotBlank(partPrefix) ? partPrefix + '_' + relId : relId;
+                        if (relId != null && target != null && target.startsWith('media/') && !savedKeys.contains(saveKey)) {
                             String fullPath = mediaPath + target.substringAfter('media/');
                             Blob imgBlob = mediaEntries.get(fullPath);
                             if (imgBlob != null) {
                                 String ext = target.substringAfterLast('.');
                                 ContentVersion cv = new ContentVersion();
-                                cv.Title = imgPrefix + relId;
-                                cv.PathOnClient = imgPrefix + relId + '.' + ext;
+                                cv.Title = imgPrefix + saveKey;
+                                cv.PathOnClient = imgPrefix + saveKey + '.' + ext;
                                 cv.VersionData = imgBlob;
                                 cv.FirstPublishLocationId = versionId;
                                 newCvs.add(cv);
-                                savedRelIds.add(relId);
+                                savedKeys.add(saveKey);
                             }
                         }
                     }
@@ -961,6 +972,10 @@ public with sharing class DocGenService {
      * Combines document XML with header/footer XML from processedXmlEntries.
      * Headers are prepended and footers are appended so the HTML renderer
      * processes all template content (not just the main body).
+     *
+     * Image relIds in header/footer XML are rewritten to be globally unique
+     * (e.g. rId1 → header1_rId1) so they don't collide with document or
+     * other part relIds when resolved against the flat image map.
      */
     private static String combineXmlWithHeadersFooters(MergeResult mr) {
         String combinedXml = mr.documentXml;
@@ -970,15 +985,43 @@ public with sharing class DocGenService {
             List<String> keys = new List<String>(mr.processedXmlEntries.keySet());
             keys.sort();
             for (String key : keys) {
-                if (key.startsWith('word/header')) {
-                    headers += mr.processedXmlEntries.get(key);
-                } else if (key.startsWith('word/footer')) {
-                    footers += mr.processedXmlEntries.get(key);
+                if (key.startsWith('word/header') || key.startsWith('word/footer')) {
+                    // Derive part prefix: word/header1.xml → header1
+                    String partPrefix = key.substringAfterLast('/').substringBefore('.xml');
+                    String partXml = namespaceImageRelIds(mr.processedXmlEntries.get(key), partPrefix);
+                    if (key.startsWith('word/header')) {
+                        headers += partXml;
+                    } else {
+                        footers += partXml;
+                    }
                 }
             }
             combinedXml = headers + combinedXml + footers;
         }
         return combinedXml;
+    }
+
+    /**
+     * Rewrites r:embed="rIdX" attributes in XML to r:embed="prefix_rIdX"
+     * so that image relIds from different parts (headers, footers) don't collide.
+     */
+    private static String namespaceImageRelIds(String xml, String partPrefix) {
+        // Find all r:embed="..." attributes and prefix the relId values
+        String result = xml;
+        Integer cursor = 0;
+        String searchToken = 'r:embed="';
+        while (cursor < result.length()) {
+            Integer embedStart = result.indexOf(searchToken, cursor);
+            if (embedStart == -1) break;
+            Integer valStart = embedStart + searchToken.length();
+            Integer valEnd = result.indexOf('"', valStart);
+            if (valEnd == -1) break;
+            String relId = result.substring(valStart, valEnd);
+            String newRelId = partPrefix + '_' + relId;
+            result = result.substring(0, valStart) + newRelId + result.substring(valEnd);
+            cursor = valStart + newRelId.length() + 1;
+        }
+        return result;
     }
 
     /**
