@@ -1,0 +1,80 @@
+<template>
+    <lightning-card title="Package Install Tracker" icon-name="standard:dashboard">
+        <div slot="actions">
+            <lightning-button-icon icon-name="utility:refresh" alternative-text="Refresh" onclick={handleRefresh}></lightning-button-icon>
+        </div>
+
+        <div class="slds-p-horizontal_medium slds-p-bottom_medium">
+            <!-- Package Filter -->
+            <div class="slds-m-bottom_medium">
+                <lightning-combobox
+                    label="Package"
+                    value={selectedPackageId}
+                    options={packageOptions}
+                    onchange={handlePackageChange}
+                    variant="label-hidden"
+                    placeholder="Select a package">
+                </lightning-combobox>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="slds-grid slds-gutters slds-m-bottom_medium">
+                <div class="slds-col slds-size_1-of-5">
+                    <div class="slds-box slds-box_small slds-text-align_center">
+                        <p class="slds-text-title_caps slds-text-color_weak">Total</p>
+                        <p class="slds-text-heading_large">{totalInstalls}</p>
+                    </div>
+                </div>
+                <div class="slds-col slds-size_1-of-5">
+                    <div class="slds-box slds-box_small slds-text-align_center">
+                        <p class="slds-text-title_caps slds-text-color_weak">Active</p>
+                        <p class="slds-text-heading_large slds-text-color_success">{activeInstalls}</p>
+                    </div>
+                </div>
+                <div class="slds-col slds-size_1-of-5">
+                    <div class="slds-box slds-box_small slds-text-align_center">
+                        <p class="slds-text-title_caps slds-text-color_weak">Production</p>
+                        <p class="slds-text-heading_large">{productionInstalls}</p>
+                    </div>
+                </div>
+                <div class="slds-col slds-size_1-of-5">
+                    <div class="slds-box slds-box_small slds-text-align_center">
+                        <p class="slds-text-title_caps slds-text-color_weak">Sandbox</p>
+                        <p class="slds-text-heading_large">{sandboxInstalls}</p>
+                    </div>
+                </div>
+                <div class="slds-col slds-size_1-of-5">
+                    <div class="slds-box slds-box_small slds-text-align_center">
+                        <p class="slds-text-title_caps slds-text-color_weak">Uninstalled</p>
+                        <p class="slds-text-heading_large slds-text-color_weak">{uninstalled}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <template if:true={isLoading}>
+                <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+            </template>
+
+            <template if:true={hasSubscribers}>
+                <lightning-datatable
+                    key-field="id"
+                    data={subscribers}
+                    columns={columns}
+                    sorted-by={sortBy}
+                    sorted-direction={sortDirection}
+                    onsort={handleSort}
+                    hide-checkbox-column>
+                </lightning-datatable>
+            </template>
+
+            <template if:false={hasSubscribers}>
+                <template if:false={isLoading}>
+                    <div class="slds-illustration slds-illustration_small slds-p-vertical_large slds-text-align_center">
+                        <p class="slds-text-color_weak slds-text-body_regular">No installs yet. Share your install link to get started.</p>
+                    </div>
+                </template>
+            </template>
+        </div>
+    </lightning-card>
+</template>

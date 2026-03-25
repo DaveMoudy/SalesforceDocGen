@@ -6,6 +6,8 @@ import getChildRelationships from '@salesforce/apex/DocGenController.getChildRel
 import getParentRelationships from '@salesforce/apex/DocGenController.getParentRelationships';
 import getAvailableReports from '@salesforce/apex/DocGenController.getAvailableReports';
 import importReportConfig from '@salesforce/apex/DocGenController.importReportConfig';
+import searchDataProviders from '@salesforce/apex/DocGenController.searchDataProviders';
+import validateDataProvider from '@salesforce/apex/DocGenController.validateDataProvider';
 
 let _nodeId = 0;
 function nextNodeId() { return 'n' + (_nodeId++); }
@@ -38,6 +40,15 @@ export default class DocGenColumnBuilder extends LightningElement {
     @track objectSearchTerm = '';
     @track selectedObjectLabel = '';
 
+    // === APEX DATA PROVIDER (V4) ===
+    @track isApexProviderMode = false;
+    @track providerSearchTerm = '';
+    @track providerOptions = [];
+    @track selectedProvider = '';
+    @track providerFields = [];
+    @track isValidatingProvider = false;
+    @track showProviderPicker = false;
+
     // Add node
     @track showAddNodeModal = false;
     @track addNodeChildOptions = [];
@@ -68,7 +79,7 @@ export default class DocGenColumnBuilder extends LightningElement {
     get hasNodes() { return this.treeNodes.length > 0; }
     get rootNode() { return this.treeNodes.find(n => !n.parentNodeId); }
     get activeNode() { return this.treeNodes.find(n => n.id === this.activeNodeId); }
-    get showObjectSelector() { return !this.hasNodes; }
+    get showObjectSelector() { return !this.hasNodes && !this.isProviderConnected; }
 
     get filteredObjectOptions() {
         const term = (this.objectSearchTerm || '').toLowerCase();
@@ -437,7 +448,85 @@ export default class DocGenColumnBuilder extends LightningElement {
         this.selectedObject = '';
         this.selectedObjectLabel = '';
         this.objectSearchTerm = '';
+        this.isApexProviderMode = false;
+        this.selectedProvider = '';
+        this.providerFields = [];
         this._notifyChange();
+    }
+
+    // === APEX DATA PROVIDER (V4) ===
+    handleToggleApexProvider(event) {
+        this.isApexProviderMode = event.target.checked;
+        if (!this.isApexProviderMode) {
+            this.selectedProvider = '';
+            this.providerFields = [];
+            this.providerOptions = [];
+        }
+    }
+
+    handleProviderSearch(event) {
+        this.providerSearchTerm = event.target.value;
+        if (this.providerSearchTerm.length >= 2) {
+            this.showProviderPicker = true;
+            searchDataProviders({ searchTerm: this.providerSearchTerm })
+                .then(data => {
+                    this.providerOptions = data || [];
+                })
+                .catch(() => { this.providerOptions = []; });
+        } else {
+            this.showProviderPicker = false;
+            this.providerOptions = [];
+        }
+    }
+
+    handleProviderSelect(event) {
+        const className = event.currentTarget.dataset.value;
+        this.selectedProvider = className;
+        this.providerSearchTerm = className;
+        this.showProviderPicker = false;
+        this.isValidatingProvider = true;
+
+        validateDataProvider({ className })
+            .then(result => {
+                this.isValidatingProvider = false;
+                if (result.valid) {
+                    this.providerFields = result.fields || [];
+                    // Emit V4 config
+                    const config = JSON.stringify({ v: 4, provider: className });
+                    this._lastEmittedConfig = config;
+                    this.dispatchEvent(new CustomEvent('configchange', {
+                        detail: { objectName: 'ApexProvider', queryConfig: config }
+                    }));
+                    this.dispatchEvent(new ShowToastEvent({
+                        title: 'Provider Connected',
+                        message: className + ' — ' + this.providerFields.length + ' fields available',
+                        variant: 'success'
+                    }));
+                } else {
+                    this.providerFields = [];
+                    this.dispatchEvent(new ShowToastEvent({
+                        title: 'Invalid Provider',
+                        message: result.error,
+                        variant: 'error'
+                    }));
+                }
+            })
+            .catch(err => {
+                this.isValidatingProvider = false;
+                this.dispatchEvent(new ShowToastEvent({ title: 'Error', message: err.body?.message || err.message, variant: 'error' }));
+            });
+    }
+
+    get providerTags() {
+        return this.providerFields.map(f => ({ code: '{' + f + '}' }));
+    }
+
+    get hasProviderFields() {
+        return this.providerFields.length > 0;
+    }
+
+    get isProviderConnected() {
+        return this.selectedProvider && this.providerFields.length > 0;
     }
 
     // === NODE MANAGEMENT ===
@@ -880,7 +969,10 @@ export default class DocGenColumnBuilder extends LightningElement {
             try {
                 const config = JSON.parse(trimmed);
                 const version = config.v || 2;
-                if (version >= 3 && config.nodes) {
+                if (version === 4 && config.provider) {
+                    this._parseV4Config(config);
+                    return;
+                } else if (version >= 3 && config.nodes) {
                     this._parseV3Config(config);
                 } else if (version === 2 && config.baseObject) {
                     this._parseV2Config(config);
@@ -982,6 +1074,20 @@ export default class DocGenColumnBuilder extends LightningElement {
         if (config.bulkWhereClause) {
             this.savedReportFilters = config.bulkWhereClause;
         }
+    }
+
+    _parseV4Config(config) {
+        this.isApexProviderMode = true;
+        this.selectedProvider = config.provider;
+        this.providerSearchTerm = config.provider;
+        // Validate and load fields
+        validateDataProvider({ className: config.provider })
+            .then(result => {
+                if (result.valid) {
+                    this.providerFields = result.fields || [];
+                }
+            })
+            .catch(() => {});
     }
 
     _parseV3Config(config) {

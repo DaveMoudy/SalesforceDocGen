@@ -1,8 +1,8 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.0.4 — Namespace Release",
-      "versionNumber": "1.0.4.NEXT",
+      "versionName": "1.0.5 — Flow Actions & Data Provider",
+      "versionNumber": "1.0.5.NEXT",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen",
@@ -22,6 +22,7 @@
     "Portwood DocGen@1.0.1-1": "04tal000006P9W5AAK",
     "Portwood DocGen@1.0.2-1": "04tal000006P9r3AAC",
     "Portwood DocGen@1.0.3-1": "04tal000006P9sfAAC",
-    "Portwood DocGen@1.0.4-1": "04tal000006P9z7AAC"
+    "Portwood DocGen@1.0.4-1": "04tal000006P9z7AAC",
+    "Portwood DocGen@1.0.5-1": "04tal000006PA7BAAW"
   }
 }

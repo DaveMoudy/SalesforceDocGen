@@ -548,6 +548,80 @@ public with sharing class DocGenController {
     }
 
     /**
+     * Searches for Apex classes that implement DocGenDataProvider.
+     * @param searchTerm Optional search term to filter class names
+     * @return List of class names that implement the interface
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<String> searchDataProviders(String searchTerm) {
+        List<String> providers = new List<String>();
+        String query = 'SELECT Name FROM ApexClass WHERE NamespacePrefix = null';
+        if (String.isNotBlank(searchTerm)) {
+            query += ' AND Name LIKE \'%' + String.escapeSingleQuotes(searchTerm) + '%\'';
+        }
+        query += ' ORDER BY Name LIMIT 50';
+
+        for (ApexClass cls : Database.query(query)) {
+            // Try to instantiate and check interface
+            Type t = Type.forName(cls.Name);
+            if (t != null) {
+                try {
+                    Object instance = t.newInstance();
+                    if (instance instanceof DocGenDataProvider) {
+                        providers.add(cls.Name);
+                    }
+                } catch (Exception e) {
+                    // Skip classes that can't be instantiated
+                }
+            }
+        }
+        return providers;
+    }
+
+    /**
+     * Validates an Apex class implements DocGenDataProvider and returns its field names.
+     * @param className The Apex class name to validate
+     * @return Map with 'valid' (Boolean), 'fields' (List<String>), and 'error' (String)
+     */
+    @AuraEnabled
+    public static Map<String, Object> validateDataProvider(String className) {
+        Map<String, Object> result = new Map<String, Object>();
+        if (String.isBlank(className)) {
+            result.put('valid', false);
+            result.put('error', 'Class name is required.');
+            return result;
+        }
+
+        Type providerType = Type.forName(className);
+        if (providerType == null) {
+            providerType = Type.forName('portwoodglobal', className);
+        }
+        if (providerType == null) {
+            result.put('valid', false);
+            result.put('error', 'Class "' + className + '" not found.');
+            return result;
+        }
+
+        try {
+            Object instance = providerType.newInstance();
+            if (!(instance instanceof DocGenDataProvider)) {
+                result.put('valid', false);
+                result.put('error', 'Class "' + className + '" does not implement DocGenDataProvider.');
+                return result;
+            }
+
+            DocGenDataProvider provider = (DocGenDataProvider) instance;
+            List<String> fields = provider.getFieldNames();
+            result.put('valid', true);
+            result.put('fields', fields != null ? fields : new List<String>());
+        } catch (Exception e) {
+            result.put('valid', false);
+            result.put('error', 'Error instantiating "' + className + '": ' + e.getMessage());
+        }
+        return result;
+    }
+
+    /**
      * Returns accessible fields for a given SObject type with label, API name, and type.
      * @param objectName The SObject API name
      * @return List of maps with 'label', 'value', and 'type' keys

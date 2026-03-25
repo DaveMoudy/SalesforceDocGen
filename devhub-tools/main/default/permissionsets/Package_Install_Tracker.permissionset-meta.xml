@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <classAccesses>
+        <apexClass>PackageInstallTracker</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <description>Access to the Package Install Tracker dashboard. Assign to DevHub admins.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <label>Package Install Tracker</label>
+    <tabSettings>
+        <tab>Package_Install_Tracker</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+</PermissionSet>

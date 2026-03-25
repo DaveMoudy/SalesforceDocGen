@@ -52,4 +52,13 @@ public interface DocGenDataProvider {
      * @return Map<String, Object> with field names as keys
      */
     Map<String, Object> getData(Id recordId);
+
+    /**
+     * Returns the list of merge tag names this provider supplies.
+     * Used by the query builder UI to display available tags.
+     * Use dot notation for parent lookups (e.g., 'Account.Name')
+     * and prefix child loops with '#' (e.g., '#LineItems', 'LineItems.Product', '/LineItems').
+     * @return List of field/tag names
+     */
+    List<String> getFieldNames();
 }

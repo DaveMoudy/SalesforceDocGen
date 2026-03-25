@@ -6,25 +6,95 @@
             <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-var-m-bottom_small">
                 <div>
                     <h3 style="font-size: 1.0625rem; font-weight: 700; margin: 0;">What kind of record is this document for?</h3>
-                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small">"Account" for a company overview, "Opportunity" for a proposal, "Contact" for a letter.</p>
+                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small">"Account" for a company overview, "Opportunity" for a proposal, or use a custom Apex class.</p>
                 </div>
-                <lightning-button label="Import from Report" variant="neutral" icon-name="utility:upload" onclick={handleOpenReportImport}></lightning-button>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <lightning-input type="toggle" label="Apex Provider" checked={isApexProviderMode} onchange={handleToggleApexProvider} message-toggle-active="Apex" message-toggle-inactive="Object" variant="label-hidden"></lightning-input>
+                    <template if:false={isApexProviderMode}>
+                        <lightning-button label="Import from Report" variant="neutral" icon-name="utility:upload" onclick={handleOpenReportImport}></lightning-button>
+                    </template>
+                </div>
             </div>
-            <div style="position: relative;">
-                <lightning-input type="search" label="Search for an object" placeholder="Type to search..." value={objectSearchTerm} onchange={handleObjectSearch} onfocus={handleObjectFocus}></lightning-input>
-                <template if:true={showObjectPicker}>
-                    <div class="slds-dropdown slds-dropdown_length-7 slds-dropdown_fluid" style="position: absolute; z-index: 100;">
-                        <ul class="slds-listbox slds-listbox_vertical">
-                            <template for:each={filteredObjectOptions} for:item="opt">
-                                <li key={opt.value} class="slds-listbox__item">
-                                    <div class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" data-value={opt.value} data-label={opt.label} onclick={handleObjectSelect}>
-                                        <span class="slds-truncate">{opt.label}</span>
-                                    </div>
-                                </li>
-                            </template>
-                        </ul>
-                    </div>
-                </template>
+
+            <!-- Standard Object Picker -->
+            <template if:false={isApexProviderMode}>
+                <div style="position: relative;">
+                    <lightning-input type="search" label="Search for an object" placeholder="Type to search..." value={objectSearchTerm} onchange={handleObjectSearch} onfocus={handleObjectFocus}></lightning-input>
+                    <template if:true={showObjectPicker}>
+                        <div class="slds-dropdown slds-dropdown_length-7 slds-dropdown_fluid" style="position: absolute; z-index: 100;">
+                            <ul class="slds-listbox slds-listbox_vertical">
+                                <template for:each={filteredObjectOptions} for:item="opt">
+                                    <li key={opt.value} class="slds-listbox__item">
+                                        <div class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" data-value={opt.value} data-label={opt.label} onclick={handleObjectSelect}>
+                                            <span class="slds-truncate">{opt.label}</span>
+                                        </div>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Apex Data Provider Picker -->
+            <template if:true={isApexProviderMode}>
+                <div style="position: relative;">
+                    <lightning-input type="search" label="Search for a Data Provider class" placeholder="Type to search Apex classes..." value={providerSearchTerm} onchange={handleProviderSearch}></lightning-input>
+                    <template if:true={showProviderPicker}>
+                        <div class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid" style="position: absolute; z-index: 100;">
+                            <ul class="slds-listbox slds-listbox_vertical">
+                                <template if:true={providerOptions.length}>
+                                    <template for:each={providerOptions} for:item="cls">
+                                        <li key={cls} class="slds-listbox__item">
+                                            <div class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" data-value={cls} onclick={handleProviderSelect}>
+                                                <span class="slds-truncate"><lightning-icon icon-name="utility:apex" size="x-small" class="slds-var-m-right_x-small"></lightning-icon>{cls}</span>
+                                            </div>
+                                        </li>
+                                    </template>
+                                </template>
+                                <template if:false={providerOptions.length}>
+                                    <li class="slds-listbox__item">
+                                        <div class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small">
+                                            <span class="slds-text-color_weak">No classes implementing DocGenDataProvider found</span>
+                                        </div>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                    </template>
+                    <template if:true={isValidatingProvider}>
+                        <div class="slds-var-m-top_small slds-is-relative" style="height: 30px;">
+                            <lightning-spinner alternative-text="Validating..." size="small"></lightning-spinner>
+                        </div>
+                    </template>
+                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">Create a class implementing <code>DocGenDataProvider</code> to supply custom data to your templates.</p>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <!-- ==================== APEX PROVIDER CONNECTED ==================== -->
+    <template if:true={isProviderConnected}>
+        <div class="slds-box slds-theme_default slds-var-p-around_medium" style="border-radius: 8px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                <div>
+                    <h3 style="font-size: 1rem; font-weight: 700; margin: 0;">
+                        <lightning-icon icon-name="utility:apex" size="x-small" class="slds-var-m-right_x-small"></lightning-icon>
+                        {selectedProvider}
+                    </h3>
+                    <p class="slds-text-body_small slds-text-color_weak">{providerFields.length} merge fields available</p>
+                </div>
+                <lightning-button label="Change Provider" variant="neutral" icon-name="utility:refresh" size="small" onclick={handleChangeRoot}></lightning-button>
+            </div>
+
+            <!-- Provider Merge Tags -->
+            <div style="border-top: 1px solid #e5e5e5; padding-top: 0.75rem;">
+                <p style="font-size: 0.75rem; font-weight: 600; color: #706e6b; margin-bottom: 0.5rem;">Merge tags for your template <span style="font-weight: 400;">(click to copy)</span></p>
+                <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                    <template for:each={providerTags} for:item="tag">
+                        <code key={tag.code} style="font-size: 0.75rem; background: #f3f2f2; padding: 2px 8px; border-radius: 4px; color: #0176d3; cursor: pointer;" data-copy={tag.code} onclick={handleCopyTag}>{tag.code}</code>
+                    </template>
+                </div>
             </div>
         </div>
     </template>
