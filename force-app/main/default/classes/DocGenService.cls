@@ -816,7 +816,21 @@ public with sharing class DocGenService {
         }
 
         Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
-        String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, pdfImages);
+
+        // Render header/footer XML separately for CSS @page positioning
+        String headerHtml = '';
+        String footerHtml = '';
+        if (mr.processedXmlEntries != null) {
+            for (String path : mr.processedXmlEntries.keySet()) {
+                if (path.startsWith('word/header')) {
+                    headerHtml = DocGenHtmlRenderer.convertToHtmlFragment(mr.processedXmlEntries.get(path), pdfImages);
+                } else if (path.startsWith('word/footer')) {
+                    footerHtml = DocGenHtmlRenderer.convertToHtmlFragment(mr.processedXmlEntries.get(path), pdfImages);
+                }
+            }
+        }
+
+        String html = DocGenHtmlRenderer.convertToHtmlWithHeaderFooter(mr.documentXml, pdfImages, headerHtml, footerHtml);
         lastRenderedHtml = html;
 
         // Blob.toPdf() with the Spring '26 Release Update resolves relative Salesforce
