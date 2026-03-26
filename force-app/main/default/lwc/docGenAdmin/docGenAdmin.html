@@ -175,23 +175,25 @@
                     <h2 class="slds-text-heading_medium slds-hyphenate">Edit Template Configuration</h2>
                 </header>
                 <div class="slds-modal__content slds-var-p-around_medium">
-                    <!-- Sample Record (persistent across all tabs) -->
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0.75rem; background: #f8fafc; border: 1px solid #e5e5e5; border-radius: 6px; margin-bottom: 0.75rem;">
-                        <lightning-icon icon-name="utility:record" size="x-small" alternative-text="Sample Record"></lightning-icon>
-                        <div style="flex: 1; min-width: 0;">
-                            <lightning-record-picker
-                                label="Sample Record"
-                                variant="label-hidden"
-                                object-api-name={editTemplateObject}
-                                value={editTemplateTestRecordId}
-                                onchange={handleEditTestRecordChange}
-                                placeholder="Set a sample record for previews...">
-                            </lightning-record-picker>
+                    <!-- Sample Record (persistent across all tabs) — hidden for Apex providers -->
+                    <template if:true={isRealObject}>
+                        <div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0.75rem; background: #f8fafc; border: 1px solid #e5e5e5; border-radius: 6px; margin-bottom: 0.75rem;">
+                            <lightning-icon icon-name="utility:record" size="x-small" alternative-text="Sample Record"></lightning-icon>
+                            <div style="flex: 1; min-width: 0;">
+                                <lightning-record-picker
+                                    label="Sample Record"
+                                    variant="label-hidden"
+                                    object-api-name={editTemplateObject}
+                                    value={editTemplateTestRecordId}
+                                    onchange={handleEditTestRecordChange}
+                                    placeholder="Set a sample record for previews...">
+                                </lightning-record-picker>
+                            </div>
+                            <template if:true={editTemplateTestRecordId}>
+                                <span class="slds-text-body_small slds-text-color_weak" style="white-space: nowrap;">ID: {editTemplateTestRecordId}</span>
+                            </template>
                         </div>
-                        <template if:true={editTemplateTestRecordId}>
-                            <span class="slds-text-body_small slds-text-color_weak" style="white-space: nowrap;">ID: {editTemplateTestRecordId}</span>
-                        </template>
-                    </div>
+                    </template>
 
                     <lightning-tabset variant="scoped" active-tab-value={activeEditTab}>
                         <!-- Tab 1: Settings -->

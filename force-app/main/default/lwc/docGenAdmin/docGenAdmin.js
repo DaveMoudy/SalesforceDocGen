@@ -892,6 +892,10 @@ const VERSION_COLUMNS = [
         return !this.editTemplateTestRecordId;
     }
 
+    get isRealObject() {
+        return this.editTemplateObject && this.editTemplateObject !== 'ApexProvider';
+    }
+
     async handleTestGenerate() {
         if (!this.editTemplateTestRecordId) {
             this.showToast('Warning', 'Please select a Test Record ID first.', 'warning');
