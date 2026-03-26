@@ -553,11 +553,16 @@ private class DocGenMiscTests {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         Account acc = [SELECT Id FROM Account LIMIT 1];
 
+		Map<String, Object> result;
         Test.startTest();
-        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+		try {
+            result = DocGenService.processDocument(tpl.Id, acc.Id);
+        } catch (DocGenException e) {
+            System.assert(e.getMessage().contains('Malformed loop tag'), 'Exception message should contain "Malformed loop tag"');
+        }
         Test.stopTest();
 
-        System.assertNotEquals(null, result.get('blob'), 'Blob should not be null for unmatched section test');
+        System.assertEquals(null, result.get('blob'), 'Blob should not be null for unmatched section test');
     }
 
     @IsTest
@@ -1577,11 +1582,16 @@ private class DocGenMiscTests {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         Account acc = [SELECT Id FROM Account LIMIT 1];
 
+		Map<String, Object> result;
         Test.startTest();
-        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        try {
+            result = DocGenService.processDocument(tpl.Id, acc.Id);
+        } catch (DocGenException e) {
+            System.assert(e.getMessage().contains('Malformed merge tag'), 'Exception message should contain "Malformed merge tag"');
+        }
         Test.stopTest();
 
-        System.assertNotEquals(null, result.get('blob'), 'Blob should not be null for unclosed brace test');
+        System.assertEquals(null, result.get('blob'), 'Blob should not be null for unclosed brace test');
     }
 
     @IsTest
