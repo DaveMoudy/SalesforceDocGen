@@ -1316,7 +1316,11 @@ public with sharing class DocGenService {
                         }
                     }
                     else {
-                        output += strVal.escapeXml();
+                        if (currentTemplateType == 'PowerPoint') {
+                            output += strVal.escapeXml();
+                        } else {
+                            output += escapeXmlPreservingDocxLineBreaks(strVal);
+                        }
                     }
                 }
                 cursor = tagClose + 1;
@@ -1360,6 +1364,26 @@ public with sharing class DocGenService {
         Integer withAttributesIndex = xml.lastIndexOf('<' + tagName + ' ', searchIndex);
         Integer bareTagIndex = xml.lastIndexOf('<' + tagName + '>', searchIndex);
         return Math.max(withAttributesIndex, bareTagIndex);
+    }
+
+    private static String escapeXmlPreservingDocxLineBreaks(String inputText) {
+        if (inputText == null) {
+            return '';
+        }
+        String normalizedText = inputText.replace('\r\n', '\n').replace('\r', '\n');
+        if (!normalizedText.contains('\n')) {
+            return normalizedText.escapeXml();
+        }
+        List<String> lineParts = normalizedText.split('\n');
+        String joinedText = '';
+        String lineBreakXml = '</w:t></w:r><w:r><w:br/></w:r><w:r><w:t xml:space="preserve">';
+        for (Integer partIndex = 0; partIndex < lineParts.size(); partIndex++) {
+            if (partIndex > 0) {
+                joinedText += lineBreakXml;
+            }
+            joinedText += lineParts[partIndex].escapeXml();
+        }
+        return joinedText;
     }
     
     private static Object resolveValue(Map<String, Object> data, String path) {
