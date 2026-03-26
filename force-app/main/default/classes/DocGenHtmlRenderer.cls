@@ -118,6 +118,77 @@ public with sharing class DocGenHtmlRenderer {
     }
 
     /**
+     * Converts DOCX XML to an HTML fragment (no html/head/body wrapper).
+     * Used for rendering header/footer content separately.
+     */
+    public static String convertToHtmlFragment(String xml, Map<String, String> images) {
+        if (String.isBlank(xml)) { return ''; }
+        if (images == null) { images = new Map<String, String>(); }
+        String bodyContent = extractBodyContent(xml);
+        if (String.isBlank(bodyContent)) {
+            bodyContent = xml;
+        }
+        return processBodyContent(bodyContent, images);
+    }
+
+    /**
+     * Converts DOCX XML to HTML with header/footer positioned via CSS running elements.
+     * Flying Saucer (Blob.toPdf engine) supports position:running() and @page margin boxes.
+     */
+    public static String convertToHtmlWithHeaderFooter(String documentXml, Map<String, String> images, String headerHtml, String footerHtml) {
+        if (String.isBlank(documentXml)) {
+            return HTML_PREFIX + HTML_SUFFIX;
+        }
+        if (images == null) { images = new Map<String, String>(); }
+
+        String bodyContent = extractBodyContent(documentXml);
+        String html = processBodyContent(bodyContent, images);
+
+        // Build CSS with fixed-position header/footer for Flying Saucer
+        String headerHeight = String.isNotBlank(headerHtml) ? '0.75in' : '0';
+        String footerHeight = String.isNotBlank(footerHtml) ? '0.75in' : '0';
+
+        String css = '@page { size: letter; margin: 1in; margin-top: ' + (String.isNotBlank(headerHtml) ? '1.75in' : '1in') + '; margin-bottom: ' + (String.isNotBlank(footerHtml) ? '1.75in' : '1in') + '; }';
+        css += 'body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.15; color: #000; }';
+        css += 'h1 { font-size: 20pt; font-weight: bold; margin: 0 0 6pt 0; }';
+        css += 'h2 { font-size: 16pt; font-weight: bold; margin: 0 0 4pt 0; }';
+        css += 'h3 { font-size: 14pt; font-weight: bold; margin: 0 0 4pt 0; }';
+        css += 'h4 { font-size: 12pt; font-weight: bold; margin: 0 0 4pt 0; }';
+        css += 'h5 { font-size: 11pt; font-weight: bold; margin: 0 0 4pt 0; }';
+        css += 'h6 { font-size: 10pt; font-weight: bold; margin: 0 0 4pt 0; }';
+        css += 'h1, h2, h3, h4, h5, h6 { page-break-after: avoid; }';
+        css += 'table { border-collapse: collapse; width: 100%; page-break-inside: auto; }';
+        css += 'tr { page-break-inside: avoid; page-break-after: auto; }';
+        css += 'td, th { padding: 4pt; vertical-align: top; }';
+        css += 'p { margin: 0 0 8pt 0; orphans: 2; widows: 2; page-break-inside: avoid; }';
+        css += 'img { max-width: 100%; }';
+        css += 'ul, ol { margin: 0 0 8pt 0; padding-left: 36pt; }';
+        css += 'li { margin: 0 0 2pt 0; page-break-inside: avoid; }';
+        css += 'hr { border: none; border-top: 1px solid #000; margin: 6pt 0; }';
+        css += 'sub { vertical-align: sub; font-size: 0.8em; }';
+        css += 'sup { vertical-align: super; font-size: 0.8em; }';
+        css += '.docgen-header { border-bottom: 1px solid #ccc; padding-bottom: 6pt; margin-bottom: 12pt; font-size: 9pt; }';
+        css += '.docgen-footer { border-top: 1px solid #ccc; padding-top: 6pt; margin-top: 12pt; font-size: 9pt; }';
+        css += '.docgen-header table, .docgen-footer table { border-collapse: collapse; width: 100%; }';
+        css += '.docgen-header td, .docgen-footer td { padding: 2pt; vertical-align: middle; }';
+
+        String result = '<html><head><style>' + css + '</style></head><body>';
+
+        if (String.isNotBlank(headerHtml)) {
+            result += '<div class="docgen-header">' + headerHtml + '</div>';
+        }
+
+        result += html;
+
+        if (String.isNotBlank(footerHtml)) {
+            result += '<div class="docgen-footer">' + footerHtml + '</div>';
+        }
+
+        result += HTML_SUFFIX;
+        return result;
+    }
+
+    /**
      * Extracts content from <w:hdr>, <w:body>, and <w:ftr> tags.
      */
     private static String extractBodyContent(String xml) {
