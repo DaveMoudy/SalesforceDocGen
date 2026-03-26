@@ -2713,8 +2713,8 @@ public with sharing class DocGenService {
                         Visibility = 'AllUsers'
                     );
                     insert cdl; // NOPMD ApexCRUDViolation - linking generated document to source record
-                } catch (DmlException linkErr) { // NOPMD EmptyCatchBlock - some objects (e.g. Pricebook2) don't support ContentDocumentLink
-                    // Object doesn't support file linking — file saved to user's library instead
+                } catch (DmlException linkErr) {
+                    System.debug(LoggingLevel.WARN, 'Could not link file to record ' + recordId + ' — object may not support ContentDocumentLink: ' + linkErr.getMessage());
                 }
                 return docId;
             }
