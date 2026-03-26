@@ -40,10 +40,12 @@ At PDF generation time, `buildPdfImageMap()` queries for these pre-committed CVs
 
 ## Package Info
 
-- Package type: Unlocked 2GP (no namespace)
-- DevHub: `namespace-org` (davemoudy398@agentforce.com)
-- Default target org: `DevOrg - 398`
-- Namespace `docgensig` is registered on `DocGen - DevOrg` but linking to DevHub is blocked (OAuth redirect_uri_mismatch)
+- Package type: Unlocked 2GP with namespace `portwoodglobal`
+- Package name: Portwood DocGen
+- DevHub: `Portwood Global - Production` (dave@portwoodglobalsolutions.com)
+- Dev scratch org: `docgen-test-ux`
+- Demo scratch org: `docgen-demo-v2`
+- Website: https://portwoodglobalsolutions.com
 
 ## Key Architecture
 
@@ -107,13 +109,11 @@ Custom fonts **cannot** be loaded into the PDF engine. CSS `@font-face` is not s
 ### DOCX output
 DOCX output preserves whatever fonts are in the template file. If users need custom fonts (branded typefaces, barcode fonts, decorative scripts), they should generate as DOCX. The fonts render correctly when opened in Word or any compatible viewer.
 
-## Scratch Org for Testing
+## Scratch Orgs
 
-- Alias: `docgen-stress` (expires ~2026-03-28)
-- Account: `001Ff00000MDKqsIAH` ("Stress Test Corp") — 500 Contacts, 1 Opportunity
-- Template: "Stress Test - Large PDF" — programmatic DOCX with `{%Description}` image + Contact loop with `{%Title}` images
-- Test image CV: `068Ff000006MHefIAG` (1.3MB PNG "Design") — stored in Account.Description and first 15 Contacts' Title field
-- Release Update enabled
+- **docgen-test-ux**: Development and testing scratch org
+- **docgen-demo-v2**: Public demo org (SSO via landing page, 30-day expiry)
+- Create new scratch orgs from `Portwood Global - Production` DevHub
 
 ## E2E Test Script
 

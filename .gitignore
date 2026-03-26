@@ -42,6 +42,20 @@ $RECYCLE.BIN/
 # Local environment variables
 .env
 
+# Code analyzer reports
+code-analyzer*.html
+code-analyzer*.csv
+code-analyzer*.json
+
+# Template samples (should not be in repo root)
+*.docx
+*.xlsx
+*.pptx
+*.pdf
+
+# Python scripts
+*.py
+
 # Python Salesforce Functions
 **/__pycache__/
 **/.venv/
