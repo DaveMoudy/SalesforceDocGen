@@ -7,7 +7,7 @@ public with sharing class DocGenTemplateManager {
      */
     public static String getTemplateFileContent(Id templateId) {
         if (templateId == null) {
-             throw new AuraHandledException('Template ID is required.');
+             throw DocGenService.ahe('Template ID is required.');
         }
 
         // 1. Check for Active Version first
@@ -54,7 +54,7 @@ public with sharing class DocGenTemplateManager {
         }
 
         if (targetCvId == null) {
-            throw new AuraHandledException('No template file found (active or attached).');
+            throw DocGenService.ahe('No template file found (active or attached).');
         }
 
         // Get the specific ContentVersion
@@ -67,7 +67,7 @@ public with sharing class DocGenTemplateManager {
         ];
 
         if (cvs.isEmpty()) {
-            throw new AuraHandledException('ContentVersion not found.');
+            throw DocGenService.ahe('ContentVersion not found.');
         }
 
         return EncodingUtil.base64Encode(cvs[0].VersionData);

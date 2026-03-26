@@ -171,7 +171,7 @@ public with sharing class DocGenController {
                 'templateType' => result.get('templateType')
             };
         } catch (Exception e) {
-            throw new AuraHandledException('Error generating document. Please check the template configuration.');
+            throw DocGenService.ahe('Error generating document. Please check the template configuration.');
         }
     }
 
@@ -188,7 +188,7 @@ public with sharing class DocGenController {
         try {
             return DocGenService.generateDocumentParts(templateId, recordId);
         } catch (Exception e) {
-            throw new AuraHandledException('Error generating document parts. Please check the template configuration.');
+            throw DocGenService.ahe('Error generating document parts. Please check the template configuration.');
         }
     }
 
@@ -364,7 +364,7 @@ public with sharing class DocGenController {
                 }
             }
         } catch (Exception e) {
-            throw new AuraHandledException('Error saving template. Please verify your inputs and permissions.');
+            throw DocGenService.ahe('Error saving template. Please verify your inputs and permissions.');
         }
     }
 
@@ -376,11 +376,11 @@ public with sharing class DocGenController {
     public static void deleteTemplate(Id templateId) {
         try {
             if (!Schema.sObjectType.DocGen_Template__c.isDeletable()) {
-                throw new AuraHandledException('Insufficient access.');
+                throw DocGenService.ahe('Insufficient access.');
             }
             delete new DocGen_Template__c(Id = templateId);
         } catch (Exception e) {
-            throw new AuraHandledException('Error deleting template. Please check your permissions.');
+            throw DocGenService.ahe('Error deleting template. Please check your permissions.');
         }
     }
 
@@ -479,7 +479,7 @@ public with sharing class DocGenController {
                 };
             }
         } catch (Exception e) {
-            throw new AuraHandledException('Error generating PDF document. Please check the template configuration.');
+            throw DocGenService.ahe('Error generating PDF document. Please check the template configuration.');
         }
     }
 
@@ -776,7 +776,7 @@ public with sharing class DocGenController {
             SObjectAccessDecision shareDecision = Security.stripInaccessible(AccessType.CREATABLE, new List<SObject>{ share });
             insert shareDecision.getRecords();
         } catch (DmlException e) {
-            throw new AuraHandledException('Error sharing template. Please check permissions.');
+            throw DocGenService.ahe(e);
         }
     }
 
@@ -788,11 +788,11 @@ public with sharing class DocGenController {
     public static void removeShare(Id shareId) {
         try {
             if (!Schema.sObjectType.DocGen_Template__c.isDeletable()) {
-                throw new AuraHandledException('Insufficient access.');
+                throw DocGenService.ahe('Insufficient access.');
             }
             delete new DocGen_Template__Share(Id = shareId); // NOPMD ApexCRUDViolation - isDeletable() checked above; package-internal share object
         } catch (DmlException e) {
-            throw new AuraHandledException('Error removing share. Please check permissions.');
+            throw DocGenService.ahe(e);
         }
     }
 
@@ -919,19 +919,19 @@ public with sharing class DocGenController {
     @AuraEnabled
     public static List<Map<String, Object>> getChildRecordPdfs(Id parentRecordId, String childObject, String lookupField, String filterClause) {
         if (parentRecordId == null || String.isBlank(childObject) || String.isBlank(lookupField)) {
-            throw new AuraHandledException('Parent record ID, child object, and lookup field are required.');
+            throw DocGenService.ahe('Parent record ID, child object, and lookup field are required.');
         }
 
         // Validate child object exists in schema
         SObjectType childType = Schema.getGlobalDescribe().get(childObject);
         if (childType == null) {
-            throw new AuraHandledException('Invalid child object: ' + childObject);
+            throw DocGenService.ahe('Invalid child object: ' + childObject);
         }
 
         // Validate lookup field exists on child object
         Map<String, SObjectField> fieldMap = childType.getDescribe().fields.getMap();
         if (!fieldMap.containsKey(lookupField.toLowerCase())) {
-            throw new AuraHandledException('Invalid lookup field: ' + lookupField);
+            throw DocGenService.ahe('Invalid lookup field: ' + lookupField);
         }
 
         // Determine display field — use Name if available, else Id
@@ -952,7 +952,7 @@ public with sharing class DocGenController {
         try {
             childRecords = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - object/field names validated against Schema.getGlobalDescribe(); runs with USER_MODE
         } catch (Exception e) {
-            throw new AuraHandledException('Error querying child records: ' + e.getMessage());
+            throw DocGenService.ahe('Error querying child records: ' + e.getMessage());
         }
 
         if (childRecords.isEmpty()) {
@@ -1042,7 +1042,7 @@ public with sharing class DocGenController {
     @AuraEnabled
     public static Map<String, Object> importReportConfig(Id reportId) {
         if (reportId == null) {
-            throw new AuraHandledException('Report ID is required.');
+            throw DocGenService.ahe('Report ID is required.');
         }
 
         Reports.ReportDescribeResult describe = Reports.ReportManager.describeReport(reportId);
@@ -1054,13 +1054,13 @@ public with sharing class DocGenController {
         String reportTypeLabel = metadata.getReportType().getLabel();
         String baseObject = resolveReportBaseObject(reportTypeName, reportTypeLabel);
         if (baseObject == null) {
-            throw new AuraHandledException('Could not determine the base object for this report. Report type: ' + reportTypeName);
+            throw DocGenService.ahe('Could not determine the base object for this report. Report type: ' + reportTypeName);
         }
 
         // Get the field map for normalization
         SObjectType objType = Schema.getGlobalDescribe().get(baseObject);
         if (objType == null) {
-            throw new AuraHandledException('Object not found: ' + baseObject);
+            throw DocGenService.ahe('Object not found: ' + baseObject);
         }
         Map<String, SObjectField> fieldMap = objType.getDescribe().fields.getMap();
 

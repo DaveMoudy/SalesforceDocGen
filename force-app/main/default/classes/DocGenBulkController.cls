@@ -20,7 +20,7 @@ public with sharing class DocGenBulkController {
         if (String.isBlank(objectName)) { return 0; }
         // Validate object name against Schema to prevent injection
         if (Schema.getGlobalDescribe().get(objectName) == null) {
-            throw new AuraHandledException('Invalid or inaccessible object.');
+            throw DocGenService.ahe('Invalid or inaccessible object.');
         }
         String sanitizedCondition = sanitizeCondition(condition);
         String query = 'SELECT Count() FROM ' + objectName;
@@ -40,7 +40,7 @@ public with sharing class DocGenBulkController {
         if (String.isBlank(condition)) { return condition; }
         // Reject dangerous characters (statement termination, comments)
         if (condition.contains(';') || condition.contains('--') || condition.contains('/*')) {
-            throw new AuraHandledException('Invalid filter condition.');
+            throw DocGenService.ahe('Invalid filter condition.');
         }
         // Normalize whitespace for keyword matching (tabs, newlines, multiple spaces → single space)
         String normalized = condition.replaceAll('\\s+', ' ').toUpperCase().trim();
@@ -52,7 +52,7 @@ public with sharing class DocGenBulkController {
         };
         for (String keyword : disallowed) {
             if (normalized.contains(keyword)) {
-                throw new AuraHandledException('Invalid filter condition.');
+                throw DocGenService.ahe('Invalid filter condition.');
             }
         }
         return condition;
@@ -312,7 +312,7 @@ public with sharing class DocGenBulkController {
 
             return job.Id;
         } catch (Exception e) {
-            throw new AuraHandledException('Error starting bulk generation job.');
+            throw DocGenService.ahe('Error starting bulk generation job.');
         }
     }
 
@@ -358,7 +358,7 @@ public with sharing class DocGenBulkController {
 
         String baseObject = job.Template__r.Base_Object_API__c;
         if (Schema.getGlobalDescribe().get(baseObject) == null) {
-            throw new AuraHandledException('Invalid base object on job template.');
+            throw DocGenService.ahe('Invalid base object on job template.');
         }
 
         // Query the same records the batch processed
@@ -435,7 +435,7 @@ public with sharing class DocGenBulkController {
             // Package-internal object — CRUD controlled by DocGen permission sets
             insert sq; // NOPMD ApexCRUDViolation - package-internal custom object; access controlled by DocGen permission sets
         } catch (Exception e) {
-            throw new AuraHandledException('Error saving query.');
+            throw DocGenService.ahe('Error saving query.');
         }
     }
 
@@ -447,11 +447,11 @@ public with sharing class DocGenBulkController {
     public static void deleteQuery(Id queryId) {
         try {
             if (!Schema.sObjectType.DocGen_Saved_Query__c.isDeletable()) {
-                throw new AuraHandledException('Insufficient access.');
+                throw DocGenService.ahe('Insufficient access.');
             }
             delete new DocGen_Saved_Query__c(Id = queryId);
         } catch (Exception e) {
-            throw new AuraHandledException('Error deleting query.');
+            throw DocGenService.ahe('Error deleting query.');
         }
     }
 }

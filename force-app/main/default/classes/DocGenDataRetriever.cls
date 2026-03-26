@@ -66,7 +66,7 @@ public with sharing class DocGenDataRetriever {
      */
     public static Map<String, Object> getRecordData(Id recordId, String baseObject, String fieldsConfig) {
         if (String.isBlank(baseObject) || String.isBlank(fieldsConfig) || recordId == null) {
-            throw new AuraHandledException('Invalid parameters for data retrieval.');
+            throw DocGenService.ahe('Invalid parameters for data retrieval.');
         }
 
         // JSON config: route by version
@@ -87,7 +87,7 @@ public with sharing class DocGenDataRetriever {
 
         SObjectType objType = Schema.getGlobalDescribe().get(baseObject);
         if (objType == null) {
-            throw new AuraHandledException('Invalid or inaccessible object.');
+            throw DocGenService.ahe('Invalid or inaccessible object.');
         }
         Map<String, SObjectField> fieldMap = objType.getDescribe().fields.getMap();
 
@@ -112,7 +112,7 @@ public with sharing class DocGenDataRetriever {
             }
             data = mapSObject(results[0]);
         } catch (Exception e) {
-            throw new AuraHandledException('Error executing query. Please verify your template configuration.');
+            throw DocGenService.ahe('Error executing query. Please verify your template configuration.');
         }
 
         // Stitch deeper levels (grandchildren, great-grandchildren)
@@ -260,7 +260,7 @@ public with sharing class DocGenDataRetriever {
             }
             data = mapSObject(results[0]);
         } catch (Exception e) {
-            throw new AuraHandledException('Error executing query. Please verify your template configuration.');
+            throw DocGenService.ahe('Error executing query. Please verify your template configuration.');
         }
 
         // Stitch junction targets (two-hop: junction record → target object)
@@ -397,7 +397,7 @@ public with sharing class DocGenDataRetriever {
 
         List<Object> nodesJson = (List<Object>) config.get('nodes');
         if (nodesJson == null || nodesJson.isEmpty()) {
-            throw new AuraHandledException('No query nodes defined.');
+            throw DocGenService.ahe('No query nodes defined.');
         }
 
         for (Object nodeObj : nodesJson) {
@@ -442,7 +442,7 @@ public with sharing class DocGenDataRetriever {
             }
         }
         if (root == null) {
-            throw new AuraHandledException('No root node found in query tree.');
+            throw DocGenService.ahe('No root node found in query tree.');
         }
 
         // Query root: SELECT fields, parentFields FROM object WHERE Id = :recordId
@@ -465,7 +465,7 @@ public with sharing class DocGenDataRetriever {
             }
             rootData = mapSObject(results[0]);
         } catch (Exception e) {
-            throw new AuraHandledException('Error querying root record: ' + e.getMessage());
+            throw DocGenService.ahe('Error querying root record: ' + e.getMessage());
         }
 
         // Walk the tree: process children of each node
@@ -490,7 +490,7 @@ public with sharing class DocGenDataRetriever {
 
         List<Object> nodesJson = (List<Object>) config.get('nodes');
         if (nodesJson == null || nodesJson.isEmpty()) {
-            throw new AuraHandledException('No query nodes defined.');
+            throw DocGenService.ahe('No query nodes defined.');
         }
 
         for (Object nodeObj : nodesJson) {
@@ -535,7 +535,7 @@ public with sharing class DocGenDataRetriever {
             }
         }
         if (root == null) {
-            throw new AuraHandledException('No root node found in query tree.');
+            throw DocGenService.ahe('No root node found in query tree.');
         }
 
         // Bulk root query: SELECT fields FROM object WHERE Id IN :recordIds
@@ -560,7 +560,7 @@ public with sharing class DocGenDataRetriever {
                 allData.put(rec.Id, mapSObject(rec));
             }
         } catch (Exception e) {
-            throw new AuraHandledException('Error bulk-querying records: ' + e.getMessage());
+            throw DocGenService.ahe('Error bulk-querying records: ' + e.getMessage());
         }
 
         // Walk the tree in bulk: process children for all root records at once

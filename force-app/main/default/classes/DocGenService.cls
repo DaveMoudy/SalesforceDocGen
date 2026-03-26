@@ -1111,8 +1111,10 @@ public with sharing class DocGenService {
             
             Integer tagClose = xml.indexOf('}', cursor);
             if (tagClose == -1) {
-                output += xml.substring(cursor);
-                break;
+                throw new DocGenException(
+                    'Malformed merge tag: missing closing "}" near position ' + cursor +
+                    '. Check for an unclosed tag in the template.'
+                );
             }
             
             String rawTag = xml.substring(cursor + 1, tagClose);
@@ -1127,8 +1129,9 @@ public with sharing class DocGenService {
                 String key = tagContent.substring(1).trim();
                 Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
                 if (sectionEnd == -1) {
-                    output += '{' + rawTag + '}';
-                    cursor = tagClose + 1;
+                    throw new DocGenException(
+                        'Malformed loop tag: missing closing "{/' + key + '}" for "{#' + key + '}".'
+                    );
                 } else {
                     // Default: Content between tags
                     Integer contentStart = tagClose + 1;
@@ -1179,7 +1182,15 @@ public with sharing class DocGenService {
                              // Backtrack output to remove the TR prefix already appended
                              Integer overlap = cursor - contentStart;
                              if (overlap > 0) {
-                                  output = output.substring(0, output.length() - overlap);
+                                Integer outputLength = output.length();
+                                if (overlap > outputLength) {
+                                    throw new DocGenException(
+                                        'Template loop parsing error for "{#' + key + '}": internal overlap (' + overlap +
+                                        ') exceeds output length (' + outputLength + '). ' +
+                                        'This usually indicates malformed or mismatched loop tags (missing "{/' + key + '}").'
+                                    );
+                                }
+                                output = output.substring(0, outputLength - overlap);
                              }
 
                              cursor = contentEnd;
@@ -2644,4 +2655,22 @@ public with sharing class DocGenService {
     public static Map<String, Object> mergeTemplateForSignature(Id templateId, String recordIdStr) {
         throw new DocGenException('Signatures have been removed from DocGen. Please delete the old signature classes from your org.');
     }
+
+	// Method to create an AuraHandledException with an Exception message
+	public static AuraHandledException ahe(Exception exc) {
+		if (exc instanceof AuraHandledException) {
+			return (AuraHandledException) exc;
+		}
+		System.debug(LoggingLevel.ERROR, 'AuraHandledException created from Exception type: ' + exc.getTypeName());
+		System.debug(LoggingLevel.ERROR, 'Message: ' + exc.getMessage());
+		System.debug(LoggingLevel.ERROR, 'StackTrace: ' + exc.getStackTraceString());
+		return ahe(exc.getMessage());
+	}
+	
+	// Method to create an AuraHandledException with a custom message
+	public static AuraHandledException ahe(String message) {
+		AuraHandledException ahe = new AuraHandledException(message);
+		ahe.setMessage(message);
+		return ahe;
+	}
 }
