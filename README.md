@@ -109,10 +109,22 @@ QR codes support up to **255 characters** — enough for a full Salesforce text 
 
 | Tag | What It Does |
 |-----|-------------|
-| `{%Logo__c:200x60}` | Insert image at 200x60px from ContentVersion ID |
-| `{%Photo__c}` | Insert image at default size (4" x 3") |
+| `{%Logo__c}` | Insert image at original size (from image metadata when available) |
+| `{%Logo__c:200x60}` | Fixed size: width 200px, height 60px |
+| `{%Logo__c:100%x}` | Fixed width: 100% of page content width, keep aspect ratio |
+| `{%Logo__c:x50%}` | Fixed height: 50% of page content height, keep aspect ratio |
+| `{%Logo__c:m100%x}` | Max width: shrink to fit page width, never upscale |
+| `{%Logo__c:xm50%}` | Max height: shrink to 50% page height, never upscale |
+| `{%Logo__c:m100%xm50%}` | Max width + max height constraints (shrink-to-fit) |
 
 Store a ContentVersion ID (starts with `068`) in a text field. Works in Word templates — PDF and DOCX output.
+
+Image size syntax is `:widthxheight` with optional tokens:
+
+- `300` or `300px` = pixels
+- `100%` = percentage of current page content area
+- `m` prefix = max constraint (shrink only, CSS-style max behavior)
+- blank side is allowed: `100%x`, `x100%`, `m100%x`, `xm50%`
 
 ### Rich Text Fields
 

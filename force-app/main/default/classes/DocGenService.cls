@@ -1230,28 +1230,12 @@ public with sharing class DocGenService {
                     cursor = tagClose + 1;
                     continue;
                 }
-                String imageSpec = tagContent.substring(1).trim();
-                String imageField = imageSpec;
-                Integer imgWidthPx = null;
-                Integer imgHeightPx = null;
-
-                // Parse optional size suffix :WxH (pixels)
-                if (imageSpec.contains(':')) {
-                    List<String> parts = imageSpec.split(':', 2);
-                    imageField = parts[0].trim();
-                    String sizeStr = parts[1].trim().toLowerCase();
-                    if (sizeStr.contains('x')) {
-                        List<String> dims = sizeStr.split('x');
-                        if (dims.size() == 2 && dims[0].isNumeric() && dims[1].isNumeric()) {
-                            imgWidthPx = Integer.valueOf(dims[0]);
-                            imgHeightPx = Integer.valueOf(dims[1]);
-                        }
-                    }
-                }
-
-                Object val = resolveValue(data, imageField);
+                String imageTagSpec = tagContent.substring(1).trim();
+                ImageRenderSpec imageRenderSpec = parseImageTagSpec(imageTagSpec);
+                Object val = resolveValue(data, imageRenderSpec.imageField);
                 if (val != null) {
-                    String imageXml = buildImageXml(String.valueOf(val), imgWidthPx, imgHeightPx);
+                    imageRenderSpec.fieldValue = String.valueOf(val);
+                    String imageXml = buildImageXml(imageRenderSpec);
                     if (imageXml != null) {
                         output += imageXml;
                     }
@@ -2059,126 +2043,169 @@ public with sharing class DocGenService {
         return tag.substring(pos, end2);
     }
 
+    private class ImageDimensionSpec {
+        Boolean isMaxConstraint;
+        Integer percentValue;
+        Integer pixelValue;
+    }
+
+    private class ImageRenderSpec {
+        String imageField;
+        String fieldValue;
+        String relationshipId;
+        String fileName;
+        String fileExtension;
+        String sourceUrl;
+        String contentVersionImageUrl;
+        Blob imageBlobData;
+
+        Integer widthPx;
+        Integer heightPx;
+        Integer widthPercent;
+        Integer heightPercent;
+        Integer maxWidthPx;
+        Integer maxHeightPx;
+        Integer maxWidthPercent;
+        Integer maxHeightPercent;
+    }
+
     private static String buildImageXml(String fieldValue) {
-        return buildImageXml(fieldValue, null, null);
+        ImageRenderSpec imageRenderSpec = new ImageRenderSpec();
+        imageRenderSpec.fieldValue = fieldValue;
+        return buildImageXml(imageRenderSpec);
     }
 
     private static String buildImageXml(String fieldValue, Integer widthPx, Integer heightPx) {
-        if (String.isBlank(fieldValue)) {
+        ImageRenderSpec imageRenderSpec = new ImageRenderSpec();
+        imageRenderSpec.fieldValue = fieldValue;
+        imageRenderSpec.widthPx = widthPx;
+        imageRenderSpec.heightPx = heightPx;
+        return buildImageXml(imageRenderSpec);
+    }
+
+    private static String buildImageXml(ImageRenderSpec imageRenderSpec) {
+        if (imageRenderSpec == null || String.isBlank(imageRenderSpec.fieldValue)) {
             return null;
         }
 
-        Blob imageBlob = null;
         String ext = 'png';
-        String cvImageUrl = null;
 
         try {
             // 1. Rich text HTML containing <img> tags
-            if (fieldValue.containsIgnoreCase('<img')) {
-                imageBlob = extractImageFromHtml(fieldValue);
+            if (imageRenderSpec.fieldValue.containsIgnoreCase('<img')) {
+                imageRenderSpec.imageBlobData = extractImageFromHtml(imageRenderSpec.fieldValue);
             }
             // 2. Base64 data URI
-            else if (fieldValue.startsWith('data:image/')) {
-                String base64Part = fieldValue.substringAfter(',');
-                if (fieldValue.containsIgnoreCase('jpeg') || fieldValue.containsIgnoreCase('jpg')) { ext = 'jpeg'; }
-                imageBlob = EncodingUtil.base64Decode(base64Part);
+            else if (imageRenderSpec.fieldValue.startsWith('data:image/')) {
+                String base64Part = imageRenderSpec.fieldValue.substringAfter(',');
+                if (imageRenderSpec.fieldValue.containsIgnoreCase('jpeg') || imageRenderSpec.fieldValue.containsIgnoreCase('jpg')) { ext = 'jpeg'; }
+                imageRenderSpec.imageBlobData = EncodingUtil.base64Decode(base64Part);
             }
             // 3. Raw base64 (no data URI prefix)
-            else if (fieldValue.length() > 100 && !fieldValue.contains('/') && !fieldValue.contains(' ')) {
-                imageBlob = EncodingUtil.base64Decode(fieldValue);
+            else if (imageRenderSpec.fieldValue.length() > 100 && !imageRenderSpec.fieldValue.contains('/') && !imageRenderSpec.fieldValue.contains(' ')) {
+                imageRenderSpec.imageBlobData = EncodingUtil.base64Decode(imageRenderSpec.fieldValue);
             }
             // 4. ContentVersion ID (starts with 068) — works for both DOCX (blob) and PDF (URL)
-            else if (fieldValue.startsWith('068') && fieldValue.length() >= 15) {
+            else if (imageRenderSpec.fieldValue.startsWith('068') && imageRenderSpec.fieldValue.length() >= 15) {
                 if (currentOutputFormat == 'PDF') {
                     // PDF path: only need the URL — Blob.toPdf() fetches images server-side.
                     // Skip loading the blob entirely to save heap.
-                    List<ContentVersion> cvs = [SELECT Id, FileExtension FROM ContentVersion WHERE Id = :fieldValue WITH SYSTEM_MODE LIMIT 1];
+                    List<ContentVersion> cvs = [SELECT Id, FileExtension FROM ContentVersion WHERE Id = :imageRenderSpec.fieldValue WITH SYSTEM_MODE LIMIT 1];
                     if (!cvs.isEmpty()) {
                         if (cvs[0].FileExtension != null) { ext = cvs[0].FileExtension.toLowerCase(); }
-                        cvImageUrl = '/sfc/servlet.shepherd/version/download/' + cvs[0].Id;
+                        imageRenderSpec.contentVersionImageUrl = '/sfc/servlet.shepherd/version/download/' + cvs[0].Id;
                     }
                 } else {
                     // DOCX path: need the blob for ZIP embedding
-                    List<ContentVersion> cvs = [SELECT Id, VersionData, FileExtension FROM ContentVersion WHERE Id = :fieldValue WITH SYSTEM_MODE LIMIT 1];
+                    List<ContentVersion> cvs = [SELECT Id, VersionData, FileExtension FROM ContentVersion WHERE Id = :imageRenderSpec.fieldValue WITH SYSTEM_MODE LIMIT 1];
                     if (!cvs.isEmpty()) {
-                        imageBlob = cvs[0].VersionData;
+                        imageRenderSpec.imageBlobData = cvs[0].VersionData;
                         if (cvs[0].FileExtension != null) { ext = cvs[0].FileExtension.toLowerCase(); }
-                        cvImageUrl = '/sfc/servlet.shepherd/version/download/' + cvs[0].Id;
+                        imageRenderSpec.contentVersionImageUrl = '/sfc/servlet.shepherd/version/download/' + cvs[0].Id;
                     }
                 }
             }
             // 5. Salesforce file URL containing refid (rich text image reference)
-            else if (fieldValue.containsIgnoreCase('refid=')) {
-                String refId = fieldValue.substringAfterLast('refid=').substringBefore('&');
-                if (String.isBlank(refId)) { refId = fieldValue.substringAfterLast('refid='); }
-                imageBlob = fetchSalesforceImage(refId);
+            else if (imageRenderSpec.fieldValue.containsIgnoreCase('refid=')) {
+                String refId = imageRenderSpec.fieldValue.substringAfterLast('refid=').substringBefore('&');
+                if (String.isBlank(refId)) { refId = imageRenderSpec.fieldValue.substringAfterLast('refid='); }
+                imageRenderSpec.imageBlobData = fetchSalesforceImage(refId);
             }
             // 6. Salesforce servlet/sfc URL
-            else if (fieldValue.containsIgnoreCase('/servlet/') || fieldValue.containsIgnoreCase('/sfc/')) {
-                String docId = fieldValue.substringAfterLast('/');
+            else if (imageRenderSpec.fieldValue.containsIgnoreCase('/servlet/') || imageRenderSpec.fieldValue.containsIgnoreCase('/sfc/')) {
+                String docId = imageRenderSpec.fieldValue.substringAfterLast('/');
                 if (docId.contains('?')) { docId = docId.substringBefore('?'); }
-                imageBlob = fetchSalesforceImage(docId);
+                imageRenderSpec.imageBlobData = fetchSalesforceImage(docId);
             }
             // 7. Generic HTTPS URL — can't fetch without session ID (AppExchange safe).
             // For {%ImageField} tags, users should use ContentVersion IDs or data URIs.
-            else if (fieldValue.startsWith('https://')) {
+            else if (imageRenderSpec.fieldValue.startsWith('https://')) {
                 // External URL images cannot be fetched without session ID — users should use ContentVersion IDs or data URIs
             }
 
             // If no blob but we have a URL, store it for PDF rendering
             // (Blob.toPdf resolves Salesforce URLs natively via the VF engine)
-            String sourceUrl = cvImageUrl; // Use CV URL if already resolved (PDF path)
-            if (imageBlob == null && sourceUrl == null) {
+            imageRenderSpec.sourceUrl = imageRenderSpec.contentVersionImageUrl; // Use CV URL if already resolved (PDF path)
+            if (imageRenderSpec.imageBlobData == null && imageRenderSpec.sourceUrl == null) {
                 // Try to extract a URL from the field value for PDF
-                if (fieldValue.containsIgnoreCase('<img')) {
+                if (imageRenderSpec.fieldValue.containsIgnoreCase('<img')) {
                     // HTML with img tag — extract src URL
-                    Integer sIdx = fieldValue.indexOfIgnoreCase('src=');
+                    Integer sIdx = imageRenderSpec.fieldValue.indexOfIgnoreCase('src=');
                     if (sIdx != -1) {
                         sIdx += 4;
-                        while (sIdx < fieldValue.length() && fieldValue.substring(sIdx, sIdx + 1) == ' ') { sIdx++; }
-                        String qc = fieldValue.substring(sIdx, sIdx + 1);
+                        while (sIdx < imageRenderSpec.fieldValue.length() && imageRenderSpec.fieldValue.substring(sIdx, sIdx + 1) == ' ') { sIdx++; }
+                        String qc = imageRenderSpec.fieldValue.substring(sIdx, sIdx + 1);
                         if (qc == '"' || qc == '\'') {
                             sIdx++;
-                            Integer sEnd = fieldValue.indexOf(qc, sIdx);
-                            if (sEnd != -1) { sourceUrl = fieldValue.substring(sIdx, sEnd).replace('&amp;', '&'); }
+                            Integer sEnd = imageRenderSpec.fieldValue.indexOf(qc, sIdx);
+                            if (sEnd != -1) { imageRenderSpec.sourceUrl = imageRenderSpec.fieldValue.substring(sIdx, sEnd).replace('&amp;', '&'); }
                         }
                     }
-                } else if (fieldValue.startsWithIgnoreCase('http') || fieldValue.startsWith('/')) {
-                    sourceUrl = fieldValue;
+                } else if (imageRenderSpec.fieldValue.startsWithIgnoreCase('http') || imageRenderSpec.fieldValue.startsWith('/')) {
+                    imageRenderSpec.sourceUrl = imageRenderSpec.fieldValue;
                 }
 
-                if (String.isBlank(sourceUrl) || sourceUrl.startsWith('data:')) {
+                if (String.isBlank(imageRenderSpec.sourceUrl) || imageRenderSpec.sourceUrl.startsWith('data:')) {
                     // Could not resolve image source — no blob or usable URL available
                     return null;
                 }
             }
 
             imageCounter++;
-            String relId = 'rIdImg' + imageCounter;
-            String fileName = 'docgen_image_' + imageCounter + '.' + ext;
+            imageRenderSpec.relationshipId = 'rIdImg' + imageCounter;
+            imageRenderSpec.fileName = 'docgen_image_' + imageCounter + '.' + ext;
+            imageRenderSpec.fileExtension = ext;
 
             // Register image — blob for DOCX, URL for PDF
             Map<String, Object> imgEntry = new Map<String, Object>{
-                'relId' => relId,
-                'fileName' => fileName
+                'relId' => imageRenderSpec.relationshipId,
+                'fileName' => imageRenderSpec.fileName
             };
-            if (imageBlob != null) {
-                imgEntry.put('blob', imageBlob);
+            if (imageRenderSpec.imageBlobData != null) {
+                imgEntry.put('blob', imageRenderSpec.imageBlobData);
             }
             // Prefer CV URL (committed, works for PDF), fall back to extracted source URL
-            if (cvImageUrl != null) {
-                imgEntry.put('url', cvImageUrl);
-            } else if (sourceUrl != null) {
-                imgEntry.put('url', sourceUrl);
+            if (imageRenderSpec.contentVersionImageUrl != null) {
+                imgEntry.put('url', imageRenderSpec.contentVersionImageUrl);
+            } else if (imageRenderSpec.sourceUrl != null) {
+                imgEntry.put('url', imageRenderSpec.sourceUrl);
             }
             pendingImages.add(imgEntry);
 
             // Use DrawingML format (<w:drawing>) for broad compatibility.
             // VML (<w:pict>) works in Word but docx-preview (used for client-side PDF) cannot render it.
             // DrawingML is the modern OOXML standard supported by Word, docx-preview, and Salesforce rendition API.
-            // EMU conversion: 1px at 96dpi = 9525 EMU, 1pt = 12700 EMU. Default: 4in x 3in
-            Integer widthEmu = (widthPx != null) ? (widthPx * 9525) : (288 * 12700);
-            Integer heightEmu = (heightPx != null) ? (heightPx * 9525) : (216 * 12700);
+            List<Integer> intrinsicSizeEmu = getImageDimensionsInEmu(imageRenderSpec.imageBlobData, imageRenderSpec.fileExtension);
+            Integer baseWidthEmu = (intrinsicSizeEmu != null && intrinsicSizeEmu.size() == 2) ? intrinsicSizeEmu[0] : (288 * 12700);
+            Integer baseHeightEmu = (intrinsicSizeEmu != null && intrinsicSizeEmu.size() == 2) ? intrinsicSizeEmu[1] : (216 * 12700);
+
+            Integer[] scaledDimensionsEmu = scaleImageDimensionsEmu(
+                baseWidthEmu,
+                baseHeightEmu,
+                imageRenderSpec
+            );
+            Integer widthEmu = scaledDimensionsEmu[0];
+            Integer heightEmu = scaledDimensionsEmu[1];
 
             return '</w:t></w:r>' +
                 '<w:r><w:drawing>' +
@@ -2194,7 +2221,7 @@ public with sharing class DocGenService {
                           '<pic:cNvPicPr/>' +
                         '</pic:nvPicPr>' +
                         '<pic:blipFill>' +
-                          '<a:blip r:embed="' + relId + '" ' +
+                          '<a:blip r:embed="' + imageRenderSpec.relationshipId + '" ' +
                             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>' +
                           '<a:stretch><a:fillRect/></a:stretch>' +
                         '</pic:blipFill>' +
@@ -2215,6 +2242,228 @@ public with sharing class DocGenService {
             // Image injection failed (invalid CV ID, corrupt base64, etc.) — skip this image
             return null;
         }
+    }
+
+    /**
+     * Parses a size token for image specs:
+     * - 300, 300px, 100%
+     * - m300, m300px, m100% (max constraints)
+     */
+    private static ImageRenderSpec parseImageTagSpec(String imageTagSpec) {
+        ImageRenderSpec imageRenderSpec = new ImageRenderSpec();
+        imageRenderSpec.imageField = imageTagSpec;
+        if (String.isBlank(imageTagSpec)) {
+            return imageRenderSpec;
+        }
+        if (!imageTagSpec.contains(':')) {
+            return imageRenderSpec;
+        }
+
+        List<String> tagParts = imageTagSpec.split(':', 2);
+        imageRenderSpec.imageField = tagParts[0].trim();
+        String sizeToken = tagParts[1].trim().toLowerCase();
+        if (!sizeToken.contains('x')) {
+            return imageRenderSpec;
+        }
+
+        Integer separatorIndex = sizeToken.indexOf('x');
+        if (separatorIndex < 0) {
+            return imageRenderSpec;
+        }
+        String widthToken = sizeToken.substring(0, separatorIndex).trim();
+        String heightToken = sizeToken.substring(separatorIndex + 1).trim();
+
+        ImageDimensionSpec widthSpec = parseImageDimensionSpec(widthToken);
+        ImageDimensionSpec heightSpec = parseImageDimensionSpec(heightToken);
+        if (widthSpec != null) {
+            if (widthSpec.isMaxConstraint) {
+                imageRenderSpec.maxWidthPx = widthSpec.pixelValue;
+                imageRenderSpec.maxWidthPercent = widthSpec.percentValue;
+            } else {
+                imageRenderSpec.widthPx = widthSpec.pixelValue;
+                imageRenderSpec.widthPercent = widthSpec.percentValue;
+            }
+        }
+        if (heightSpec != null) {
+            if (heightSpec.isMaxConstraint) {
+                imageRenderSpec.maxHeightPx = heightSpec.pixelValue;
+                imageRenderSpec.maxHeightPercent = heightSpec.percentValue;
+            } else {
+                imageRenderSpec.heightPx = heightSpec.pixelValue;
+                imageRenderSpec.heightPercent = heightSpec.percentValue;
+            }
+        }
+        return imageRenderSpec;
+    }
+
+    private static ImageDimensionSpec parseImageDimensionSpec(String rawDimensionToken) {
+        if (String.isBlank(rawDimensionToken)) {
+            return null;
+        }
+        String normalizedToken = rawDimensionToken.trim().toLowerCase();
+        Boolean isMaxConstraint = normalizedToken.startsWith('m');
+        if (isMaxConstraint) {
+            normalizedToken = normalizedToken.substring(1).trim();
+        }
+        if (String.isBlank(normalizedToken)) {
+            return null;
+        }
+
+        Integer percentValue = null;
+        Integer pixelValue = null;
+        if (normalizedToken.endsWith('%')) {
+            String numericPart = normalizedToken.substring(0, normalizedToken.length() - 1).trim();
+            if (numericPart.isNumeric()) {
+                percentValue = Integer.valueOf(numericPart);
+            }
+        } else if (normalizedToken.endsWith('px')) {
+            String numericPart = normalizedToken.substring(0, normalizedToken.length() - 2).trim();
+            if (numericPart.isNumeric()) {
+                pixelValue = Integer.valueOf(numericPart);
+            }
+        } else if (normalizedToken.isNumeric()) {
+            // Bare numbers are interpreted as pixels.
+            pixelValue = Integer.valueOf(normalizedToken);
+        }
+
+        if (percentValue == null && pixelValue == null) {
+            return null;
+        }
+        ImageDimensionSpec imageDimensionSpec = new ImageDimensionSpec();
+        imageDimensionSpec.isMaxConstraint = isMaxConstraint;
+        imageDimensionSpec.percentValue = percentValue;
+        imageDimensionSpec.pixelValue = pixelValue;
+        return imageDimensionSpec;
+    }
+
+    /** Parse hex string (e.g. "00A5") to Integer. */
+    private static Integer parseHexToInt(String hexStr) {
+        if (String.isBlank(hexStr)) {
+            return 0;
+        }
+        String hexChars = '0123456789ABCDEF';
+        Integer parsedValue = 0;
+        for (Integer positionIndex = 0; positionIndex < hexStr.length(); positionIndex++) {
+            Integer digitValue = hexChars.indexOf(hexStr.substring(positionIndex, positionIndex + 1).toUpperCase());
+            if (digitValue < 0) {
+                return 0;
+            }
+            parsedValue = (parsedValue * 16) + digitValue;
+        }
+        return parsedValue;
+    }
+
+    /** Read image dimensions from blob (JPEG or PNG header); return {cxEmu, cyEmu} or null. */
+    private static List<Integer> getImageDimensionsInEmu(Blob imageBlobValue, String fileExtension) {
+        if (imageBlobValue == null || imageBlobValue.size() < 24) {
+            return null;
+        }
+        String imageHex = EncodingUtil.convertToHex(imageBlobValue);
+        if (String.isBlank(imageHex) || imageHex.length() < 64) {
+            return null;
+        }
+        String imageHexUpper = imageHex.toUpperCase();
+        String extensionLower = fileExtension != null ? fileExtension.toLowerCase() : '';
+        Integer widthPx = null;
+        Integer heightPx = null;
+        try {
+            Boolean looksPng = extensionLower == 'png' || (imageHexUpper.length() >= 16 && imageHexUpper.substring(0, 16) == '89504E470D0A1A0A');
+            if (looksPng) {
+                Integer ihdrIndex = imageHexUpper.indexOf('49484452');
+                if (ihdrIndex >= 0 && ihdrIndex + 24 <= imageHexUpper.length()) {
+                    Integer pngWidth = parseHexToInt(imageHexUpper.substring(ihdrIndex + 8, ihdrIndex + 16));
+                    Integer pngHeight = parseHexToInt(imageHexUpper.substring(ihdrIndex + 16, ihdrIndex + 24));
+                    if (pngWidth > 0 && pngHeight > 0) {
+                        widthPx = pngWidth;
+                        heightPx = pngHeight;
+                    }
+                }
+            }
+            Boolean looksJpeg = extensionLower == 'jpg' || extensionLower == 'jpeg' || (imageHexUpper.length() >= 4 && imageHexUpper.substring(0, 4) == 'FFD8');
+            if ((widthPx == null || heightPx == null) && looksJpeg) {
+                Integer sofIndex = imageHexUpper.indexOf('FFC0');
+                if (sofIndex >= 0 && sofIndex + 18 <= imageHexUpper.length()) {
+                    heightPx = parseHexToInt(imageHexUpper.substring(sofIndex + 10, sofIndex + 14));
+                    widthPx = parseHexToInt(imageHexUpper.substring(sofIndex + 14, sofIndex + 18));
+                }
+            }
+            if (widthPx == null || heightPx == null || widthPx <= 0 || heightPx <= 0) {
+                return null;
+            }
+            Integer emuPerPixel = 9525;
+            return new List<Integer>{widthPx * emuPerPixel, heightPx * emuPerPixel};
+        } catch (Exception imageDimensionException) {
+            return null;
+        }
+    }
+
+    /**
+     * Applies fixed and max sizing constraints to image dimensions in EMU.
+     * Fixed width/height may use px or %; max constraints only shrink.
+     */
+    private static Integer[] scaleImageDimensionsEmu(Integer baseWidthEmu, Integer baseHeightEmu, ImageRenderSpec imageRenderSpec) {
+        Integer pageContentWidthEmu = 5943600; // 6.5in
+        Integer pageContentHeightEmu = 8229600; // 9in
+
+        Integer resolvedWidthEmu = baseWidthEmu;
+        Integer resolvedHeightEmu = baseHeightEmu;
+
+        Integer fixedWidthEmu = imageRenderSpec.widthPx != null ? (imageRenderSpec.widthPx * 9525) : null;
+        if (fixedWidthEmu == null && imageRenderSpec.widthPercent != null) {
+            fixedWidthEmu = (pageContentWidthEmu * imageRenderSpec.widthPercent) / 100;
+        }
+        Integer fixedHeightEmu = imageRenderSpec.heightPx != null ? (imageRenderSpec.heightPx * 9525) : null;
+        if (fixedHeightEmu == null && imageRenderSpec.heightPercent != null) {
+            fixedHeightEmu = (pageContentHeightEmu * imageRenderSpec.heightPercent) / 100;
+        }
+
+        if (fixedWidthEmu != null && fixedWidthEmu > 0 && fixedHeightEmu != null && fixedHeightEmu > 0) {
+            resolvedWidthEmu = fixedWidthEmu;
+            resolvedHeightEmu = fixedHeightEmu;
+        } else if (fixedWidthEmu != null && fixedWidthEmu > 0 && baseWidthEmu > 0) {
+            Decimal widthScaleFactor = ((Decimal)fixedWidthEmu) / ((Decimal)baseWidthEmu);
+            resolvedWidthEmu = fixedWidthEmu;
+            resolvedHeightEmu = (((Decimal)baseHeightEmu) * widthScaleFactor).intValue();
+        } else if (fixedHeightEmu != null && fixedHeightEmu > 0 && baseHeightEmu > 0) {
+            Decimal heightScaleFactor = ((Decimal)fixedHeightEmu) / ((Decimal)baseHeightEmu);
+            resolvedHeightEmu = fixedHeightEmu;
+            resolvedWidthEmu = (((Decimal)baseWidthEmu) * heightScaleFactor).intValue();
+        }
+
+        Integer maxWidthEmu = imageRenderSpec.maxWidthPx != null ? (imageRenderSpec.maxWidthPx * 9525) : null;
+        if (maxWidthEmu == null && imageRenderSpec.maxWidthPercent != null) {
+            maxWidthEmu = (pageContentWidthEmu * imageRenderSpec.maxWidthPercent) / 100;
+        }
+        Integer maxHeightEmu = imageRenderSpec.maxHeightPx != null ? (imageRenderSpec.maxHeightPx * 9525) : null;
+        if (maxHeightEmu == null && imageRenderSpec.maxHeightPercent != null) {
+            maxHeightEmu = (pageContentHeightEmu * imageRenderSpec.maxHeightPercent) / 100;
+        }
+
+        Decimal maxScaleFactor = 1;
+        if (maxWidthEmu != null && maxWidthEmu > 0 && resolvedWidthEmu > maxWidthEmu && resolvedWidthEmu > 0) {
+            Decimal widthMaxScale = ((Decimal)maxWidthEmu) / ((Decimal)resolvedWidthEmu);
+            if (widthMaxScale < maxScaleFactor) {
+                maxScaleFactor = widthMaxScale;
+            }
+        }
+        if (maxHeightEmu != null && maxHeightEmu > 0 && resolvedHeightEmu > maxHeightEmu && resolvedHeightEmu > 0) {
+            Decimal heightMaxScale = ((Decimal)maxHeightEmu) / ((Decimal)resolvedHeightEmu);
+            if (heightMaxScale < maxScaleFactor) {
+                maxScaleFactor = heightMaxScale;
+            }
+        }
+        if (maxScaleFactor < 1) {
+            resolvedWidthEmu = (((Decimal)resolvedWidthEmu) * maxScaleFactor).intValue();
+            resolvedHeightEmu = (((Decimal)resolvedHeightEmu) * maxScaleFactor).intValue();
+        }
+
+        if (resolvedWidthEmu == null || resolvedWidthEmu <= 0) {
+            resolvedWidthEmu = 288 * 12700;
+        }
+        if (resolvedHeightEmu == null || resolvedHeightEmu <= 0) {
+            resolvedHeightEmu = 216 * 12700;
+        }
+        return new Integer[]{resolvedWidthEmu, resolvedHeightEmu};
     }
 
     /**
