@@ -378,6 +378,9 @@ public with sharing class DocGenService {
             String rawXml = cachedXmlParts.get(key);
             if (key == 'rels') {
                 mr.relsXml = rawXml;
+            } else if (key == 'word__styles.xml') {
+                // Store styles.xml for table style resolution (not merged with record data)
+                mr.processedXmlEntries.put('word/styles.xml', rawXml);
             } else {
                 // Restore original path: word__document.xml → word/document.xml
                 String originalPath = key.replace('__', '/');
@@ -605,7 +608,7 @@ public with sharing class DocGenService {
         }
 
         String relsXml = null;
-        List<String> additionalRelsXmls = new List<String>(); // header/footer rels
+        Map<String, String> additionalRelsXmls = new Map<String, String>(); // partPrefix → rels XML
         Map<String, Blob> mediaEntries = new Map<String, Blob>();
         Map<String, String> xmlEntries = new Map<String, String>();
 
@@ -629,7 +632,8 @@ public with sharing class DocGenService {
             } else if (templateType == 'Word' && name.startsWith('word/_rels/') &&
                        (name.contains('header') || name.contains('footer')) && name.endsWith('.rels')) {
                 // Header/footer relationship files contain image references
-                additionalRelsXmls.add(entryBlob.toString());
+                String partPrefix = name.substringAfterLast('/').substringBefore('.xml.rels');
+                additionalRelsXmls.put(partPrefix, entryBlob.toString());
             } else if (name.startsWith(mediaPath)) {
                 mediaEntries.put(name, entryBlob);
             }
@@ -637,11 +641,14 @@ public with sharing class DocGenService {
             // Identify XML parts that get merged/replaced at generation time
             if (templateType == 'Word') {
                 if (name == 'word/document.xml' ||
+                    name == 'word/styles.xml' ||
                     (name.startsWith('word/header') && name.endsWith('.xml')) ||
                     (name.startsWith('word/footer') && name.endsWith('.xml'))) {
                     xmlEntries.put(name, entryBlob.toString());
-                    isDocumentXml = true;
-                    documentXmlPaths.add(name);
+                    if (name != 'word/styles.xml') {
+                        isDocumentXml = true;
+                        documentXmlPaths.add(name);
+                    }
                 }
             } else if (templateType == 'PowerPoint') {
                 if (name.startsWith('ppt/slides/slide') && name.endsWith('.xml')) {
@@ -677,7 +684,7 @@ public with sharing class DocGenService {
         // Save rels XML for image relId mapping during PDF generation
         // Combine document rels with header/footer rels so all image relIds are resolvable
         String combinedRels = relsXml != null ? relsXml : '';
-        for (String hfRels : additionalRelsXmls) {
+        for (String hfRels : additionalRelsXmls.values()) {
             combinedRels += hfRels;
         }
         if (String.isNotBlank(combinedRels)) {
@@ -692,14 +699,18 @@ public with sharing class DocGenService {
         // Parse rels (document + header/footer) and save each image as a ContentVersion
         if (!mediaEntries.isEmpty()) {
             String imgPrefix = 'docgen_tmpl_img_' + versionId + '_';
-            Set<String> savedRelIds = new Set<String>();
+            Set<String> savedKeys = new Set<String>();
 
-            // Collect all rels XML to parse: main document rels + header/footer rels
-            List<String> allRelsXmls = new List<String>();
-            if (relsXml != null) { allRelsXmls.add(relsXml); }
-            allRelsXmls.addAll(additionalRelsXmls);
+            // Build list of (partPrefix, relsXml) pairs: document gets empty prefix
+            List<List<String>> allRelsPairs = new List<List<String>>();
+            if (relsXml != null) { allRelsPairs.add(new List<String>{'', relsXml}); }
+            for (String partPrefix : additionalRelsXmls.keySet()) {
+                allRelsPairs.add(new List<String>{partPrefix, additionalRelsXmls.get(partPrefix)});
+            }
 
-            for (String currentRels : allRelsXmls) {
+            for (List<String> pair : allRelsPairs) {
+                String partPrefix = pair[0];
+                String currentRels = pair[1];
                 Integer relCursor = 0;
                 while (relCursor < currentRels.length()) {
                     Integer relStart = currentRels.indexOf('<Relationship ', relCursor);
@@ -718,18 +729,19 @@ public with sharing class DocGenService {
                     if (relType != null && relType.contains('/image')) {
                         String relId = extractXmlAttrValue(relTag, 'Id');
                         String target = extractXmlAttrValue(relTag, 'Target');
-                        if (relId != null && target != null && target.startsWith('media/') && !savedRelIds.contains(relId)) {
+                        String saveKey = String.isNotBlank(partPrefix) ? partPrefix + '_' + relId : relId;
+                        if (relId != null && target != null && target.startsWith('media/') && !savedKeys.contains(saveKey)) {
                             String fullPath = mediaPath + target.substringAfter('media/');
                             Blob imgBlob = mediaEntries.get(fullPath);
                             if (imgBlob != null) {
                                 String ext = target.substringAfterLast('.');
                                 ContentVersion cv = new ContentVersion();
-                                cv.Title = imgPrefix + relId;
-                                cv.PathOnClient = imgPrefix + relId + '.' + ext;
+                                cv.Title = imgPrefix + saveKey;
+                                cv.PathOnClient = imgPrefix + saveKey + '.' + ext;
                                 cv.VersionData = imgBlob;
                                 cv.FirstPublishLocationId = versionId;
                                 newCvs.add(cv);
-                                savedRelIds.add(relId);
+                                savedKeys.add(saveKey);
                             }
                         }
                     }
@@ -816,21 +828,7 @@ public with sharing class DocGenService {
         }
 
         Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
-
-        // Render header/footer XML separately for CSS @page positioning
-        String headerHtml = '';
-        String footerHtml = '';
-        if (mr.processedXmlEntries != null) {
-            for (String path : mr.processedXmlEntries.keySet()) {
-                if (path.startsWith('word/header')) {
-                    headerHtml = DocGenHtmlRenderer.convertToHtmlFragment(mr.processedXmlEntries.get(path), pdfImages);
-                } else if (path.startsWith('word/footer')) {
-                    footerHtml = DocGenHtmlRenderer.convertToHtmlFragment(mr.processedXmlEntries.get(path), pdfImages);
-                }
-            }
-        }
-
-        String html = DocGenHtmlRenderer.convertToHtmlWithHeaderFooter(mr.documentXml, pdfImages, headerHtml, footerHtml);
+        String html = DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), pdfImages);
         lastRenderedHtml = html;
 
         // Blob.toPdf() with the Spring '26 Release Update resolves relative Salesforce
@@ -880,7 +878,7 @@ public with sharing class DocGenService {
             }
         }
 
-        return DocGenHtmlRenderer.convertToHtml(mr.documentXml, previewImages);
+        return DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), previewImages);
     }
 
     /**
@@ -932,7 +930,7 @@ public with sharing class DocGenService {
             }
         }
 
-        String html = DocGenHtmlRenderer.convertToHtml(mr.documentXml, mergedMap);
+        String html = DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), mergedMap);
 
         return new Map<String, Object>{
             'html' => html,
@@ -977,6 +975,67 @@ public with sharing class DocGenService {
     }
 
     /**
+     * Combines document XML with header/footer XML from processedXmlEntries.
+     * Headers are prepended and footers are appended so the HTML renderer
+     * processes all template content (not just the main body).
+     * Image relIds in header/footer XML are namespaced to prevent collisions.
+     */
+    private static String combineXmlWithHeadersFooters(MergeResult mr) {
+        if (mr.processedXmlEntries == null) { return mr.documentXml; }
+
+        String headers = '';
+        String footers = '';
+        List<String> keys = new List<String>(mr.processedXmlEntries.keySet());
+        keys.sort();
+        for (String key : keys) {
+            if (key == 'word/styles.xml') { continue; }
+            if (key.startsWith('word/header') || key.startsWith('word/footer')) {
+                String partPrefix = key.substringAfterLast('/').substringBefore('.xml');
+                String partXml = namespaceImageRelIds(mr.processedXmlEntries.get(key), partPrefix);
+                if (key.startsWith('word/header')) {
+                    headers += partXml;
+                } else {
+                    footers += partXml;
+                }
+            }
+        }
+
+        // Inject header/footer markers that the HTML renderer can detect and position.
+        // Wrap in special XML comments that convertToHtml will transform to CSS-positioned divs.
+        String combinedXml = '';
+        if (String.isNotBlank(headers)) {
+            combinedXml += '<!-- DOCGEN_HEADER_START -->' + headers + '<!-- DOCGEN_HEADER_END -->';
+        }
+        combinedXml += mr.documentXml;
+        if (String.isNotBlank(footers)) {
+            combinedXml += '<!-- DOCGEN_FOOTER_START -->' + footers + '<!-- DOCGEN_FOOTER_END -->';
+        }
+        return combinedXml;
+    }
+
+    /**
+     * Rewrites r:embed="rIdX" to r:embed="prefix_rIdX" so header/footer
+     * image relIds don't collide with document or other part relIds.
+     */
+    private static String namespaceImageRelIds(String xml, String partPrefix) {
+        String result = xml;
+        Integer cursor = 0;
+        String searchToken = 'r:embed="';
+        while (cursor < result.length()) {
+            Integer embedStart = result.indexOf(searchToken, cursor);
+            if (embedStart == -1) { break; }
+            Integer valStart = embedStart + searchToken.length();
+            Integer valEnd = result.indexOf('"', valStart);
+            if (valEnd == -1) { break; }
+            String relId = result.substring(valStart, valEnd);
+            String newRelId = partPrefix + '_' + relId;
+            result = result.substring(0, valStart) + newRelId + result.substring(valEnd);
+            cursor = valStart + newRelId.length() + 1;
+        }
+        return result;
+    }
+
+    /**
      * Generates the HTML for a single record without calling Blob.toPdf() or saving a file.
      * Used by bulk batch to accumulate HTML for all records, then render one merged PDF at the end.
      * Accepts optional pre-loaded record data to skip per-record SOQL.
@@ -991,26 +1050,8 @@ public with sharing class DocGenService {
         }
         MergeResult mr = mergeTemplate(templateId, recordId, null, 'PDF');
 
-        // Combine document XML with headers and footers for HTML conversion
-        String combinedXml = mr.documentXml;
-        if (mr.processedXmlEntries != null) {
-            // Prepend headers, append footers
-            String headers = '';
-            String footers = '';
-            List<String> keys = new List<String>(mr.processedXmlEntries.keySet());
-            keys.sort();
-            for (String key : keys) {
-                if (key.startsWith('word/header')) {
-                    headers += mr.processedXmlEntries.get(key);
-                } else if (key.startsWith('word/footer')) {
-                    footers += mr.processedXmlEntries.get(key);
-                }
-            }
-            combinedXml = headers + combinedXml + footers;
-        }
-
         Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
-        return DocGenHtmlRenderer.convertToHtml(combinedXml, pdfImages);
+        return DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), pdfImages);
     }
 
     /**

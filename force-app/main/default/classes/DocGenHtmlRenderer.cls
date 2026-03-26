@@ -76,8 +76,54 @@ public with sharing class DocGenHtmlRenderer {
             images = new Map<String, String>();
         }
 
-        String bodyContent = extractBodyContent(documentXml);
+        // Extract header/footer markers if present
+        String headerXml = '';
+        String footerXml = '';
+        String mainXml = documentXml;
+        if (documentXml.contains('<!-- DOCGEN_HEADER_START -->')) {
+            Integer hStart = documentXml.indexOf('<!-- DOCGEN_HEADER_START -->') + '<!-- DOCGEN_HEADER_START -->'.length();
+            Integer hEnd = documentXml.indexOf('<!-- DOCGEN_HEADER_END -->');
+            if (hEnd > hStart) {
+                headerXml = documentXml.substring(hStart, hEnd);
+                mainXml = documentXml.substring(0, documentXml.indexOf('<!-- DOCGEN_HEADER_START -->')) +
+                          documentXml.substring(hEnd + '<!-- DOCGEN_HEADER_END -->'.length());
+            }
+        }
+        if (mainXml.contains('<!-- DOCGEN_FOOTER_START -->')) {
+            Integer fStart = mainXml.indexOf('<!-- DOCGEN_FOOTER_START -->') + '<!-- DOCGEN_FOOTER_START -->'.length();
+            Integer fEnd = mainXml.indexOf('<!-- DOCGEN_FOOTER_END -->');
+            if (fEnd > fStart) {
+                footerXml = mainXml.substring(fStart, fEnd);
+                mainXml = mainXml.substring(0, mainXml.indexOf('<!-- DOCGEN_FOOTER_START -->'));
+            }
+        }
+
+        String bodyContent = extractBodyContent(mainXml);
         String html = processBodyContent(bodyContent, images);
+
+        // If we have header/footer, wrap in a table with thead/tfoot for repeating on every page
+        if (String.isNotBlank(headerXml) || String.isNotBlank(footerXml)) {
+            String headerHtml = String.isNotBlank(headerXml) ? processBodyContent(extractBodyContent(headerXml), images) : '';
+            String footerHtml = String.isNotBlank(footerXml) ? processBodyContent(extractBodyContent(footerXml), images) : '';
+
+            // Zero out paragraph margins inside header/footer tables for tight cell spacing
+            headerHtml = headerHtml.replace('<p>', '<p style="margin:0;">');
+            footerHtml = footerHtml.replace('<p>', '<p style="margin:0;">');
+
+            // Use a wrapper div with min-height to fill the page, pushing footer to bottom.
+            // Letter page (11in) minus margins (1in top + 1in bottom) = 9in usable.
+            // Subtract approximate header height (1in) = ~8in for body+footer.
+            String wrapped = '<div style="position:relative;min-height:8.8in;">';
+            if (String.isNotBlank(headerHtml)) {
+                wrapped += '<div style="padding-bottom:10pt;">' + headerHtml + '</div>';
+            }
+            wrapped += '<div>' + html + '</div>';
+            if (String.isNotBlank(footerHtml)) {
+                wrapped += '<div style="position:absolute;bottom:0;left:0;right:0;padding-top:10pt;">' + footerHtml + '</div>';
+            }
+            wrapped += '</div>';
+            html = wrapped;
+        }
 
         // Inject custom @font-face declarations before the base styles
         if (String.isNotBlank(fontFaceCss)) {
@@ -913,10 +959,18 @@ public with sharing class DocGenHtmlRenderer {
                 tableStyle = 'border-collapse:collapse;width:' + pct + '%';
             }
 
-            // Table borders
+            // Table borders — check inline borders first, then style reference
             if (tblPr.contains('<w:tblBorders')) {
                 hasBorders = true;
                 tableStyle += ';border:1px solid #000';
+            } else if (tblPr.contains('w:tblStyle')) {
+                // Table uses a named style (e.g., TableGrid) — common styles have borders
+                String styleVal = extractAttr(tblPr, 'w:tblStyle', 'w:val');
+                if (styleVal != null && (styleVal.contains('Grid') || styleVal.contains('grid') ||
+                    styleVal.contains('Table') || styleVal.contains('List'))) {
+                    hasBorders = true;
+                    tableStyle += ';border:1px solid #000';
+                }
             }
 
             // Table alignment
