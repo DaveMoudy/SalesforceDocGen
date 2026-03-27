@@ -112,7 +112,7 @@ public with sharing class DocGenDataRetriever {
             }
             data = mapSObject(results[0]);
         } catch (Exception e) {
-            throw DocGenService.ahe('Error executing query. Please verify your template configuration.');
+            throw DocGenService.ahe(e, 'Error executing query. Please verify your template configuration.');
         }
 
         // Stitch deeper levels (grandchildren, great-grandchildren)
@@ -260,7 +260,7 @@ public with sharing class DocGenDataRetriever {
             }
             data = mapSObject(results[0]);
         } catch (Exception e) {
-            throw DocGenService.ahe('Error executing query. Please verify your template configuration.');
+            throw DocGenService.ahe(e, 'Error executing query. Please verify your template configuration.');
         }
 
         // Stitch junction targets (two-hop: junction record → target object)
@@ -465,7 +465,7 @@ public with sharing class DocGenDataRetriever {
             }
             rootData = mapSObject(results[0]);
         } catch (Exception e) {
-            throw DocGenService.ahe('Error querying root record: ' + e.getMessage());
+            throw DocGenService.ahe(e);
         }
 
         // Walk the tree: process children of each node
@@ -560,7 +560,7 @@ public with sharing class DocGenDataRetriever {
                 allData.put(rec.Id, mapSObject(rec));
             }
         } catch (Exception e) {
-            throw DocGenService.ahe('Error bulk-querying records: ' + e.getMessage());
+            throw DocGenService.ahe(e);
         }
 
         // Walk the tree in bulk: process children for all root records at once

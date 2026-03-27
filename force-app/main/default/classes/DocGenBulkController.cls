@@ -312,7 +312,7 @@ public with sharing class DocGenBulkController {
 
             return job.Id;
         } catch (Exception e) {
-            throw DocGenService.ahe('Error starting bulk generation job.');
+            throw DocGenService.ahe(e, 'Error starting bulk generation job.');
         }
     }
 
@@ -435,7 +435,7 @@ public with sharing class DocGenBulkController {
             // Package-internal object — CRUD controlled by DocGen permission sets
             insert sq; // NOPMD ApexCRUDViolation - package-internal custom object; access controlled by DocGen permission sets
         } catch (Exception e) {
-            throw DocGenService.ahe('Error saving query.');
+            throw DocGenService.ahe(e, 'Error saving query.');
         }
     }
 
@@ -451,7 +451,7 @@ public with sharing class DocGenBulkController {
             }
             delete new DocGen_Saved_Query__c(Id = queryId);
         } catch (Exception e) {
-            throw DocGenService.ahe('Error deleting query.');
+            throw DocGenService.ahe(e, 'Error deleting query.');
         }
     }
 }

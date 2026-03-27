@@ -6,7 +6,7 @@ public with sharing class DocGenHtmlRenderer {
 
     private static final String HTML_PREFIX =
         '<html><head><style>' +
-        '@page { size: letter; margin: 1in; }' +
+        '@page { size: letter; margin: 1in; }' + // default — overridden by convertToHtmlWithHeaderFooter
         'body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.15; color: #000; }' +
         'h1 { font-size: 20pt; font-weight: bold; margin: 0 0 6pt 0; }' +
         'h2 { font-size: 16pt; font-weight: bold; margin: 0 0 4pt 0; }' +
@@ -28,6 +28,9 @@ public with sharing class DocGenHtmlRenderer {
         '</style></head><body>';
 
     private static final String HTML_SUFFIX = '</body></html>';
+
+    // Styles XML from template — set before calling convertToHtml for style resolution
+    public static String stylesXml;
 
     // Unit conversions
     private static final Decimal HALF_POINTS_TO_PT = 0.5;     // half-points → pt (÷2)
@@ -76,36 +79,88 @@ public with sharing class DocGenHtmlRenderer {
             images = new Map<String, String>();
         }
 
-        String bodyContent = extractBodyContent(documentXml);
-        String html = processBodyContent(bodyContent, images);
-
-        // Inject custom @font-face declarations before the base styles
-        if (String.isNotBlank(fontFaceCss)) {
-            String prefix = '<html><head><style>' + fontFaceCss +
-                '@page { size: letter; margin: 1in; }' +
-                'body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.15; color: #000; }' +
-                'h1 { font-size: 20pt; font-weight: bold; margin: 0 0 6pt 0; }' +
-                'h2 { font-size: 16pt; font-weight: bold; margin: 0 0 4pt 0; }' +
-                'h3 { font-size: 14pt; font-weight: bold; margin: 0 0 4pt 0; }' +
-                'h4 { font-size: 12pt; font-weight: bold; margin: 0 0 4pt 0; }' +
-                'h5 { font-size: 11pt; font-weight: bold; margin: 0 0 4pt 0; }' +
-                'h6 { font-size: 10pt; font-weight: bold; margin: 0 0 4pt 0; }' +
-                'h1, h2, h3, h4, h5, h6 { page-break-after: avoid; }' +
-                'table { border-collapse: collapse; width: 100%; page-break-inside: auto; }' +
-                'tr { page-break-inside: avoid; page-break-after: auto; }' +
-                'td, th { padding: 4pt; vertical-align: top; }' +
-                'p { margin: 0 0 8pt 0; orphans: 2; widows: 2; page-break-inside: avoid; }' +
-                'img { max-width: 100%; }' +
-                'ul, ol { margin: 0 0 8pt 0; padding-left: 36pt; }' +
-                'li { margin: 0 0 2pt 0; page-break-inside: avoid; }' +
-                'hr { border: none; border-top: 1px solid #000; margin: 6pt 0; }' +
-                'sub { vertical-align: sub; font-size: 0.8em; }' +
-                'sup { vertical-align: super; font-size: 0.8em; }' +
-                '</style></head><body>';
-            return prefix + html + HTML_SUFFIX;
+        // Extract header/footer markers if present
+        String headerXml = '';
+        String footerXml = '';
+        String mainXml = documentXml;
+        if (documentXml.contains('<!-- DOCGEN_HEADER_START -->')) {
+            Integer hStart = documentXml.indexOf('<!-- DOCGEN_HEADER_START -->') + '<!-- DOCGEN_HEADER_START -->'.length();
+            Integer hEnd = documentXml.indexOf('<!-- DOCGEN_HEADER_END -->');
+            if (hEnd > hStart) {
+                headerXml = documentXml.substring(hStart, hEnd);
+                mainXml = documentXml.substring(0, documentXml.indexOf('<!-- DOCGEN_HEADER_START -->')) +
+                          documentXml.substring(hEnd + '<!-- DOCGEN_HEADER_END -->'.length());
+            }
+        }
+        if (mainXml.contains('<!-- DOCGEN_FOOTER_START -->')) {
+            Integer fStart = mainXml.indexOf('<!-- DOCGEN_FOOTER_START -->') + '<!-- DOCGEN_FOOTER_START -->'.length();
+            Integer fEnd = mainXml.indexOf('<!-- DOCGEN_FOOTER_END -->');
+            if (fEnd > fStart) {
+                footerXml = mainXml.substring(fStart, fEnd);
+                mainXml = mainXml.substring(0, mainXml.indexOf('<!-- DOCGEN_FOOTER_START -->'));
+            }
         }
 
-        return HTML_PREFIX + html + HTML_SUFFIX;
+        String bodyContent = extractBodyContent(mainXml);
+        String html = processBodyContent(bodyContent, images);
+
+        // If we have header/footer, wrap in a table with thead/tfoot for repeating on every page
+        if (String.isNotBlank(headerXml) || String.isNotBlank(footerXml)) {
+            String headerHtml = String.isNotBlank(headerXml) ? processBodyContent(extractBodyContent(headerXml), images) : '';
+            String footerHtml = String.isNotBlank(footerXml) ? processBodyContent(extractBodyContent(footerXml), images) : '';
+
+            // Zero out paragraph margins inside header/footer tables for tight cell spacing
+            headerHtml = headerHtml.replace('<p>', '<p style="margin:0;">');
+            footerHtml = footerHtml.replace('<p>', '<p style="margin:0;">');
+
+            // Calculate min-height from page dimensions in sectPr
+            String minHeight = calculatePageContentHeight(documentXml);
+
+            String wrapped = '<div style="position:relative;min-height:' + minHeight + ';">';
+            if (String.isNotBlank(headerHtml)) {
+                wrapped += '<div style="padding-bottom:10pt;">' + headerHtml + '</div>';
+            }
+            wrapped += '<div>' + html + '</div>';
+            if (String.isNotBlank(footerHtml)) {
+                wrapped += '<div style="position:absolute;bottom:0;left:0;right:0;padding-top:10pt;">' + footerHtml + '</div>';
+            }
+            wrapped += '</div>';
+            html = wrapped;
+        }
+
+        // Build dynamic page CSS from document dimensions + styles
+        Map<String, Decimal> pageDims = parsePageDimensions(documentXml);
+        String cellPadding = resolveDefaultCellPadding();
+        String dynamicPageCss = '@page { size: ' + pageDims.get('pageWidth') + 'in ' + pageDims.get('pageHeight') + 'in; ' +
+            'margin: ' + pageDims.get('marginTop') + 'in ' + pageDims.get('marginRight') + 'in ' +
+            pageDims.get('marginBottom') + 'in ' + pageDims.get('marginLeft') + 'in; }';
+        String dynamicCss = dynamicPageCss +
+            'body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.15; color: #000; }' +
+            'h1 { font-size: 20pt; font-weight: bold; margin: 0 0 6pt 0; }' +
+            'h2 { font-size: 16pt; font-weight: bold; margin: 0 0 4pt 0; }' +
+            'h3 { font-size: 14pt; font-weight: bold; margin: 0 0 4pt 0; }' +
+            'h4 { font-size: 12pt; font-weight: bold; margin: 0 0 4pt 0; }' +
+            'h5 { font-size: 11pt; font-weight: bold; margin: 0 0 4pt 0; }' +
+            'h6 { font-size: 10pt; font-weight: bold; margin: 0 0 4pt 0; }' +
+            'h1, h2, h3, h4, h5, h6 { page-break-after: avoid; }' +
+            'table { border-collapse: collapse; width: 100%; page-break-inside: auto; }' +
+            'tr { page-break-inside: avoid; page-break-after: auto; }' +
+            'td, th { padding: ' + cellPadding + '; vertical-align: top; }' +
+            'p { margin: 0 0 8pt 0; orphans: 2; widows: 2; page-break-inside: avoid; }' +
+            'img { max-width: 100%; }' +
+            'ul, ol { margin: 0 0 8pt 0; padding-left: 36pt; }' +
+            'li { margin: 0 0 2pt 0; page-break-inside: avoid; }' +
+            'hr { border: none; border-top: 1px solid #000; margin: 6pt 0; }' +
+            'sub { vertical-align: sub; font-size: 0.8em; }' +
+            'sup { vertical-align: super; font-size: 0.8em; }';
+        String dynamicPrefix = '<html><head><style>' + dynamicCss + '</style></head><body>';
+
+        // Always use dynamic prefix — it has resolved page dimensions and cell padding
+        // Inject font-face CSS if provided
+        if (String.isNotBlank(fontFaceCss)) {
+            dynamicPrefix = '<html><head><style>' + fontFaceCss + dynamicCss + '</style></head><body>';
+        }
+        return dynamicPrefix + html + HTML_SUFFIX;
     }
 
     /**
@@ -115,6 +170,77 @@ public with sharing class DocGenHtmlRenderer {
      */
     public static String convertToHtml(String documentXml) {
         return convertToHtml(documentXml, new Map<String, String>(), null);
+    }
+
+    /**
+     * Converts DOCX XML to an HTML fragment (no html/head/body wrapper).
+     * Used for rendering header/footer content separately.
+     */
+    public static String convertToHtmlFragment(String xml, Map<String, String> images) {
+        if (String.isBlank(xml)) { return ''; }
+        if (images == null) { images = new Map<String, String>(); }
+        String bodyContent = extractBodyContent(xml);
+        if (String.isBlank(bodyContent)) {
+            bodyContent = xml;
+        }
+        return processBodyContent(bodyContent, images);
+    }
+
+    /**
+     * Converts DOCX XML to HTML with header/footer positioned via CSS running elements.
+     * Flying Saucer (Blob.toPdf engine) supports position:running() and @page margin boxes.
+     */
+    public static String convertToHtmlWithHeaderFooter(String documentXml, Map<String, String> images, String headerHtml, String footerHtml) {
+        if (String.isBlank(documentXml)) {
+            return HTML_PREFIX + HTML_SUFFIX;
+        }
+        if (images == null) { images = new Map<String, String>(); }
+
+        String bodyContent = extractBodyContent(documentXml);
+        String html = processBodyContent(bodyContent, images);
+
+        // Build CSS with fixed-position header/footer for Flying Saucer
+        String headerHeight = String.isNotBlank(headerHtml) ? '0.75in' : '0';
+        String footerHeight = String.isNotBlank(footerHtml) ? '0.75in' : '0';
+
+        String css = '@page { size: letter; margin: 1in; margin-top: ' + (String.isNotBlank(headerHtml) ? '1.75in' : '1in') + '; margin-bottom: ' + (String.isNotBlank(footerHtml) ? '1.75in' : '1in') + '; }';
+        css += 'body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.15; color: #000; }';
+        css += 'h1 { font-size: 20pt; font-weight: bold; margin: 0 0 6pt 0; }';
+        css += 'h2 { font-size: 16pt; font-weight: bold; margin: 0 0 4pt 0; }';
+        css += 'h3 { font-size: 14pt; font-weight: bold; margin: 0 0 4pt 0; }';
+        css += 'h4 { font-size: 12pt; font-weight: bold; margin: 0 0 4pt 0; }';
+        css += 'h5 { font-size: 11pt; font-weight: bold; margin: 0 0 4pt 0; }';
+        css += 'h6 { font-size: 10pt; font-weight: bold; margin: 0 0 4pt 0; }';
+        css += 'h1, h2, h3, h4, h5, h6 { page-break-after: avoid; }';
+        css += 'table { border-collapse: collapse; width: 100%; page-break-inside: auto; }';
+        css += 'tr { page-break-inside: avoid; page-break-after: auto; }';
+        css += 'td, th { padding: 4pt; vertical-align: top; }';
+        css += 'p { margin: 0 0 8pt 0; orphans: 2; widows: 2; page-break-inside: avoid; }';
+        css += 'img { max-width: 100%; }';
+        css += 'ul, ol { margin: 0 0 8pt 0; padding-left: 36pt; }';
+        css += 'li { margin: 0 0 2pt 0; page-break-inside: avoid; }';
+        css += 'hr { border: none; border-top: 1px solid #000; margin: 6pt 0; }';
+        css += 'sub { vertical-align: sub; font-size: 0.8em; }';
+        css += 'sup { vertical-align: super; font-size: 0.8em; }';
+        css += '.docgen-header { border-bottom: 1px solid #ccc; padding-bottom: 6pt; margin-bottom: 12pt; font-size: 9pt; }';
+        css += '.docgen-footer { border-top: 1px solid #ccc; padding-top: 6pt; margin-top: 12pt; font-size: 9pt; }';
+        css += '.docgen-header table, .docgen-footer table { border-collapse: collapse; width: 100%; }';
+        css += '.docgen-header td, .docgen-footer td { padding: 2pt; vertical-align: middle; }';
+
+        String result = '<html><head><style>' + css + '</style></head><body>';
+
+        if (String.isNotBlank(headerHtml)) {
+            result += '<div class="docgen-header">' + headerHtml + '</div>';
+        }
+
+        result += html;
+
+        if (String.isNotBlank(footerHtml)) {
+            result += '<div class="docgen-footer">' + footerHtml + '</div>';
+        }
+
+        result += HTML_SUFFIX;
+        return result;
     }
 
     /**
@@ -621,7 +747,21 @@ public with sharing class DocGenHtmlRenderer {
 
                 if (String.isBlank(innerContent)) { return ''; }
 
-        // Wrap in styled span to indicate link (blue + underline)
+        // Check for direct URL from rich text (custom attribute set by DocGenService)
+        String directUrl = null;
+        Integer urlAttr = hlXml.indexOf('w:docgen-url="');
+        if (urlAttr != -1) {
+            Integer urlStart = urlAttr + 14;
+            Integer urlEnd = hlXml.indexOf('"', urlStart);
+            if (urlEnd != -1) {
+                directUrl = hlXml.substring(urlStart, urlEnd);
+            }
+        }
+
+        if (String.isNotBlank(directUrl)) {
+            return '<a href="' + directUrl + '" style="color:#0563C1;text-decoration:underline">' + innerContent + '</a>';
+        }
+        // No URL available (template hyperlink without rels) — render as styled text
         return '<span style="color:#0563C1;text-decoration:underline">' + innerContent + '</span>';
     }
 
@@ -842,10 +982,20 @@ public with sharing class DocGenHtmlRenderer {
                 tableStyle = 'border-collapse:collapse;width:' + pct + '%';
             }
 
-            // Table borders
+            // Table borders — check inline borders first, then style reference
             if (tblPr.contains('<w:tblBorders')) {
                 hasBorders = true;
-                tableStyle += ';border:1px solid #000';
+                tableStyle += ';border:0.5pt solid #000';
+            } else if (tblPr.contains('w:tblStyle')) {
+                // Table uses a named style — resolve from styles.xml if available
+                String styleVal = extractAttr(tblPr, 'w:tblStyle', 'w:val');
+                if (styleVal != null) {
+                    String resolvedBorder = resolveTableStyleBorder(styleVal);
+                    if (resolvedBorder != null) {
+                        hasBorders = true;
+                        tableStyle += ';border:' + resolvedBorder;
+                    }
+                }
             }
 
             // Table alignment
@@ -951,7 +1101,7 @@ public with sharing class DocGenHtmlRenderer {
             if (String.isNotBlank(tcBdr)) {
                 addBorderStyles(styles, tcBdr);
             } else if (hasBorders) {
-                styles.add('border:1px solid #000');
+                styles.add('border:0.5pt solid #000'); // from hasBorders (style or inline)
             }
 
             // Column span: <w:gridSpan w:val="2"/>
@@ -967,7 +1117,7 @@ public with sharing class DocGenHtmlRenderer {
                 addCellPaddingStyles(styles, tcMar);
             }
         } else if (hasBorders) {
-            styles.add('border:1px solid #000');
+            styles.add('border:0.5pt solid #000'); // from hasBorders (style or inline)
         }
 
         // Process cell content (paragraphs)
@@ -985,6 +1135,124 @@ public with sharing class DocGenHtmlRenderer {
     /**
      * Adds border CSS styles from a tcBorders element.
      */
+    /**
+     * Resolves a table style name to its border CSS by looking it up in stylesXml.
+     * Returns a CSS border shorthand (e.g., "0.5pt solid #000") or null if not found.
+     */
+    /**
+     * Calculates the usable content height from page dimensions in w:sectPr.
+     * Parses pgSz (page height) and pgMar (top + bottom margins) from the XML.
+     * Returns a CSS length value (e.g., "8.8in").
+     */
+    /**
+     * Parses page dimensions from w:sectPr and returns usable content height.
+     */
+    private static String calculatePageContentHeight(String xml) {
+        Map<String, Decimal> dims = parsePageDimensions(xml);
+        Decimal usable = dims.get('contentHeight');
+        return usable.setScale(1, System.RoundingMode.DOWN) + 'in';
+    }
+
+    /**
+     * Parses page dimensions from w:sectPr. Returns map with keys:
+     * pageWidth, pageHeight, marginTop, marginRight, marginBottom, marginLeft,
+     * contentHeight, contentWidth (all in inches).
+     */
+    private static Map<String, Decimal> parsePageDimensions(String xml) {
+        Map<String, Decimal> dims = new Map<String, Decimal>();
+        // Defaults: Letter, 1in margins
+        Integer pgW = 12240, pgH = 15840;
+        Integer mTop = 1440, mRight = 1440, mBottom = 1440, mLeft = 1440;
+
+        if (String.isNotBlank(xml) && xml.contains('<w:pgSz')) {
+            try {
+                String val;
+                val = extractAttr(xml, 'w:pgSz', 'w:w');
+                if (val != null && val.isNumeric()) { pgW = Integer.valueOf(val); }
+                val = extractAttr(xml, 'w:pgSz', 'w:h');
+                if (val != null && val.isNumeric()) { pgH = Integer.valueOf(val); }
+                val = extractAttr(xml, 'w:pgMar', 'w:top');
+                if (val != null && val.isNumeric()) { mTop = Integer.valueOf(val); }
+                val = extractAttr(xml, 'w:pgMar', 'w:right');
+                if (val != null && val.isNumeric()) { mRight = Integer.valueOf(val); }
+                val = extractAttr(xml, 'w:pgMar', 'w:bottom');
+                if (val != null && val.isNumeric()) { mBottom = Integer.valueOf(val); }
+                val = extractAttr(xml, 'w:pgMar', 'w:left');
+                if (val != null && val.isNumeric()) { mLeft = Integer.valueOf(val); }
+            } catch (Exception e) {
+                System.debug(LoggingLevel.WARN, 'Page dimension parsing failed, using defaults: ' + e.getMessage());
+            }
+        }
+
+        dims.put('pageWidth', pgW / 1440.0);
+        dims.put('pageHeight', pgH / 1440.0);
+        dims.put('marginTop', mTop / 1440.0);
+        dims.put('marginRight', mRight / 1440.0);
+        dims.put('marginBottom', mBottom / 1440.0);
+        dims.put('marginLeft', mLeft / 1440.0);
+        dims.put('contentHeight', (pgH - mTop - mBottom - 288) / 1440.0); // 288 twips buffer
+        dims.put('contentWidth', (pgW - mLeft - mRight) / 1440.0);
+        return dims;
+    }
+
+    /**
+     * Resolves default table cell padding from TableNormal style in stylesXml.
+     * Returns CSS padding value (e.g., "0pt 5.4pt").
+     */
+    private static String resolveDefaultCellPadding() {
+        if (String.isBlank(stylesXml)) { return '0pt 5.4pt'; }
+        try {
+            Integer tnIdx = stylesXml.indexOf('w:styleId="TableNormal"');
+            if (tnIdx == -1) { return '0pt 5.4pt'; }
+            Integer tnStart = stylesXml.lastIndexOf('<w:style', tnIdx);
+            Integer tnEnd = stylesXml.indexOf('</w:style>', tnIdx);
+            if (tnStart == -1 || tnEnd == -1) { return '0pt 5.4pt'; }
+            String tnDef = stylesXml.substring(tnStart, tnEnd + 10);
+
+            String topW = extractAttr(tnDef, 'w:top', 'w:w');
+            String leftW = extractAttr(tnDef, 'w:left', 'w:w');
+            String bottomW = extractAttr(tnDef, 'w:bottom', 'w:w');
+            String rightW = extractAttr(tnDef, 'w:right', 'w:w');
+
+            Decimal top = (topW != null && topW.isNumeric()) ? twipsToPt(Integer.valueOf(topW)) : 0;
+            Decimal left = (leftW != null && leftW.isNumeric()) ? twipsToPt(Integer.valueOf(leftW)) : 5.4;
+            Decimal bottom = (bottomW != null && bottomW.isNumeric()) ? twipsToPt(Integer.valueOf(bottomW)) : 0;
+            Decimal right = (rightW != null && rightW.isNumeric()) ? twipsToPt(Integer.valueOf(rightW)) : 5.4;
+
+            return top + 'pt ' + right + 'pt ' + bottom + 'pt ' + left + 'pt';
+        } catch (Exception e) {
+            return '0pt 5.4pt';
+        }
+    }
+
+    private static String resolveTableStyleBorder(String styleName) {
+        if (String.isBlank(stylesXml) || String.isBlank(styleName)) { return null; }
+
+        // Find the style definition: <w:style ... w:styleId="TableGrid">
+        String searchKey = 'w:styleId="' + styleName + '"';
+        Integer styleIdx = stylesXml.indexOf(searchKey);
+        if (styleIdx == -1) { return null; }
+
+        Integer styleStart = stylesXml.lastIndexOf('<w:style', styleIdx);
+        Integer styleEnd = stylesXml.indexOf('</w:style>', styleIdx);
+        if (styleStart == -1 || styleEnd == -1) { return null; }
+
+        String styleDef = stylesXml.substring(styleStart, styleEnd + 10);
+
+        // Check for tblBorders
+        if (!styleDef.contains('<w:tblBorders')) { return null; }
+
+        // Parse the first border side to get size and color
+        String topBorder = parseBorderSide(styleDef, 'w:top');
+        if (topBorder != null) { return topBorder; }
+
+        // Fallback: check for insideH (grid borders)
+        String insideH = parseBorderSide(styleDef, 'w:insideH');
+        if (insideH != null) { return insideH; }
+
+        return '0.5pt solid #000'; // Default for styles with tblBorders
+    }
+
     private static void addBorderStyles(List<String> styles, String bdrXml) {
         String topBdr = parseBorderSide(bdrXml, 'w:top');
         String bottomBdr = parseBorderSide(bdrXml, 'w:bottom');

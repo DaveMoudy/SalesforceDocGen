@@ -377,7 +377,7 @@ private class DocGenHtmlRendererTest {
                 '</w:body></w:document>';
 
             String html = DocGenHtmlRenderer.convertToHtml(xml);
-            System.assert(html.contains('border:1px solid #000'), 'Should have cell borders');
+            System.assert(html.contains('border:0.5pt solid #000'), 'Should have cell borders');
             System.assert(html.contains('Pct'), 'Should contain pct cell text');
             System.assert(html.contains('Dxa'), 'Should contain dxa cell text');
         }

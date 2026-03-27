@@ -171,7 +171,7 @@ public with sharing class DocGenController {
                 'templateType' => result.get('templateType')
             };
         } catch (Exception e) {
-            throw DocGenService.ahe(e,'Error generating document. Please check the template configuration.');
+            throw DocGenService.ahe(e, 'Error generating document. Please check the template configuration.');
         }
     }
 
@@ -188,7 +188,7 @@ public with sharing class DocGenController {
         try {
             return DocGenService.generateDocumentParts(templateId, recordId);
         } catch (Exception e) {
-            throw DocGenService.ahe(e,'Error generating document parts. Please check the template configuration.');
+            throw DocGenService.ahe(e, 'Error generating document parts. Please check the template configuration.');
         }
     }
 
@@ -364,7 +364,7 @@ public with sharing class DocGenController {
                 }
             }
         } catch (Exception e) {
-            throw DocGenService.ahe(e,'Error saving template. Please verify your inputs and permissions.');
+            throw DocGenService.ahe(e, 'Error saving template. Please verify your inputs and permissions.');
         }
     }
 
@@ -380,7 +380,7 @@ public with sharing class DocGenController {
             }
             delete new DocGen_Template__c(Id = templateId);
         } catch (Exception e) {
-            throw DocGenService.ahe(e,'Error deleting template. Please check your permissions.');
+            throw DocGenService.ahe(e, 'Error deleting template. Please check your permissions.');
         }
     }
 
@@ -479,7 +479,7 @@ public with sharing class DocGenController {
                 };
             }
         } catch (Exception e) {
-            throw DocGenService.ahe('Error generating PDF document. Please check the template configuration.');
+            throw DocGenService.ahe(e, 'Error generating PDF document. Please check the template configuration.');
         }
     }
 
@@ -776,7 +776,7 @@ public with sharing class DocGenController {
             SObjectAccessDecision shareDecision = Security.stripInaccessible(AccessType.CREATABLE, new List<SObject>{ share });
             insert shareDecision.getRecords();
         } catch (DmlException e) {
-            throw DocGenService.ahe(e);
+            throw DocGenService.ahe(e, 'Error sharing template. Please check permissions.');
         }
     }
 
@@ -792,7 +792,7 @@ public with sharing class DocGenController {
             }
             delete new DocGen_Template__Share(Id = shareId); // NOPMD ApexCRUDViolation - isDeletable() checked above; package-internal share object
         } catch (DmlException e) {
-            throw DocGenService.ahe(e);
+            throw DocGenService.ahe(e, 'Error removing share. Please check permissions.');
         }
     }
 
@@ -952,7 +952,7 @@ public with sharing class DocGenController {
         try {
             childRecords = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - object/field names validated against Schema.getGlobalDescribe(); runs with USER_MODE
         } catch (Exception e) {
-            throw DocGenService.ahe('Error querying child records: ' + e.getMessage());
+            throw DocGenService.ahe(e, 'Error querying child records');
         }
 
         if (childRecords.isEmpty()) {

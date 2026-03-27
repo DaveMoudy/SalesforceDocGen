@@ -579,7 +579,7 @@ private class DocGenMiscTests {
         }
         Test.stopTest();
 
-        System.assertEquals(null, result, 'result should be null for unmatched section test');
+        System.assertEquals(null, result, 'Result should be null for unmatched section test');
     }
 
     @IsTest
@@ -1587,7 +1587,7 @@ private class DocGenMiscTests {
         }
         Test.stopTest();
 
-        System.assertEquals(null, result, 'result should be null for unclosed brace test');
+        System.assertEquals(null, result, 'Result should be null for unclosed brace test');
     }
 
     @IsTest

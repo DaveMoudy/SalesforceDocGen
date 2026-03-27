@@ -1,8 +1,8 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.0.9 — PDF Merger, Client-Side DOCX & Bug Fixes",
-      "versionNumber": "1.0.9.NEXT",
+      "versionName": "1.1.3 — Clickable Hyperlinks in Rich Text PDFs",
+      "versionNumber": "1.1.3.NEXT",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen",
@@ -27,6 +27,10 @@
     "Portwood DocGen@1.0.6-1": "04tal000006PANJAA4",
     "Portwood DocGen@1.0.7-1": "04tal000006PAOvAAO",
     "Portwood DocGen@1.0.8-1": "04tal000006PB01AAG",
-    "Portwood DocGen@1.0.9-1": "04tal000006PBrFAAW"
+    "Portwood DocGen@1.0.9-1": "04tal000006PBrFAAW",
+    "Portwood DocGen@1.1.0-1": "04tal000006PCFRAA4",
+    "Portwood DocGen@1.1.1-1": "04tal000006PCTxAAO",
+    "Portwood DocGen@1.1.2-1": "04tal000006PCVZAA4",
+    "Portwood DocGen@1.1.3-1": "04tal000006PClhAAG"
   }
 }

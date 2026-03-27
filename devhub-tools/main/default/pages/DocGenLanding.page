@@ -276,7 +276,7 @@
             <a href="{!installLinkProd}" class="btn btn-primary">Install in Production</a>
             <a href="{!installLinkSandbox}" class="btn btn-secondary" style="color: #1a1a2e; border-color: #cbd5e1;">Install in Sandbox</a>
         </div>
-        <div class="install-code">sf package install --package 04tal000006PBrFAAW --wait 10 --target-org your-org</div>
+        <div class="install-code">sf package install --package 04tal000006PClhAAG --wait 10 --target-org your-org</div>
         <p style="margin-top: 1.5rem; font-size: 0.9rem;">Then: Assign <strong>DocGen Admin</strong> permission set &bull; Open the <strong>DocGen</strong> app</p>
     </section>
 

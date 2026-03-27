@@ -7,8 +7,8 @@ public without sharing class DocGenLandingController {
 
     // Store demo session in a custom setting or org-wide default
     // For now, use a static approach — refresh via CLI
-    private static final String INSTALL_LINK_PROD = 'https://login.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PBrFAAW';
-    private static final String INSTALL_LINK_SANDBOX = 'https://test.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PBrFAAW';
+    private static final String INSTALL_LINK_PROD = 'https://login.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PClhAAG';
+    private static final String INSTALL_LINK_SANDBOX = 'https://test.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PClhAAG';
 
     public String installLinkProd { get { return INSTALL_LINK_PROD; } }
     public String installLinkSandbox { get { return INSTALL_LINK_SANDBOX; } }

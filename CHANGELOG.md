@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.1.3 — "Clickable Hyperlinks in Rich Text PDFs" (Portwood DocGen)
+
+- **Clickable Hyperlinks in PDF** — Rich text `<a href="...">` tags now render as real clickable links in PDF output. Previously, hyperlinks from rich text fields were rendered as styled text (blue + underline) but were not clickable. Now they generate proper `<a>` tags in the HTML passed to `Blob.toPdf()`.
+- **Anchor Tag Parsing** — New `extractAttribute()` helper parses `href` from rich text anchor tags. Handles quoted and unquoted attributes, `&amp;` decoding.
+- **Custom URL Attribute for DOCX→PDF Bridge** — Rich text links embed a `w:docgen-url` attribute on `w:hyperlink` elements during XML processing, which the HTML renderer reads to produce clickable `<a>` tags without needing relationship file lookups.
+
+## v1.1.2 — "Image Sizing, Error Diagnostics & Multiline Text" (Portwood DocGen)
+
+Huge thanks to **@Henk3000** for PR #47 — ImageRenderSpec, ahe() helper, multiline text preservation, error diagnostics for malformed tags, and smart container expansion for numbered lists.
+
+- **ImageRenderSpec** — Percentage-based image sizing (`{%Logo:100%x}`), max constraints (`{%Logo:m100%x}`), intrinsic dimension detection from PNG/JPEG headers, aspect ratio preservation. Credit: @Henk3000 PR #47.
+- **Error Diagnostics** — Malformed merge tags and unclosed loop tags now throw `DocGenException` with descriptive messages instead of silently producing broken output.
+- **Multiline Text Preservation** — Newlines in Long Text Area and Text Area fields now render as proper Word line breaks (`<w:br/>`) with correct run element handling.
+- **Smart Container Expansion** — Loop tags inside numbered/bulleted lists now repeat the list paragraph formatting. Previously only table rows were detected.
+- **`ahe()` Helper** — Consistent `AuraHandledException` creation with original exception logging. All 38 throw sites migrated.
+- **Universal File Save** — `saveContentVersion()` gracefully handles objects that don't support `FirstPublishLocationId` or `ContentDocumentLink` (e.g., Pricebook2).
+- **507/507 Apex tests**, 79% coverage, 0 Critical/High. E2E 22/22.
+
+## v1.1.0 — "Pixel-Perfect PDF" (Portwood DocGen)
+
+Huge thanks to **@josephedwards-png** for PR #46 — his analysis of the relId collision bug and namespacing approach was the key insight that unlocked header/footer image rendering.
+
+- **Header/Footer Rendering in PDF** — Full formatting, borders, merge tags, images. Headers at top, footers pinned to bottom.
+- **Namespaced Image RelIds** — `header1_rId1`, `footer1_rId1` prevent collisions. Credit: @josephedwards-png PR #46.
+- **Dynamic Style Resolution** — Table borders, cell padding, page size/margins all read from `styles.xml` and `w:sectPr` at render time.
+- **PDF Merger Restored** — Generate+merge, merge-only, document packets with client-side PDF merging.
+- **Client-Side DOCX Assembly** — Zero heap ZIP. Per-image Apex calls with fresh 6MB heap each.
+- **507/507 Apex tests**, 81% coverage, 0 Critical/High. E2E 22/22.
+- Templates with headers/footers must be re-saved to pick up the fix.
+
 ## v1.0.8 — "Full Release" (Portwood DocGen)
 
 **IMPORTANT: If upgrading from the old unnamespaced "Document Generation" package, you MUST uninstall it first.** The new package uses the `portwoodglobal` namespace — the two cannot coexist. Go to Setup > Installed Packages > Document Generation > Uninstall, then install this version.
