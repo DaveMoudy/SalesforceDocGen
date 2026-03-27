@@ -1,8 +1,8 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.1.1 — Image Sizing, Error Diagnostics & Multiline Text",
-      "versionNumber": "1.1.1.NEXT",
+      "versionName": "1.1.2 — Image Sizing, Error Diagnostics & Multiline Text",
+      "versionNumber": "1.1.2.NEXT",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen",
@@ -29,6 +29,7 @@
     "Portwood DocGen@1.0.8-1": "04tal000006PB01AAG",
     "Portwood DocGen@1.0.9-1": "04tal000006PBrFAAW",
     "Portwood DocGen@1.1.0-1": "04tal000006PCFRAA4",
-    "Portwood DocGen@1.1.1-1": "04tal000006PCTxAAO"
+    "Portwood DocGen@1.1.1-1": "04tal000006PCTxAAO",
+    "Portwood DocGen@1.1.2-1": "04tal000006PCVZAA4"
   }
 }

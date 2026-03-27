@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.1 — "Image Sizing, Error Diagnostics & Multiline Text" (Portwood DocGen)
+## v1.1.2 — "Image Sizing, Error Diagnostics & Multiline Text" (Portwood DocGen)
 
 Huge thanks to **@Henk3000** for PR #47 — ImageRenderSpec, ahe() helper, multiline text preservation, error diagnostics for malformed tags, and smart container expansion for numbered lists.
 
