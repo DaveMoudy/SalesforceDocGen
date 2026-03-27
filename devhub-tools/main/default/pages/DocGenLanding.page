@@ -151,6 +151,74 @@
             margin-bottom: 1rem;
         }
 
+        /* Comparison */
+        .compare-section {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #fff;
+            padding: 5rem 2rem;
+        }
+        .compare-section h2 {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 0.75rem;
+        }
+        .compare-subtitle {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+        }
+        .compare-table-wrap {
+            max-width: 1100px;
+            margin: 0 auto;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .compare-table th, .compare-table td {
+            padding: 10px 14px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            white-space: nowrap;
+        }
+        .compare-table th {
+            background: rgba(255,255,255,0.05);
+            font-weight: 700;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #94a3b8;
+        }
+        .compare-table th.col-docgen {
+            color: #60a5fa;
+            background: rgba(96,165,250,0.08);
+        }
+        .compare-table td:first-child {
+            text-align: left;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+        .compare-table td.col-docgen {
+            background: rgba(96,165,250,0.04);
+            color: #fff;
+            font-weight: 600;
+        }
+        .compare-table td { color: #94a3b8; }
+        .cmp-yes { color: #4ade80 !important; }
+        .cmp-no { color: #64748b !important; }
+        .cmp-partial { color: #fbbf24 !important; }
+        .compare-note {
+            text-align: center;
+            color: #64748b;
+            font-size: 0.8rem;
+            margin-top: 1.5rem;
+        }
+
         /* Install */
         .install-section {
             background: #fff;
@@ -176,6 +244,94 @@
             font-family: 'Courier New', monospace;
             font-size: 0.85rem;
             display: inline-block;
+            margin-top: 1rem;
+        }
+
+        /* Help Form */
+        .help-section {
+            background: #f8fafc;
+            padding: 5rem 2rem;
+        }
+        .help-section h2 {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            color: #1a1a2e;
+        }
+        .help-subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 2.5rem;
+        }
+        .help-form {
+            max-width: 520px;
+            margin: 0 auto;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 2.5rem;
+        }
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 0.35rem;
+        }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            color: #1a1a2e;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+        }
+        .form-group textarea { resize: vertical; min-height: 80px; }
+        .form-submit {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: #fff;
+            border: none;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 0.5rem;
+        }
+        .form-submit:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(37,99,235,0.3); }
+        .form-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .form-success {
+            text-align: center;
+            color: #059669;
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: none;
+        }
+        .form-error {
+            text-align: center;
+            color: #dc2626;
+            font-size: 0.9rem;
+            margin-top: 0.75rem;
+            display: none;
+        }
+        .form-fine-print {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.75rem;
             margin-top: 1rem;
         }
 
@@ -206,7 +362,8 @@
     <header class="header">
         <div class="logo">Portwood <span>DocGen</span></div>
         <nav class="header-links">
-            <a href="https://github.com/DaveMoudy/SalesforceDocGen">GitHub</a>
+            <a href="/DocGenCommunity">Community</a>
+            <a href="https://github.com/Portwood-Global-Solutions/Portwood-DocGen">GitHub</a>
             <a href="mailto:hello@portwoodglobalsolutions.com">Support</a>
             <a href="{!installLinkProd}" style="color: #60a5fa;">Install</a>
         </nav>
@@ -225,8 +382,8 @@
         <div class="hero-actions">
             <a href="{!installLinkProd}" class="btn btn-primary">Install Free</a>
             <a href="{!installLinkSandbox}" class="btn btn-secondary">Install in Sandbox</a>
-            <apex:outputPanel rendered="{!hasDemoUrl}">
-                <a href="{!demoUrl}" class="btn btn-demo" target="_blank">Try Live Demo</a>
+            <apex:outputPanel rendered="{!NOT(ISBLANK(demoUrl))}">
+                <a href="{!HTMLENCODE(demoUrl)}" target="_blank" class="btn btn-demo">Live Demo</a>
             </apex:outputPanel>
         </div>
     </section>
@@ -268,6 +425,211 @@
         </div>
     </section>
 
+    <!-- Comparison -->
+    <section class="compare-section">
+        <h2>How DocGen Compares</h2>
+        <p class="compare-subtitle">The only free, fully native document generator for Salesforce.</p>
+        <div class="compare-table-wrap">
+            <table class="compare-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th class="col-docgen">DocGen</th>
+                        <th>Conga</th>
+                        <th>S-Docs</th>
+                        <th>OmniStudio</th>
+                        <th>PDF Butler</th>
+                        <th>PandaDoc</th>
+                        <th>Nintex</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Price</td>
+                        <td class="col-docgen cmp-yes">Free</td>
+                        <td>~$25-50/user/mo</td>
+                        <td>~$15-30/user/mo</td>
+                        <td>Industries license req'd</td>
+                        <td>~$25-150/org/mo</td>
+                        <td>~$35-65/user/mo</td>
+                        <td>~$25-35/user/mo</td>
+                    </tr>
+                    <tr>
+                        <td>100% Native Salesforce</td>
+                        <td class="col-docgen cmp-yes">Yes</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-partial">Partial</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                    </tr>
+                    <tr>
+                        <td>Data Stays in Org</td>
+                        <td class="col-docgen cmp-yes">Yes</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                    </tr>
+                    <tr>
+                        <td>No External Callouts</td>
+                        <td class="col-docgen cmp-yes">Yes</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                    </tr>
+                    <tr>
+                        <td>Word/PPTX Templates</td>
+                        <td class="col-docgen cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-no">HTML only</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-no">HTML only</td>
+                        <td class="cmp-no">Web editor</td>
+                        <td class="cmp-yes">Yes</td>
+                    </tr>
+                    <tr>
+                        <td>PDF Output</td>
+                        <td class="col-docgen cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                    </tr>
+                    <tr>
+                        <td>DOCX Output</td>
+                        <td class="col-docgen cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-partial">Weak</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                    </tr>
+                    <tr>
+                        <td>PPTX Output</td>
+                        <td class="col-docgen cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-yes">Yes</td>
+                    </tr>
+                    <tr>
+                        <td>Images in Documents</td>
+                        <td class="col-docgen cmp-yes">Zero-heap</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-partial">Limited</td>
+                        <td class="cmp-partial">Limited</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-yes">Yes</td>
+                    </tr>
+                    <tr>
+                        <td>Rich Text Fields</td>
+                        <td class="col-docgen cmp-yes">Full HTML</td>
+                        <td class="cmp-partial">Partial</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-partial">Limited</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-no">N/A</td>
+                        <td class="cmp-partial">Partial</td>
+                    </tr>
+                    <tr>
+                        <td>Unlimited Depth Queries</td>
+                        <td class="col-docgen cmp-yes">Yes</td>
+                        <td class="cmp-partial">Limited</td>
+                        <td class="cmp-partial">Limited</td>
+                        <td class="cmp-yes">Via DataRaptor</td>
+                        <td class="cmp-partial">Limited</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-partial">Limited</td>
+                    </tr>
+                    <tr>
+                        <td>Junction Object Support</td>
+                        <td class="col-docgen cmp-yes">Native</td>
+                        <td class="cmp-partial">Complex</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-partial">Manual</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-partial">Limited</td>
+                    </tr>
+                    <tr>
+                        <td>Bulk Generation</td>
+                        <td class="col-docgen cmp-yes">Built-in</td>
+                        <td class="cmp-partial">Add-on cost</td>
+                        <td class="cmp-yes">Yes</td>
+                        <td class="cmp-partial">Limited</td>
+                        <td class="cmp-partial">Higher tiers</td>
+                        <td class="cmp-no">API only</td>
+                        <td class="cmp-yes">Yes</td>
+                    </tr>
+                    <tr>
+                        <td>Open Source</td>
+                        <td class="col-docgen cmp-yes">Yes</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                        <td class="cmp-no">No</td>
+                    </tr>
+                    <tr>
+                        <td>Vendor Outage Risk</td>
+                        <td class="col-docgen cmp-yes">None</td>
+                        <td class="cmp-no">Yes</td>
+                        <td class="cmp-yes">None</td>
+                        <td class="cmp-partial">Possible</td>
+                        <td class="cmp-yes">None</td>
+                        <td class="cmp-no">Yes</td>
+                        <td class="cmp-no">Yes</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="compare-note">Pricing reflects publicly available estimates as of early 2026. Actual pricing varies by contract.</p>
+    </section>
+
+    <!-- Help / Lead Capture -->
+    <section class="help-section">
+        <h2>Need Help Getting Started?</h2>
+        <p class="help-subtitle">We'll walk you through setup, templates, and your first document — free.</p>
+        <div class="help-form" id="helpForm">
+            <div class="form-group">
+                <label for="helpName">Name</label>
+                <input type="text" id="helpName" placeholder="Jane Smith" />
+            </div>
+            <div class="form-group">
+                <label for="helpEmail">Email</label>
+                <input type="email" id="helpEmail" placeholder="jane@company.com" />
+            </div>
+            <div class="form-group">
+                <label for="helpCompany">Company</label>
+                <input type="text" id="helpCompany" placeholder="Acme Corp" />
+            </div>
+            <div class="form-group">
+                <label for="helpMessage">How can we help?</label>
+                <textarea id="helpMessage" placeholder="I need help setting up templates for our invoices..."></textarea>
+            </div>
+            <button type="button" class="form-submit" id="helpSubmitBtn" onclick="submitHelpForm()">Send Request</button>
+            <div class="form-error" id="helpError"></div>
+            <p class="form-fine-print">We'll respond within one business day. No spam, no sales pitch.</p>
+        </div>
+        <div class="form-success" id="helpSuccess">
+            Thank you! We'll be in touch shortly.
+        </div>
+    </section>
+
     <!-- Install -->
     <section class="install-section">
         <h2>Install in 30 seconds</h2>
@@ -276,20 +638,64 @@
             <a href="{!installLinkProd}" class="btn btn-primary">Install in Production</a>
             <a href="{!installLinkSandbox}" class="btn btn-secondary" style="color: #1a1a2e; border-color: #cbd5e1;">Install in Sandbox</a>
         </div>
-        <div class="install-code">sf package install --package 04tal000006PClhAAG --wait 10 --target-org your-org</div>
+        <div class="install-code">sf package install --package 04tal000006PDjNAAW --wait 10 --target-org your-org</div>
         <p style="margin-top: 1.5rem; font-size: 0.9rem;">Then: Assign <strong>DocGen Admin</strong> permission set &bull; Open the <strong>DocGen</strong> app</p>
     </section>
 
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-links">
-            <a href="https://github.com/DaveMoudy/SalesforceDocGen">GitHub</a>
+            <a href="https://github.com/Portwood-Global-Solutions/Portwood-DocGen">GitHub</a>
             <a href="mailto:hello@portwoodglobalsolutions.com">Support</a>
-            <a href="https://github.com/DaveMoudy/SalesforceDocGen/issues">Report a Bug</a>
+            <a href="https://github.com/Portwood-Global-Solutions/Portwood-DocGen/issues">Report a Bug</a>
         </div>
         <p>Built by <a href="https://portwoodglobalsolutions.com">Portwood Global Solutions</a></p>
         <p style="margin-top: 0.5rem; font-size: 0.8rem;">Namespace: portwoodglobal &bull; Apache 2.0 License &bull; Working toward Salesforce Accelerator listing</p>
     </footer>
+
+    <script>
+        function submitHelpForm() {
+            var name = document.getElementById('helpName').value.trim();
+            var email = document.getElementById('helpEmail').value.trim();
+            var company = document.getElementById('helpCompany').value.trim();
+            var message = document.getElementById('helpMessage').value.trim();
+            var errEl = document.getElementById('helpError');
+            var btn = document.getElementById('helpSubmitBtn');
+
+            errEl.style.display = 'none';
+
+            if (!name || !email) {
+                errEl.textContent = 'Please enter your name and email.';
+                errEl.style.display = 'block';
+                return;
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                errEl.textContent = 'Please enter a valid email address.';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.DocGenLandingController.submitHelpRequest}',
+                name, email, company, message,
+                function(result, event) {
+                    if (event.status) {
+                        document.getElementById('helpForm').style.display = 'none';
+                        document.getElementById('helpSuccess').style.display = 'block';
+                    } else {
+                        errEl.textContent = event.message || 'Something went wrong. Please email hello@portwoodglobalsolutions.com instead.';
+                        errEl.style.display = 'block';
+                        btn.disabled = false;
+                        btn.textContent = 'Send Request';
+                    }
+                },
+                { escape: true }
+            );
+        }
+    </script>
 
 </body>
 </html>
