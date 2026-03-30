@@ -153,22 +153,28 @@ public with sharing class DocGenBulkController {
             }
             analysis.items.add(countItem);
 
-            // --- 4. Heap (merge mode only) ---
-            if (isMerge) {
-                AnalysisItem heapItem = new AnalysisItem();
-                heapItem.label = 'Merge Heap';
-                heapItem.limitVal = 12;
+            // --- 4. Heap estimation ---
+            if (String.isNotBlank(temp.Test_Record_Id__c)) {
+                try {
+                    // Measure actual heap consumed by generation (queries + template + rendering)
+                    Integer heapBefore = Limits.getHeapSize();
+                    String html = DocGenService.generateHtmlForRecord(templateId, temp.Test_Record_Id__c, null);
+                    Integer heapAfter = Limits.getHeapSize();
+                    // Use the larger of: measured heap delta or HTML size × 2 (UTF-16)
+                    // The delta captures query objects, template parsing, image metadata, etc.
+                    Long measuredBytes = Math.max(heapAfter - heapBefore, html.length() * 2);
 
-                if (String.isNotBlank(temp.Test_Record_Id__c)) {
-                    try {
-                        String html = DocGenService.generateHtmlForRecord(templateId, temp.Test_Record_Id__c, null);
-                        Long singleRecordBytes = html.length() * 2;
-                        Decimal totalMb = ((singleRecordBytes * recordCount) * 1.25) / (1024.0 * 1024.0);
+                    if (isMerge) {
+                        // Merge heap: all HTML snippets concatenated in one Queueable
+                        AnalysisItem heapItem = new AnalysisItem();
+                        heapItem.label = 'Merge Heap';
+                        heapItem.limitVal = 12;
+                        Decimal totalMb = ((measuredBytes * recordCount) * 1.3) / (1024.0 * 1024.0);
                         heapItem.estimated = totalMb.setScale(2);
 
                         if (totalMb >= 10.0) {
                             heapItem.status = 'error';
-                            heapItem.message = totalMb.setScale(1) + 'MB / 12MB — high risk of heap failure. Reduce record count or disable merge.';
+                            heapItem.message = totalMb.setScale(1) + 'MB / 12MB — high risk of heap failure. Reduce record count or switch to Individual Files.';
                             analysis.canProceed = false;
                         } else if (totalMb >= 7.0) {
                             heapItem.status = 'warning';
@@ -177,14 +183,40 @@ public with sharing class DocGenBulkController {
                             heapItem.status = 'ok';
                             heapItem.message = totalMb.setScale(1) + 'MB / 12MB — safe.';
                         }
-                    } catch (Exception e) {
-                        heapItem.status = 'warning';
-                        heapItem.message = 'Could not estimate — no test record data available.';
+                        analysis.items.add(heapItem);
                     }
-                } else {
+
+                    // Per-batch heap: measured heap × batch size (each execute() gets fresh 12MB)
+                    AnalysisItem batchHeapItem = new AnalysisItem();
+                    batchHeapItem.label = 'Batch Heap';
+                    batchHeapItem.limitVal = 12;
+                    Decimal batchMb = ((measuredBytes * safeBatchSize) * 1.3) / (1024.0 * 1024.0);
+                    batchHeapItem.estimated = batchMb.setScale(2);
+
+                    if (batchMb >= 10.0) {
+                        batchHeapItem.status = 'error';
+                        batchHeapItem.message = batchMb.setScale(1) + 'MB / 12MB per batch — reduce batch size to ' + Math.max(1, Math.floor(9.0 / (batchMb / safeBatchSize))) + ' or lower.';
+                        analysis.canProceed = false;
+                    } else if (batchMb >= 7.0) {
+                        batchHeapItem.status = 'warning';
+                        batchHeapItem.message = batchMb.setScale(1) + 'MB / 12MB per batch — consider reducing batch size.';
+                    } else {
+                        batchHeapItem.status = 'ok';
+                        batchHeapItem.message = batchMb.setScale(1) + 'MB / 12MB per batch.';
+                    }
+                    analysis.items.add(batchHeapItem);
+                } catch (Exception e) {
+                    AnalysisItem heapItem = new AnalysisItem();
+                    heapItem.label = 'Heap Estimate';
                     heapItem.status = 'warning';
-                    heapItem.message = 'No test record on template — heap estimate unavailable.';
+                    heapItem.message = 'Could not estimate — test record may be inaccessible.';
+                    analysis.items.add(heapItem);
                 }
+            } else {
+                AnalysisItem heapItem = new AnalysisItem();
+                heapItem.label = 'Heap Estimate';
+                heapItem.status = 'warning';
+                heapItem.message = 'No test record on template — heap estimate unavailable.';
                 analysis.items.add(heapItem);
             }
 

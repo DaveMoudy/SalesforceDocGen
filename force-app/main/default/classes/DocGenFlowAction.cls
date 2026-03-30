@@ -3,38 +3,38 @@
  * Supports PDF, DOCX, PPTX, and XLSX output. Full merge tag support
  * including loops, conditionals, images, barcodes, and aggregates.
  */
-public with sharing class DocGenFlowAction {
+global with sharing class DocGenFlowAction {
 
-    public class Request {
+    global class Request {
         @InvocableVariable(label='Template ID' required=true description='The DocGen Template record ID')
-        public Id templateId;
+        global Id templateId;
 
         @InvocableVariable(label='Record ID' required=true description='The source record ID to merge data from')
-        public Id recordId;
+        global Id recordId;
 
         @InvocableVariable(label='Save to Record' description='If true, attach the generated file to the source record via ContentDocumentLink. Default: false')
-        public Boolean saveToRecord;
+        global Boolean saveToRecord;
 
         @InvocableVariable(label='Document Title' description='Override the generated file name. Leave blank to use the template default.')
-        public String documentTitle;
+        global String documentTitle;
     }
 
-    public class Response {
+    global class Response {
         @InvocableVariable(label='Content Document ID')
-        public Id contentDocumentId;
+        global Id contentDocumentId;
 
         @InvocableVariable(label='Content Version ID')
-        public Id contentVersionId;
+        global Id contentVersionId;
 
         @InvocableVariable(label='Error Message')
-        public String errorMessage;
+        global String errorMessage;
 
         @InvocableVariable(label='Success')
-        public Boolean success;
+        global Boolean success;
     }
 
     @InvocableMethod(label='Generate Document' description='Generates a document (PDF, DOCX, PPTX, XLSX) from a DocGen template and record. Supports all merge tags including loops, images, barcodes, QR codes, and aggregates.')
-    public static List<Response> generateDocument(List<Request> requests) {
+    global static List<Response> generateDocument(List<Request> requests) {
         List<Response> responses = new List<Response>();
 
         for (Request req : requests) {

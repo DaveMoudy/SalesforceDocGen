@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.1.6 — "Template Import/Export & Community Repo Migration" (Portwood DocGen)
+
+- **Template Import/Export** — Export any template as a portable `.docgen.json` file containing all metadata, query config, saved queries, and the template file (DOCX/XLSX/PPTX). Import the JSON into any org to recreate the template with a single click. Pre-decomposed parts and images are auto-regenerated on import. Export via row action menu; Import via toolbar button.
+- **Community Repo Migration** — DocGen's official home is now [Portwood-Global-Solutions/Portwood-DocGen](https://github.com/Portwood-Global-Solutions/Portwood-DocGen). GitHub Discussions enabled, issue templates upgraded (bug report, feature request, question), PR template, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, and custom labels added.
+- **Landing Page Links Updated** — All GitHub and install links on portwoodglobalsolutions.com now point to the new org repo and use CMDT-backed install URLs.
+- **507/507 Apex tests**, 77% coverage, 0 Critical/High. E2E 24/24.
+
+## v1.1.5 — "Flow Action Visibility, Null Parent Lookup Fix & Landing Page CMDT" (Portwood DocGen)
+
+- **Flow Actions Visible in Subscriber Orgs** — `DocGenFlowAction` and `DocGenBulkFlowAction` changed from `public` to `global`. In namespaced packages, `@InvocableMethod` and `@InvocableVariable` members must be `global` to appear in the subscriber org's Flow Builder. Fixes #49.
+- **Null Parent Lookup Fix** — Null parent lookups in child loops (e.g., `{ReportsTo__r.Name}`) no longer incorrectly render the child record's own `Name` field. They now correctly render as blank. The `resolveValue()` base-object-name skip logic now excludes relationship fields ending in `__r`. Fixes #48.
+- **Landing Page CMDT** — Install links on the VF landing page are now driven by `DocGen_Landing_Config__mdt` instead of hardcoded constants. Updating install links for a new release only requires deploying an updated CMDT record — no Apex changes needed.
+- **507/507 Apex tests**, 79% coverage, 0 Critical/High. E2E 23/23.
+
+## v1.1.4 — "Bulk Runner UX, Community Hub & Batch Heap Analysis" (Portwood DocGen)
+
+- **Bulk Runner Output Mode** — Replaced confusing checkbox toggles with a single dropdown: "Individual Files" (one PDF per record, unlimited scale), "Print-Ready Packet" (single merged PDF), or "Combined + Individual" (both). Clear labels, clear behavior.
+- **Batch Heap Analysis** — Pre-generation analysis now shows per-batch heap estimates alongside merge heap. Uses measured heap delta (not just HTML size) to capture query objects, template parsing, and image metadata overhead. Safer batch size recommendations.
+- **Join Community Link** — Command Hub sidebar now includes a "Join Community" link to the DocGen Community Hub at portwoodglobalsolutions.com/DocGenCommunity. Passes the org ID for automatic account linking during registration.
+- **507/507 Apex tests**, 83% coverage, 0 Critical/High. E2E 22/22.
+
 ## v1.1.3 — "Clickable Hyperlinks in Rich Text PDFs" (Portwood DocGen)
 
 - **Clickable Hyperlinks in PDF** — Rich text `<a href="...">` tags now render as real clickable links in PDF output. Previously, hyperlinks from rich text fields were rendered as styled text (blue + underline) but were not clickable. Now they generate proper `<a>` tags in the HTML passed to `Blob.toPdf()`.

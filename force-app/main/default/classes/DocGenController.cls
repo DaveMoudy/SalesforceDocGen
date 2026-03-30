@@ -2603,4 +2603,178 @@ public with sharing class DocGenController {
 
         return templates.size();
     }
+
+    @AuraEnabled(cacheable=true)
+    public static String getOrgId() {
+        return UserInfo.getOrganizationId();
+    }
+
+    // =========================================================================
+    // Template Import / Export
+    // =========================================================================
+
+    /**
+     * Exports a template and its active version as a portable JSON bundle.
+     * Includes template metadata, query config, saved queries, and the
+     * template file (DOCX/XLSX/PPTX) as base64. Pre-decomposed XML parts
+     * and images are NOT included — they are regenerated on import.
+     */
+    @AuraEnabled
+    public static String exportTemplate(Id templateId) {
+        try {
+            List<DocGen_Template__c> templates = [
+                SELECT Name, Base_Object_API__c, Type__c, Output_Format__c, Category__c,
+                       Description__c, Query_Config__c, Document_Title_Format__c, Is_Default__c,
+                       (SELECT Id, Is_Active__c, Query_Config__c, Content_Version_Id__c,
+                               Category__c, Description__c, Type__c, Base_Object_API__c
+                        FROM Versions__r WHERE Is_Active__c = true LIMIT 1),
+                       (SELECT Name, Query_Condition__c, Description__c FROM Saved_Queries__r)
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH USER_MODE
+                LIMIT 1
+            ];
+            if (templates.isEmpty()) {
+                throw new DocGenException('Template not found or not accessible.');
+            }
+            DocGen_Template__c tmpl = templates[0];
+
+            Map<String, Object> bundle = new Map<String, Object>();
+            bundle.put('docgenExportVersion', '1');
+            bundle.put('exportDate', String.valueOf(Date.today()));
+
+            // Template metadata
+            Map<String, Object> tmplData = new Map<String, Object>();
+            tmplData.put('Name', tmpl.Name);
+            tmplData.put('Base_Object_API__c', tmpl.Base_Object_API__c);
+            tmplData.put('Type__c', tmpl.Type__c);
+            tmplData.put('Output_Format__c', tmpl.Output_Format__c);
+            tmplData.put('Category__c', tmpl.Category__c);
+            tmplData.put('Description__c', tmpl.Description__c);
+            tmplData.put('Query_Config__c', tmpl.Query_Config__c);
+            tmplData.put('Document_Title_Format__c', tmpl.Document_Title_Format__c);
+            tmplData.put('Is_Default__c', tmpl.Is_Default__c);
+            bundle.put('template', tmplData);
+
+            // Active version's template file
+            if (!tmpl.Versions__r.isEmpty()) {
+                DocGen_Template_Version__c ver = tmpl.Versions__r[0];
+                if (String.isNotBlank(ver.Content_Version_Id__c)) {
+                    List<ContentVersion> cvs = [
+                        SELECT VersionData, FileExtension, Title
+                        FROM ContentVersion
+                        WHERE Id = :ver.Content_Version_Id__c
+                        WITH USER_MODE
+                        LIMIT 1
+                    ];
+                    if (!cvs.isEmpty()) {
+                        Map<String, Object> fileData = new Map<String, Object>();
+                        fileData.put('fileName', cvs[0].Title);
+                        fileData.put('fileExtension', cvs[0].FileExtension);
+                        fileData.put('base64', EncodingUtil.base64Encode(cvs[0].VersionData));
+                        bundle.put('templateFile', fileData);
+                    }
+                }
+            }
+
+            // Saved queries
+            if (!tmpl.Saved_Queries__r.isEmpty()) {
+                List<Map<String, String>> queries = new List<Map<String, String>>();
+                for (DocGen_Saved_Query__c sq : tmpl.Saved_Queries__r) {
+                    Map<String, String> q = new Map<String, String>();
+                    q.put('Name', sq.Name);
+                    q.put('Query_Condition__c', sq.Query_Condition__c);
+                    q.put('Description__c', sq.Description__c);
+                    queries.add(q);
+                }
+                bundle.put('savedQueries', queries);
+            }
+
+            return JSON.serialize(bundle);
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error exporting template.');
+        }
+    }
+
+    /**
+     * Imports a template from a JSON bundle produced by exportTemplate().
+     * Creates the template record, uploads the file, creates an active
+     * version, and triggers image extraction / pre-decomposition.
+     * @return The new template record ID
+     */
+    @AuraEnabled
+    public static Id importTemplate(String jsonData) {
+        try {
+            Map<String, Object> bundle = (Map<String, Object>) JSON.deserializeUntyped(jsonData);
+            Map<String, Object> tmplData = (Map<String, Object>) bundle.get('template');
+            if (tmplData == null) {
+                throw new DocGenException('Invalid import file: missing template data.');
+            }
+
+            // 1. Create template record
+            DocGen_Template__c tmpl = new DocGen_Template__c();
+            tmpl.Name = (String) tmplData.get('Name');
+            tmpl.Base_Object_API__c = (String) tmplData.get('Base_Object_API__c');
+            tmpl.Type__c = (String) tmplData.get('Type__c');
+            tmpl.Output_Format__c = (String) tmplData.get('Output_Format__c');
+            tmpl.Category__c = (String) tmplData.get('Category__c');
+            tmpl.Description__c = (String) tmplData.get('Description__c');
+            tmpl.Query_Config__c = (String) tmplData.get('Query_Config__c');
+            tmpl.Document_Title_Format__c = (String) tmplData.get('Document_Title_Format__c');
+            tmpl.Is_Default__c = tmplData.get('Is_Default__c') == true;
+            insert tmpl; // NOPMD ApexCRUDViolation - package-internal custom object
+
+            // 2. Upload template file if present
+            Map<String, Object> fileData = (Map<String, Object>) bundle.get('templateFile');
+            String cvId = null;
+            if (fileData != null && String.isNotBlank((String) fileData.get('base64'))) {
+                ContentVersion cv = new ContentVersion();
+                cv.Title = tmpl.Name;
+                cv.PathOnClient = tmpl.Name + '.' + (String) fileData.get('fileExtension');
+                cv.VersionData = EncodingUtil.base64Decode((String) fileData.get('base64'));
+                cv.FirstPublishLocationId = tmpl.Id;
+                insert cv; // NOPMD ApexCRUDViolation - ContentVersion for template file
+                cvId = cv.Id;
+            }
+
+            // 3. Create active version
+            DocGen_Template_Version__c ver = new DocGen_Template_Version__c();
+            ver.Template__c = tmpl.Id;
+            ver.Is_Active__c = true;
+            ver.Content_Version_Id__c = cvId;
+            ver.Query_Config__c = (String) tmplData.get('Query_Config__c');
+            ver.Category__c = (String) tmplData.get('Category__c');
+            ver.Description__c = (String) tmplData.get('Description__c');
+            ver.Type__c = (String) tmplData.get('Type__c');
+            ver.Base_Object_API__c = (String) tmplData.get('Base_Object_API__c');
+            insert ver; // NOPMD ApexCRUDViolation - package-internal custom object
+
+            // 4. Extract images and pre-decompose (non-fatal)
+            try {
+                DocGenService.extractAndSaveTemplateImages(tmpl.Id, ver.Id);
+            } catch (Exception imgErr) {
+                System.debug(LoggingLevel.ERROR, 'Import: Image extraction failed: ' + imgErr.getMessage());
+            }
+
+            // 5. Create saved queries if present
+            List<Object> savedQueries = (List<Object>) bundle.get('savedQueries');
+            if (savedQueries != null && !savedQueries.isEmpty()) {
+                List<DocGen_Saved_Query__c> sqs = new List<DocGen_Saved_Query__c>();
+                for (Object sqObj : savedQueries) {
+                    Map<String, Object> sq = (Map<String, Object>) sqObj;
+                    DocGen_Saved_Query__c newSq = new DocGen_Saved_Query__c();
+                    newSq.DocGen_Template__c = tmpl.Id;
+                    newSq.Name = (String) sq.get('Name');
+                    newSq.Query_Condition__c = (String) sq.get('Query_Condition__c');
+                    newSq.Description__c = (String) sq.get('Description__c');
+                    sqs.add(newSq);
+                }
+                insert sqs; // NOPMD ApexCRUDViolation - package-internal custom object
+            }
+
+            return tmpl.Id;
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error importing template.');
+        }
+    }
 }

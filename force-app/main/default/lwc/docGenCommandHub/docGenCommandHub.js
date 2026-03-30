@@ -1,14 +1,25 @@
 import { LightningElement, track, wire } from 'lwc';
 import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
+import getOrgId from '@salesforce/apex/DocGenController.getOrgId';
 
 export default class DocGenCommandHub extends LightningElement {
     @track templateCount = 0;
+    communityOrgId = '';
     @track showBanner = false;
     @track bannerDismissed = false;
     @track activeSection = 'templates';
     @track isLoaded = false;
 
     _wiredTemplates;
+
+    @wire(getOrgId)
+    wiredOrgId({ data }) {
+        if (data) { this.communityOrgId = data; }
+    }
+
+    get communityUrl() {
+        return 'https://portwoodglobalsolutions.com/DocGenCommunity?view=signup&orgId=' + this.communityOrgId;
+    }
 
     @wire(getAllTemplates)
     wiredTemplates(result) {

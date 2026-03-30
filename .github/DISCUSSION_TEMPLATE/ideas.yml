@@ -1,0 +1,17 @@
+title: "[Idea] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share an idea for DocGen! This is the place for early-stage thoughts, brainstorming, and "what if" conversations. Once an idea gets traction, we'll convert it to a feature request issue.
+  - type: textarea
+    attributes:
+      label: Idea
+      description: What's on your mind?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Context
+      description: Why would this be useful? What use case does it unlock?

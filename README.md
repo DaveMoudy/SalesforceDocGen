@@ -2,13 +2,13 @@
 
 Generate PDFs, Word docs, Excel spreadsheets, and PowerPoint presentations from any Salesforce record. Merge PDFs, add barcodes and QR codes, compute totals — 100% native, zero external dependencies, completely free.
 
-[![Version](https://img.shields.io/badge/version-1.1.3-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-1.1.6-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
 [![Apex Tests](https://img.shields.io/badge/Apex_Tests-507%2F507_passing-brightgreen)](#code-quality)
-[![Coverage](https://img.shields.io/badge/Coverage-83%25-green)](#code-quality)
-[![E2E](https://img.shields.io/badge/E2E-22%2F22_passing-brightgreen)](#code-quality)
+[![Coverage](https://img.shields.io/badge/Coverage-77%25-green)](#code-quality)
+[![E2E](https://img.shields.io/badge/E2E-24%2F24_passing-brightgreen)](#code-quality)
 [![Website](https://img.shields.io/badge/website-portwoodglobalsolutions.com-blue)](https://portwoodglobalsolutions.com)
 
 ### Salesforce Code Analyzer Results
@@ -17,9 +17,9 @@ Generate PDFs, Word docs, Excel spreadsheets, and PowerPoint presentations from 
 |----------|-------|--------|
 | Critical | 0 | :white_check_mark: |
 | High | 0 | :white_check_mark: |
-| Moderate | 344 | Style/complexity only |
-| Low | 617 | ApexDoc, SLDS suggestions |
-| Info | 60 | Whitespace, copy-paste |
+| Moderate | 387 | Style/complexity only |
+| Low | 656 | ApexDoc, SLDS suggestions |
+| Info | 56 | Whitespace, copy-paste |
 
 Scanned with `sf code-analyzer run --rule-selector "recommended"` — the rule set used by Salesforce Security Review. Zero security violations.
 
@@ -30,10 +30,10 @@ Scanned with `sf code-analyzer run --rule-selector "recommended"` — the rule s
 **New install:**
 
 ```bash
-sf package install --package 04tal000006PClhAAG --wait 10 --target-org <your-org>
+sf package install --package 04tal000006PDufAAG --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PClhAAG) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PClhAAG)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PDufAAG) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PDufAAG)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -296,9 +296,9 @@ Scanned with [Salesforce Code Analyzer](https://developer.salesforce.com/docs/pl
 |----------|-------|--------|-------|
 | **Critical** | **0** | :white_check_mark: Pass | No security vulnerabilities |
 | **High** | **0** | :white_check_mark: Pass | No CRUD/FLS, SOQL injection, or XSS issues |
-| **Moderate** | 344 | :information_source: | Cyclomatic complexity, missing braces (style only) |
-| **Low** | 617 | :information_source: | Missing ApexDoc, SLDS class suggestions |
-| **Info** | 60 | :information_source: | Trailing whitespace, copy-paste detection |
+| **Moderate** | 387 | :information_source: | Cyclomatic complexity, missing braces (style only) |
+| **Low** | 656 | :information_source: | Missing ApexDoc, SLDS class suggestions |
+| **Info** | 56 | :information_source: | Trailing whitespace, copy-paste detection |
 
 **Run it yourself:**
 ```bash
@@ -308,7 +308,7 @@ sf code-analyzer run --rule-selector "recommended" --target force-app
 ### Apex Test Results
 
 - **507 / 507 tests passing** (100% pass rate)
-- **83% org-wide code coverage**
+- **77% org-wide code coverage**
 - All tests use `System.runAs()`, assertion messages, and real data
 
 ### E2E Test Results
@@ -316,7 +316,7 @@ sf code-analyzer run --rule-selector "recommended" --target force-app
 ```
 sf apex run --target-org <org> -f scripts/e2e-test.apex
 
-PASS: 22  FAIL: 0  ALL TESTS PASSED
+PASS: 24  FAIL: 0  ALL TESTS PASSED
 ```
 
 | # | Test | Result |
@@ -343,6 +343,8 @@ PASS: 22  FAIL: 0  ALL TESTS PASSED
 | T20 | MAX:Quantity aggregate | PASS |
 | T21 | V4 Apex Data Provider generation | PASS |
 | T22 | V4 missing class error handling | PASS |
+| T23 | Null parent lookup in loop renders blank | PASS |
+| T24 | Template export/import round-trip | PASS |
 
 ### QR Code Verification
 
@@ -350,28 +352,24 @@ QR encoding verified module-by-module against [qrcode-generator](https://www.npm
 
 ---
 
-## Roadmap
+## Community
 
-DocGen is now published through a Salesforce Partner org (Portwood Global Solutions). We are actively working toward listing as a **Salesforce Accelerator** (similar to DLRS and other community-driven tools). A community support page is in progress — stay tuned.
+DocGen is open source, community-driven, and published through [Portwood Global Solutions](https://portwoodglobalsolutions.com). We're working toward listing as a **Salesforce Accelerator** (like DLRS and other community tools).
 
-## Support
-
-For questions, bugs, or feature requests:
-
-- **Email:** hello@portwoodglobalsolutions.com
-- **GitHub Issues:** [github.com/DaveMoudy/SalesforceDocGen/issues](https://github.com/DaveMoudy/SalesforceDocGen/issues)
-
----
+| Channel | What It's For |
+|---------|---------------|
+| [Issues](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/issues) | Bug reports, feature requests, questions |
+| [Discussions](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/discussions) | Ideas, show-and-tell, general conversation |
+| [Community Hub](https://portwoodglobalsolutions.com/DocGenCommunity) | Forum with real-time help and template sharing |
+| [Website](https://portwoodglobalsolutions.com) | Install links, live demo, documentation |
 
 ## Contributing
 
-Open-source under Apache 2.0. Contributions welcome:
+We welcome contributions of all kinds — bug fixes, features, documentation, and template examples. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, code guidelines, and how to submit a PR.
 
-1. Fork the repo
-2. Create a feature branch
-3. Submit a PR with a clear description
+## Security
 
----
+Found a vulnerability? Please report it privately — see [SECURITY.md](SECURITY.md) for details.
 
 ## License
 

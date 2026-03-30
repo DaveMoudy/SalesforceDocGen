@@ -84,9 +84,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
     @track recentJobs = [];
     @track jobLabel = '';
     @track batchSize = 1;
-    @track mergePdf = true;
-    @track mergeOnly = true;
-    @track keepIndividual = false;
+    @track outputMode = 'combined'; // 'individual', 'combined', 'both'
     @track jobSearchTerm = '';
 
     // Job analysis state
@@ -253,39 +251,25 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
         if (this.filterValidated) this.runAnalysis();
     }
 
-    handleMergePdfChange(event) {
-        this.mergePdf = event.target.checked;
-        if (!this.mergePdf) {
-            this.mergeOnly = false;
-        }
+    get outputModeOptions() {
+        return [
+            { label: 'Individual Files', value: 'individual' },
+            { label: 'Print-Ready Packet', value: 'combined' },
+            { label: 'Combined + Individual', value: 'both' }
+        ];
+    }
+
+    handleOutputModeChange(event) {
+        this.outputMode = event.detail.value;
         if (this.filterValidated) { this.runAnalysis(); }
     }
 
-    handleMergeOnlyChange(event) {
-        this.mergeOnly = event.target.checked;
-        if (this.mergeOnly) {
-            this.mergePdf = true;
-            this.keepIndividual = false;
-        } else {
-            this.mergePdf = false;
-            this.keepIndividual = false;
-        }
-        if (this.filterValidated) { this.runAnalysis(); }
+    get mergePdf() {
+        return this.outputMode === 'combined' || this.outputMode === 'both';
     }
 
-    handleKeepIndividualChange(event) {
-        this.keepIndividual = event.target.checked;
-        if (this.keepIndividual) {
-            this.mergePdf = true;
-            this.mergeOnly = false;
-        } else {
-            this.mergeOnly = true;
-        }
-        if (this.filterValidated) { this.runAnalysis(); }
-    }
-
-    get keepIndividualDisabled() {
-        return !this.mergeOnly || this.isProcessing;
+    get mergeOnly() {
+        return this.outputMode === 'combined';
     }
 
     handleJobSearchChange(event) {

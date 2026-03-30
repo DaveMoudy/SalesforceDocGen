@@ -85,6 +85,24 @@
     text-align: center;
 }
 
+.community-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    justify-content: center;
+    transition: transform 0.2s;
+}
+.community-link:hover { transform: translateY(-1px); }
+.community-link .nav-icon { --sds-c-icon-color-foreground-default: #fff; }
+
 .footer-note {
     font-size: 0.75rem;
     color: #9ca3af;

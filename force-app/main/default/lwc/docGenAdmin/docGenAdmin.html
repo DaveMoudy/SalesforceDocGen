@@ -142,6 +142,16 @@
                                 variant="neutral">
                             </lightning-button>
                         </div>
+                        <div class="slds-col slds-var-p-left_medium">
+                            <lightning-button
+                                icon-name="utility:upload"
+                                onclick={handleImportClick}
+                                label="Import Template"
+                                title="Import a .docgen.json template file"
+                                variant="neutral">
+                            </lightning-button>
+                            <input type="file" data-id="importFileInput" accept=".json" style="display:none" onchange={handleImportFile} />
+                        </div>
                     </div>
                     <template if:true={isInstallingSamples}>
                         <div class="slds-var-p-around_xx-large slds-text-align_center">

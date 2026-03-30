@@ -570,10 +570,10 @@ private class DocGenMiscTests {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         User usr = getManagedUser();
 
-		Map<String, Object> result;
+        Map<String, Object> result;
         Test.startTest();
-		try {
-            result = DocGenService.processDocument(tpl.Id, usr.Id);
+        try {
+            result = DocGenService.processDocument(tpl.Id, acc.Id);
         } catch (DocGenException e) {
             System.assert(e.getMessage().contains('Malformed loop tag'), 'Exception message should contain "Malformed loop tag"');
         }
@@ -1578,10 +1578,10 @@ private class DocGenMiscTests {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         User usr = getManagedUser();
 
-		Map<String, Object> result;
+        Map<String, Object> result;
         Test.startTest();
         try {
-            result = DocGenService.processDocument(tpl.Id, usr.Id);
+            result = DocGenService.processDocument(tpl.Id, acc.Id);
         } catch (DocGenException e) {
             System.assert(e.getMessage().contains('Malformed merge tag'), 'Exception message should contain "Malformed merge tag"');
         }

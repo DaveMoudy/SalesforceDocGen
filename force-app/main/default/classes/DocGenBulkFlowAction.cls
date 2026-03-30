@@ -3,41 +3,41 @@
  * Exposes the full bulk generation pipeline: filtering, batch size,
  * combined PDF, and individual file options.
  */
-public with sharing class DocGenBulkFlowAction {
+global with sharing class DocGenBulkFlowAction {
 
-    public class Request {
+    global class Request {
         @InvocableVariable(label='Template ID' required=true description='The DocGen Template record ID')
-        public Id templateId;
+        global Id templateId;
 
         @InvocableVariable(label='WHERE Condition' description='Optional SOQL WHERE clause to filter records (e.g. Industry = \'Technology\')')
-        public String queryCondition;
+        global String queryCondition;
 
         @InvocableVariable(label='Job Label' description='A friendly label for this job (shown in Job History)')
-        public String jobLabel;
+        global String jobLabel;
 
         @InvocableVariable(label='Combined PDF Only' description='Recommended. Produce one merged PDF with all records. Uses minimal heap. Default: true')
-        public Boolean combinedPdfOnly;
+        global Boolean combinedPdfOnly;
 
         @InvocableVariable(label='Also Keep Individual Files' description='Generate a separate PDF per record in addition to the combined PDF. Uses more heap.')
-        public Boolean keepIndividualFiles;
+        global Boolean keepIndividualFiles;
 
         @InvocableVariable(label='Batch Size' description='Records per batch transaction. Use 1 for complex templates, 10-50 for simple ones. Default: 1')
-        public Integer batchSize;
+        global Integer batchSize;
     }
 
-    public class Response {
+    global class Response {
         @InvocableVariable(label='Job ID')
-        public Id jobId;
+        global Id jobId;
 
         @InvocableVariable(label='Error Message')
-        public String errorMessage;
+        global String errorMessage;
 
         @InvocableVariable(label='Success')
-        public Boolean success;
+        global Boolean success;
     }
 
     @InvocableMethod(label='Generate Bulk Documents' description='Starts a batch job to generate documents for multiple records. Supports combined PDF, individual files, batch sizing, and WHERE filters.')
-    public static List<Response> generateBulkDocuments(List<Request> requests) {
+    global static List<Response> generateBulkDocuments(List<Request> requests) {
         List<Response> responses = new List<Response>();
 
         for (Request req : requests) {

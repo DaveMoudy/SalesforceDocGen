@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Version_Label__c</fullName>
+    <fieldManageability>DeveloperControlled</fieldManageability>
+    <label>Version Label</label>
+    <length>20</length>
+    <type>Text</type>
+    <unique>false</unique>
+    <description>Human-readable version label (e.g. 1.1.5).</description>
+</CustomField>

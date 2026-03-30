@@ -1,0 +1,21 @@
+title: ""
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Show off what you've built with DocGen! Share templates, screenshots, use cases, or creative solutions. This helps the whole community learn.
+  - type: textarea
+    attributes:
+      label: What did you build?
+      description: Describe your template, use case, or integration.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: How it works
+      description: Merge tags used, template format, any special techniques.
+  - type: textarea
+    attributes:
+      label: Screenshots
+      description: Paste screenshots of the template and/or generated output.

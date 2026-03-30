@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Community Hub
+    url: https://portwoodglobalsolutions.com/DocGenCommunity
+    about: Ask questions, share templates, and connect with other DocGen users
+  - name: Discussions
+    url: https://github.com/Portwood-Global-Solutions/Portwood-DocGen/discussions
+    about: General discussion, ideas, and show-and-tell
+  - name: Website
+    url: https://portwoodglobalsolutions.com
+    about: Install links, live demo, and documentation

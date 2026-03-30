@@ -14,6 +14,8 @@ import processAndReturnDocument from '@salesforce/apex/DocGenController.processA
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
 import createSampleTemplates from '@salesforce/apex/DocGenController.createSampleTemplates';
+import exportTemplate from '@salesforce/apex/DocGenController.exportTemplate';
+import importTemplate from '@salesforce/apex/DocGenController.importTemplate';
 
 // Schema
 import DOCGEN_TEMPLATE_OBJECT from '@salesforce/schema/DocGen_Template__c';
@@ -59,6 +61,7 @@ const COLUMNS = [
     { type: 'action', typeAttributes: { rowActions: [
         { label: 'View', name: 'view' },
         { label: 'Edit', name: 'edit' },
+        { label: 'Export', name: 'export' },
         { label: 'Share', name: 'share' },
         { label: 'Delete', name: 'delete' }
     ] } }
@@ -581,9 +584,62 @@ const VERSION_COLUMNS = [
             this.openEditModal(row, 'details');
         } else if (actionName === 'view') {
             this.openEditModal(row, 'tags');
+        } else if (actionName === 'export') {
+            this.handleExportTemplate(row);
         } else if (actionName === 'share') {
             this.sharingTemplateId = row.Id;
             this.isSharingModalOpen = true;
+        }
+    }
+
+    async handleExportTemplate(row) {
+        try {
+            this.showToast('Exporting', 'Preparing ' + row.Name + '...', 'info');
+            const jsonStr = await exportTemplate({ templateId: row.Id });
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = (row.Name || 'template').replace(/[^a-zA-Z0-9_-]/g, '_') + '.docgen.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            this.showToast('Exported', row.Name + ' exported successfully', 'success');
+        } catch (error) {
+            this.showToast('Export Error', error.body ? error.body.message : error.message, 'error');
+        }
+    }
+
+    handleImportClick() {
+        this.template.querySelector('input[data-id="importFileInput"]').click();
+    }
+
+    async handleImportFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        // Reset the input so the same file can be re-imported
+        event.target.value = '';
+
+        if (!file.name.endsWith('.json') && !file.name.endsWith('.docgen.json')) {
+            this.showToast('Invalid File', 'Please select a .docgen.json file', 'error');
+            return;
+        }
+
+        try {
+            this.showToast('Importing', 'Importing ' + file.name + '...', 'info');
+            const jsonStr = await file.text();
+            // Basic validation
+            const parsed = JSON.parse(jsonStr);
+            if (!parsed.template || !parsed.docgenExportVersion) {
+                this.showToast('Invalid File', 'This file is not a valid DocGen export.', 'error');
+                return;
+            }
+            await importTemplate({ jsonData: jsonStr });
+            this.showToast('Imported', (parsed.template.Name || 'Template') + ' imported successfully', 'success');
+            return refreshApex(this.wiredTemplatesResult);
+        } catch (error) {
+            this.showToast('Import Error', error.body ? error.body.message : error.message, 'error');
         }
     }
 

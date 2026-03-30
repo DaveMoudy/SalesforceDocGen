@@ -262,25 +262,15 @@
                             field-level-help="Records per transaction. Use 1 for complex templates. Higher values (10-50) for simple text-only templates.">
                         </lightning-input>
                     </div>
-                    <div class="slds-col slds-var-p-top_large">
-                        <lightning-input
-                            type="checkbox"
-                            label="Combined PDF Only"
-                            checked={mergeOnly}
-                            onchange={handleMergeOnlyChange}
+                    <div class="slds-col slds-size_1-of-4">
+                        <lightning-combobox
+                            label="Output Mode"
+                            value={outputMode}
+                            options={outputModeOptions}
+                            onchange={handleOutputModeChange}
                             disabled={isProcessing}
-                            field-level-help="Recommended. Produces one merged PDF containing all records. Most efficient — uses minimal heap.">
-                        </lightning-input>
-                    </div>
-                    <div class="slds-col slds-var-p-top_large">
-                        <lightning-input
-                            type="checkbox"
-                            label="Combined + Individual PDFs"
-                            checked={keepIndividual}
-                            onchange={handleKeepIndividualChange}
-                            disabled={keepIndividualDisabled}
-                            field-level-help="Produces both a merged PDF and a separate PDF per record. Uses more heap — reduce batch size if needed.">
-                        </lightning-input>
+                            field-level-help="Individual Files: one PDF per record (unlimited scale). Print-Ready Packet: single merged PDF for mail/print. Combined + Individual: both.">
+                        </lightning-combobox>
                     </div>
 
                     <div class="slds-col slds-var-m-top_small">
