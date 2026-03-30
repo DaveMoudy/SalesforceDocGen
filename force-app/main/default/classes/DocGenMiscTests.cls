@@ -36,7 +36,7 @@ private class DocGenMiscTests {
 				LocaleSidKey = 'en_US',
 				EmailEncodingKey = 'UTF-8',
 				ManagerId = UserInfo.getUserId(),
-				ProfileId = [SELECT Id FROM Profile WHERE Name = 'Chatter Free User' LIMIT 1].Id,
+				ProfileId = [SELECT Id FROM Profile WHERE Name = :CHATTER_FREE_USER_PROFILE_NAME LIMIT 1].Id,
 				TimeZoneSidKey = 'America/Los_Angeles'
 			);
 			insert usr;
@@ -4007,7 +4007,7 @@ private class DocGenMiscTests {
     @IsTest
     static void testSaveSettingsPermissionDenied() {
         // Create a user without admin access (permission set DocGen_Admin_Access is not assigned)
-        Profile p = [SELECT Id FROM Profile WHERE Id =: UserInfo.getProfileId() LIMIT 1];
+        Profile p = [SELECT Id FROM Profile WHERE Name = :CHATTER_FREE_USER_PROFILE_NAME LIMIT 1];
         User stdUser = new User(
             Alias = 'dgntst',
             Email = 'docgentest@example.com',
@@ -4133,14 +4133,13 @@ private class DocGenMiscTests {
         createValidDocxFile(docXml);
 
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-        User usr = getManagedUser();
 
         Map<String, Object> preloaded = new Map<String, Object>{
             'Name' => 'Preloaded Name'
         };
 
         Test.startTest();
-        String html = DocGenService.generateHtmlForRecord(tpl.Id, usr.Id, preloaded);
+        String html = DocGenService.generateHtmlForRecord(tpl.Id, UserInfo.getUserId(), preloaded);
         Test.stopTest();
 
         System.assertNotEquals(null, html, 'Should return HTML with preloaded data');
