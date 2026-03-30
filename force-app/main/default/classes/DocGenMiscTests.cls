@@ -13,7 +13,6 @@ private class DocGenMiscTests {
         );
         insert tpl;
 
-		
 		createManagedUser(UNIQUE_IDENTIFIER);
     }
 
@@ -381,7 +380,7 @@ private class DocGenMiscTests {
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p>' +
-            '<w:p><w:r><w:t>{AccountSource}</w:t></w:r></w:p></w:body></w:document>';
+            '<w:p><w:r><w:t>{Id}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -468,7 +467,7 @@ private class DocGenMiscTests {
 
         // Update template query config to include Signature
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-        tpl.Query_Config__c = 'Name, AccountSource, Signature';
+        tpl.Query_Config__c = 'Name, Id, Signature';
         update tpl;
 
         User usr = getManagedUser();
@@ -573,7 +572,7 @@ private class DocGenMiscTests {
         Map<String, Object> result;
         Test.startTest();
         try {
-            result = DocGenService.processDocument(tpl.Id, acc.Id);
+            result = DocGenService.processDocument(tpl.Id, usr.Id);
         } catch (DocGenException e) {
             System.assert(e.getMessage().contains('Malformed loop tag'), 'Exception message should contain "Malformed loop tag"');
         }
@@ -607,7 +606,7 @@ private class DocGenMiscTests {
         zw.addEntry('word/document.xml', Blob.valueOf(bodyXml));
         String headerXml = '<?xml version="1.0"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Header: {Name}</w:t></w:r></w:p></w:hdr>';
         zw.addEntry('word/header1.xml', Blob.valueOf(headerXml));
-        String footerXml = '<?xml version="1.0"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Footer: {AccountSource}</w:t></w:r></w:p></w:ftr>';
+        String footerXml = '<?xml version="1.0"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Footer: {Id}</w:t></w:r></w:p></w:ftr>';
         zw.addEntry('word/footer1.xml', Blob.valueOf(footerXml));
 
         ContentVersion cv = new ContentVersion(Title='HeaderFooterDoc', PathOnClient='HeaderFooterDoc.docx', VersionData=zw.getArchive());
@@ -862,7 +861,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testGetRecordDataWithAutoAppendC() {
-        // Exercises the __c auto-append branch — AccountSource exists, but try without __c
+        // Exercises the __c auto-append branch — Id exists, but try without __c
         // "Signature" is a standard field so this tests the field-not-found skip path
 
         Test.startTest();
@@ -1581,7 +1580,7 @@ private class DocGenMiscTests {
         Map<String, Object> result;
         Test.startTest();
         try {
-            result = DocGenService.processDocument(tpl.Id, acc.Id);
+            result = DocGenService.processDocument(tpl.Id, usr.Id);
         } catch (DocGenException e) {
             System.assert(e.getMessage().contains('Malformed merge tag'), 'Exception message should contain "Malformed merge tag"');
         }
@@ -1759,13 +1758,13 @@ private class DocGenMiscTests {
         updateUser(usr);
 
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-        tpl.Query_Config__c = 'Name, AboutMe, AccountSource';
+        tpl.Query_Config__c = 'Name, AboutMe, Id';
         update tpl;
 
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-            '<w:body><w:p><w:r><w:t>{#AboutMe}{#AccountSource}Both present{/AccountSource}{/AboutMe}</w:t></w:r></w:p></w:body></w:document>';
+            '<w:body><w:p><w:r><w:t>{#AboutMe}{#Id}Both present{/Id}{/AboutMe}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
         Test.startTest();
@@ -1915,7 +1914,7 @@ private class DocGenMiscTests {
             '<a:r><a:t>{Name}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>';
         String slide2 = '<?xml version="1.0"?><p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
             '<p:cSld><p:spTree><p:sp><p:txBody><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
-            '<a:r><a:t>{AccountSource}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>';
+            '<a:r><a:t>{Id}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>';
         zw.addEntry('ppt/slides/slide1.xml', Blob.valueOf(slide1));
         zw.addEntry('ppt/slides/slide2.xml', Blob.valueOf(slide2));
 
@@ -3368,7 +3367,7 @@ private class DocGenMiscTests {
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="3">' +
             '<si><t>{Name}</t></si>' +
-            '<si><t>{AccountSource}</t></si>' +
+            '<si><t>{Id}</t></si>' +
             '<si><t>Static Text</t></si>' +
             '</sst>';
 
@@ -4803,7 +4802,7 @@ private class DocGenMiscTests {
 
         String sharedStringsXml =
             '<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-            '<si><t>{Name}</t></si><si><t>{AccountSource}</t></si></sst>';
+            '<si><t>{Name}</t></si><si><t>{Id}</t></si></sst>';
 
         String sheet1Xml =
             '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +

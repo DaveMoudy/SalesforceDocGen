@@ -2828,26 +2828,4 @@ public with sharing class DocGenService {
     public static Map<String, Object> mergeTemplateForSignature(Id templateId, String recordIdStr) {
         throw new DocGenException('Signatures have been removed from DocGen. Please delete the old signature classes from your org.');
     }
-
-	// Method to create an AuraHandledException with an Exception message
-	public static AuraHandledException ahe(Exception exc) {
-		return ahe(exc, exc.getMessage());
-	}
-	
-	public static AuraHandledException ahe(Exception exc, String message) {
-		if (exc instanceof AuraHandledException) {
-			return (AuraHandledException) exc;
-		}
-		System.debug(LoggingLevel.ERROR, 'AuraHandledException created from Exception type: ' + exc.getTypeName());
-		System.debug(LoggingLevel.ERROR, 'Message: ' + exc.getMessage());
-		System.debug(LoggingLevel.ERROR, 'StackTrace: ' + exc.getStackTraceString());
-		return ahe(message);
-	}
-	
-	// Method to create an AuraHandledException with a custom message
-	public static AuraHandledException ahe(String message) {
-		AuraHandledException ahe = new AuraHandledException(message);
-		ahe.setMessage(message);
-		return ahe;
-	}
 }
