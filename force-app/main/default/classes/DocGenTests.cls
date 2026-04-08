@@ -6,15 +6,11 @@ private class DocGenTests {
         // Create Template
         DocGen_Template__c tpl = new DocGen_Template__c(
             Name = 'Test Template',
-            Base_Object_API__c = 'Account',
-            Query_Config__c = 'Name, AccountSource',
+            Base_Object_API__c = 'User',
+            Query_Config__c = 'Email, CreatedBy.Email',
             Type__c = 'Word'
         );
         insert tpl;
-
-        // Create Account
-        Account acc = new Account(Name = 'Test Account', AccountSource = 'Web', Website = 'https://www.example.com');
-        insert acc;
 
         // Create ContentVersion (File)
         ContentVersion cv = new ContentVersion(
@@ -42,16 +38,16 @@ private class DocGenTests {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            Account acc = [SELECT Id FROM Account LIMIT 1];
+            User usr = u;
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, acc.Id);
+            Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, usr.Id);
             Test.stopTest();
 
             System.assertNotEquals(null, result.get('data'), 'Data should not be null');
             System.assertNotEquals(null, result.get('templateFile'), 'File should not be null');
             Map<String, Object> data = (Map<String, Object>) result.get('data');
-            System.assertEquals('Test Account', data.get('Name'), 'Account Name should match test data');
+            System.assertEquals(UserInfo.getUserEmail(), data.get('Email'), 'User Email should match test data');
         }
     }
 
@@ -59,7 +55,7 @@ private class DocGenTests {
     static void testGetTemplates() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            List<DocGen_Template__c> tpls = DocGenController.getTemplatesForObject('Account');
+            List<DocGen_Template__c> tpls = DocGenController.getTemplatesForObject('User');
             System.assertEquals(1, tpls.size(), 'Should return 1 template for Account');
         }
     }
@@ -77,7 +73,7 @@ private class DocGenTests {
                 Content_Version_Id__c = cv1.Id,
                 Is_Active__c = true,
                 Type__c = 'Word',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Category__c = 'General',
                 Description__c = 'V1 Description'
             );
@@ -106,7 +102,7 @@ private class DocGenTests {
                 Content_Version_Id__c = cv2.Id,
                 Is_Active__c = true,
                 Type__c = 'Word',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Category__c = 'General',
                 Description__c = 'V2 Description'
             );

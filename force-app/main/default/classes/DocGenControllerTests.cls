@@ -1,23 +1,44 @@
 @IsTest
 private class DocGenControllerTests {
-
+	private static String CHATTER_FREE_USER_PROFILE_NAME = 'Chatter Free User';
+	private static String UNIQUE_IDENTIFIER = 'DocGenControllerTests';
+	private static String UNIQUE_USERNAME = String.format('manageduser+{0}@test.com{1}', new List<String>{UNIQUE_IDENTIFIER, UserInfo.getUserId()});
     @TestSetup
     static void setup() {
         DocGen_Template__c tpl = new DocGen_Template__c(
             Name = 'Controller Test Template',
-            Base_Object_API__c = 'Account',
-            Query_Config__c = 'Name, AccountSource',
+            Base_Object_API__c = 'User',
+            Query_Config__c = 'Email, CreatedBy.Email',
             Type__c = 'Word'
         );
         insert tpl;
 
-        Account acc = new Account(
-            Name = 'Controller Test Account',
-            AccountSource = 'Web',
-            Website = 'https://test.com'
-        );
-        insert acc;
+		createManagedUser(UNIQUE_IDENTIFIER);
     }
+
+	private static void createManagedUser(String uniqueIdentifier) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+			// this should create a new chatter free user and set the manager to the current user
+			User usr = new User(
+				FirstName = 'Managed',
+				LastName = 'User',
+				Email = 'manageduser@test.com',
+				Username = UNIQUE_USERNAME,
+				Alias = 'muser',
+				LanguageLocaleKey = 'en_US',
+				LocaleSidKey = 'en_US',
+				EmailEncodingKey = 'UTF-8',
+				ManagerId = UserInfo.getUserId(),
+				ProfileId = [SELECT Id FROM Profile WHERE Name = 'Chatter Free User' LIMIT 1].Id,
+				TimeZoneSidKey = 'America/Los_Angeles'
+			);
+			insert usr;
+		}
+	}
+
+	private static User getManagedUser() {
+		return [SELECT Id, Name, FirstName, LastName, CreatedBy.Name FROM User WHERE Username = :UNIQUE_USERNAME LIMIT 1];
+	}
 
     private static ContentVersion createTestFile() {
         ContentVersion cv = new ContentVersion(
@@ -41,14 +62,13 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testSaveGeneratedDocument() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            User usr = getManagedUser();
             String dummyContent = EncodingUtil.base64Encode(Blob.valueOf('Dummy PDF content'));
 
             Test.startTest();
             Id contentDocId = DocGenController.saveGeneratedDocument(
-                acc.Id, 'TestOutput', dummyContent, '.pdf'
+                usr.Id, 'TestOutput', dummyContent, '.pdf'
             );
             Test.stopTest();
 
@@ -67,14 +87,13 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testSaveGeneratedDocumentExtensionWithoutDot() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            User usr = getManagedUser();
             String dummyContent = EncodingUtil.base64Encode(Blob.valueOf('Dummy DOCX content'));
 
             Test.startTest();
             Id contentDocId = DocGenController.saveGeneratedDocument(
-                acc.Id, 'TestOutputNoDot', dummyContent, 'docx'
+                usr.Id, 'TestOutputNoDot', dummyContent, 'docx'
             );
             Test.stopTest();
 
@@ -94,16 +113,15 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testProcessAndReturnDocumentThrows() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             createTestFile();
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.processAndReturnDocument(tpl.Id, acc.Id);
+                DocGenController.processAndReturnDocument(tpl.Id, usr.Id);
             } catch (AuraHandledException e) {
                 caughtException = true;
             }
@@ -118,26 +136,24 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testPreviewRecordData() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Test.startTest();
             Map<String, Object> result = DocGenController.previewRecordData(
-                acc.Id, 'Account', 'Name, AccountSource'
+                usr.Id, 'User', 'Name, Email'
             );
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Preview data should not be null');
-            System.assertEquals('Controller Test Account', result.get('Name'),
-                'Name field should match the test account');
+            System.assertNotEquals(null, result.get('Name'),
+                'Name field should be returned');
         }
     }
 
     @IsTest
     static void testPreviewRecordDataNullParams() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             Map<String, Object> result = DocGenController.previewRecordData(null, null, null);
             Test.stopTest();
@@ -151,8 +167,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetAllTemplates() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<DocGen_Template__c> templates = DocGenController.getAllTemplates();
             Test.stopTest();
@@ -174,8 +189,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testSaveTemplateUpdateOnly() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             Map<String, Object> fields = new Map<String, Object>{
@@ -183,7 +197,7 @@ private class DocGenControllerTests {
                 'Name' => 'Renamed Template',
                 'Category__c' => 'Legal',
                 'Type__c' => 'Word',
-                'Base_Object_API__c' => 'Account',
+                'Base_Object_API__c' => 'User',
                 'Description__c' => 'Updated description',
                 'Query_Config__c' => 'Name',
                 'Test_Record_Id__c' => null,
@@ -207,8 +221,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testSaveTemplateWithVersion() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             createTestFile();
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
@@ -217,9 +230,9 @@ private class DocGenControllerTests {
                 'Name' => 'Versioned Template',
                 'Category__c' => 'Finance',
                 'Type__c' => 'Word',
-                'Base_Object_API__c' => 'Account',
+                'Base_Object_API__c' => 'User',
                 'Description__c' => 'Version test',
-                'Query_Config__c' => 'Name, AccountSource',
+                'Query_Config__c' => 'Name, Email',
                 'Test_Record_Id__c' => null,
                 'Document_Title_Format__c' => null
             };
@@ -253,12 +266,11 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testDeleteTemplate() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             // Create a disposable template to delete
             DocGen_Template__c disposable = new DocGen_Template__c(
                 Name = 'To Be Deleted',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = 'Name',
                 Type__c = 'Word'
             );
@@ -280,8 +292,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetTemplateVersions() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             // Create a version record
@@ -289,7 +300,7 @@ private class DocGenControllerTests {
                 Template__c = tpl.Id,
                 Is_Active__c = true,
                 Type__c = 'Word',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Category__c = 'General',
                 Description__c = 'Test version'
             );
@@ -309,8 +320,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetObjectOptions() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<Map<String, String>> options = DocGenController.getObjectOptions();
             Test.stopTest();
@@ -320,7 +330,7 @@ private class DocGenControllerTests {
             // Verify Account is in the list
             Boolean foundAccount = false;
             for (Map<String, String> opt : options) {
-                if (opt.get('value') == 'Account') {
+                if (opt.get('value') == 'User') {
                     foundAccount = true;
                     break;
                 }
@@ -334,10 +344,9 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetObjectFields() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
-            List<Map<String, String>> fields = DocGenController.getObjectFields('Account');
+            List<Map<String, String>> fields = DocGenController.getObjectFields('User');
             Test.stopTest();
 
             System.assert(!fields.isEmpty(), 'Account should have fields');
@@ -356,8 +365,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGetObjectFieldsInvalidObject() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<Map<String, String>> fields = DocGenController.getObjectFields('NonExistentObject__x');
             Test.stopTest();
@@ -371,10 +379,9 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetChildRelationships() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
-            List<Map<String, String>> rels = DocGenController.getChildRelationships('Account');
+            List<Map<String, String>> rels = DocGenController.getChildRelationships('User');
             Test.stopTest();
 
             System.assert(!rels.isEmpty(), 'Account should have child relationships');
@@ -390,8 +397,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGetChildRelationshipsInvalidObject() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<Map<String, String>> rels = DocGenController.getChildRelationships('NonExistentObject__x');
             Test.stopTest();
@@ -405,10 +411,9 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetParentRelationships() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
-            List<Map<String, String>> parents = DocGenController.getParentRelationships('Account');
+            List<Map<String, String>> parents = DocGenController.getParentRelationships('User');
             Test.stopTest();
 
             System.assert(!parents.isEmpty(), 'Account should have parent/lookup relationships');
@@ -423,8 +428,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGetParentRelationshipsInvalidObject() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<Map<String, String>> parents = DocGenController.getParentRelationships('NonExistentObject__x');
             Test.stopTest();
@@ -438,8 +442,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testSearchUsersAndGroups() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             // The running user should always exist and be matchable
             String currentUserName = UserInfo.getLastName();
 
@@ -459,8 +462,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testSearchUsersAndGroupsNoResults() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<Map<String, String>> results = DocGenController.searchUsersAndGroups('ZZZZNONEXISTENT99999');
             Test.stopTest();
@@ -474,8 +476,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetTemplateSharesEmpty() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             Test.startTest();
@@ -493,8 +494,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testShareAndRemoveTemplate() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id, OwnerId FROM DocGen_Template__c LIMIT 1];
 
             // We need a different user or group to share with.
@@ -544,8 +544,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testOptionCompareTo() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGenController.Option optA = new DocGenController.Option('Alpha', 'a');
             DocGenController.Option optB = new DocGenController.Option('Beta', 'b');
             DocGenController.Option optA2 = new DocGenController.Option('Alpha', 'a2');
@@ -560,13 +559,12 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testOptionThreeArgConstructor() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGenController.Option opt = new DocGenController.Option('Contacts', 'Contacts', 'Contact');
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            DocGenController.Option opt = new DocGenController.Option('Contacts', 'Contacts', 'User');
 
             System.assertEquals('Contacts', opt.label, 'Label should match');
             System.assertEquals('Contacts', opt.value, 'Value should match');
-            System.assertEquals('Contact', opt.childObjectApiName, 'Child object API name should match');
+            System.assertEquals('User', opt.childObjectApiName, 'Child object API name should match');
         }
     }
 
@@ -575,14 +573,13 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGenerateDocumentDataNullTemplateId() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.generateDocumentData(null, acc.Id);
+                DocGenController.generateDocumentData(null, usr.Id);
             } catch (DocGenException e) {
                 caughtException = true;
                 System.assert(e.getMessage().contains('Template ID is missing'),
@@ -599,16 +596,15 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGenerateDocumentDataTemplateNotFound() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
             // Use a fake but valid-format Id for a template that does not exist
             Id fakeTemplateId = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
 
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.generateDocumentData(fakeTemplateId, acc.Id);
+                DocGenController.generateDocumentData(fakeTemplateId, usr.Id);
             } catch (DocGenException e) {
                 caughtException = true;
                 System.assert(e.getMessage().contains('Unable to access template'),
@@ -625,10 +621,9 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGenerateDocumentDataSuccess() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             // Build a minimal valid DOCX ZIP
             Compression.ZipWriter zw = new Compression.ZipWriter();
@@ -664,7 +659,7 @@ private class DocGenControllerTests {
             );
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, acc.Id);
+            Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, usr.Id);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null');
@@ -680,10 +675,9 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetTemplatesForObject() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
-            List<DocGen_Template__c> templates = DocGenController.getTemplatesForObject('Account');
+            List<DocGen_Template__c> templates = DocGenController.getTemplatesForObject('User');
             Test.stopTest();
 
             System.assert(!templates.isEmpty(), 'Should return the test template for Account');
@@ -693,8 +687,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGetTemplatesForObjectNoResults() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<DocGen_Template__c> templates = DocGenController.getTemplatesForObject('NonExistentObject__c');
             Test.stopTest();
@@ -708,10 +701,9 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testProcessAndReturnDocumentSuccess() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             // Build valid DOCX
             Compression.ZipWriter zw = new Compression.ZipWriter();
@@ -747,7 +739,7 @@ private class DocGenControllerTests {
             );
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.processAndReturnDocument(tpl.Id, acc.Id);
+            Map<String, Object> result = DocGenController.processAndReturnDocument(tpl.Id, usr.Id);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null');
@@ -763,16 +755,15 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGeneratePdfDownloadThrows() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             createTestFile();
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.generatePdf(tpl.Id, acc.Id, false);
+                DocGenController.generatePdf(tpl.Id, usr.Id, false);
             } catch (AuraHandledException e) {
                 caughtException = true;
             }
@@ -787,10 +778,9 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGeneratePdfDownloadSuccess() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Compression.ZipWriter zw = new Compression.ZipWriter();
             zw.addEntry('[Content_Types].xml', Blob.valueOf(
@@ -825,7 +815,7 @@ private class DocGenControllerTests {
             );
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.generatePdf(tpl.Id, acc.Id, false);
+            Map<String, Object> result = DocGenController.generatePdf(tpl.Id, usr.Id, false);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null');
@@ -839,12 +829,11 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGeneratePdfSaveSuccess() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
             tpl.Output_Format__c = 'PDF';
             update tpl;
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Compression.ZipWriter zw = new Compression.ZipWriter();
             zw.addEntry('[Content_Types].xml', Blob.valueOf(
@@ -879,7 +868,7 @@ private class DocGenControllerTests {
             );
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.generatePdf(tpl.Id, acc.Id, true);
+            Map<String, Object> result = DocGenController.generatePdf(tpl.Id, usr.Id, true);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null');
@@ -892,8 +881,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testActivateVersion() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             // Create two versions, both active initially
@@ -901,7 +889,7 @@ private class DocGenControllerTests {
                 Template__c = tpl.Id,
                 Is_Active__c = true,
                 Type__c = 'Word',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Category__c = 'General',
                 Description__c = 'Version 1',
                 Query_Config__c = 'Name'
@@ -910,10 +898,10 @@ private class DocGenControllerTests {
                 Template__c = tpl.Id,
                 Is_Active__c = false,
                 Type__c = 'Word',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Category__c = 'Legal',
                 Description__c = 'Version 2',
-                Query_Config__c = 'Name, AccountSource'
+                Query_Config__c = 'Email, CreatedBy.Email'
             );
             insert new List<DocGen_Template_Version__c>{ v1, v2 };
 
@@ -939,8 +927,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testSaveTemplateWithDefaultFlag() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             Map<String, Object> fields = new Map<String, Object>{
@@ -948,7 +935,7 @@ private class DocGenControllerTests {
                 'Name' => 'Default Template',
                 'Category__c' => 'Sales',
                 'Type__c' => 'Word',
-                'Base_Object_API__c' => 'Account',
+                'Base_Object_API__c' => 'User',
                 'Description__c' => 'Default test',
                 'Query_Config__c' => 'Name',
                 'Test_Record_Id__c' => null,
@@ -970,14 +957,13 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testSaveTemplateDefaultEnforcement() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl1 = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             // Create a second template for the same object
             DocGen_Template__c tpl2 = new DocGen_Template__c(
                 Name = 'Second Account Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = 'Name',
                 Type__c = 'Word'
             );
@@ -989,7 +975,7 @@ private class DocGenControllerTests {
                 'Name' => 'Controller Test Template',
                 'Category__c' => null,
                 'Type__c' => 'Word',
-                'Base_Object_API__c' => 'Account',
+                'Base_Object_API__c' => 'User',
                 'Description__c' => null,
                 'Query_Config__c' => 'Name',
                 'Test_Record_Id__c' => null,
@@ -1004,7 +990,7 @@ private class DocGenControllerTests {
                 'Name' => 'Second Account Template',
                 'Category__c' => null,
                 'Type__c' => 'Word',
-                'Base_Object_API__c' => 'Account',
+                'Base_Object_API__c' => 'User',
                 'Description__c' => null,
                 'Query_Config__c' => 'Name',
                 'Test_Record_Id__c' => null,
@@ -1028,14 +1014,13 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testPreviewRecordDataException() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.previewRecordData(acc.Id, 'InvalidObject__xyz', 'Name');
+                DocGenController.previewRecordData(usr.Id, 'InvalidObject__xyz', 'Name');
             } catch (DocGenException e) {
                 caughtException = true;
                 System.assert(e.getMessage().contains('Error fetching preview data'),
@@ -1052,8 +1037,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testDeleteTemplateThrows() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             // Use a fake ID that looks valid but does not exist — will throw
             Id fakeId = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
 
@@ -1075,8 +1059,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testSaveTemplateThrows() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Id fakeId = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
 
             Map<String, Object> fields = new Map<String, Object>{
@@ -1084,7 +1067,7 @@ private class DocGenControllerTests {
                 'Name' => 'Will Fail',
                 'Category__c' => null,
                 'Type__c' => 'Word',
-                'Base_Object_API__c' => 'Account',
+                'Base_Object_API__c' => 'User',
                 'Description__c' => null,
                 'Query_Config__c' => 'Name',
                 'Test_Record_Id__c' => null,
@@ -1110,16 +1093,15 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGenerateDocumentDataWithRichTextRefid() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            tpl.Query_Config__c = 'Name, Description';
+            tpl.Query_Config__c = 'Name, AboutMe';
             update tpl;
 
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
-            // Set Description to contain HTML with an img tag using refid (simulates rich text)
-            acc.Description = '<p>See image: <img src="https://example.com/servlet/rtaImage?eid=001&refid=0EM000000000001" alt="test"/></p>';
-            update acc;
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
+            // Set AboutMe to contain HTML with an img tag using refid (simulates rich text)
+            usr.AboutMe = '<p>See image: <img src="https://example.com/servlet/rtaImage?eid=001&refid=0EM000000000001" alt="test"/></p>';
+            update usr;
 
             // Build valid DOCX
             Compression.ZipWriter zw = new Compression.ZipWriter();
@@ -1158,7 +1140,7 @@ private class DocGenControllerTests {
             // but the code handles exceptions gracefully. This exercises the code path.
             Test.startTest();
             try {
-                Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, acc.Id);
+                Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, usr.Id);
                 // If no exception, result should still be valid
                 System.assertNotEquals(null, result, 'Result should not be null');
             } catch (Exception e) {
@@ -1175,16 +1157,15 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGenerateDocumentDataWithServletImages() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            tpl.Query_Config__c = 'Name, Description';
+            tpl.Query_Config__c = 'Name, AboutMe';
             update tpl;
 
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
-            // Set Description with servlet URL (without refid) to exercise resolveServletImageUrls
-            acc.Description = '<p><img src="https://myorg.salesforce.com/servlet/rtaImage?eid=001ABC&feoid=00N000&refid=" alt="img"/></p>';
-            update acc;
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
+            // Set AboutMe with servlet URL (without refid) to exercise resolveServletImageUrls
+            usr.AboutMe = '<p><img src="https://myorg.salesforce.com/servlet/rtaImage?eid=001ABC&feoid=00N000&refid=" alt="img"/></p>';
+            update usr;
 
             Compression.ZipWriter zw = new Compression.ZipWriter();
             zw.addEntry('[Content_Types].xml', Blob.valueOf(
@@ -1220,7 +1201,7 @@ private class DocGenControllerTests {
 
             Test.startTest();
             try {
-                Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, acc.Id);
+                Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, usr.Id);
                 System.assertNotEquals(null, result, 'Result should not be null');
             } catch (Exception e) {
                 // Callout exceptions are acceptable in test context
@@ -1236,15 +1217,14 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGenerateDocumentDataWithSfcImages() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            tpl.Query_Config__c = 'Name, Description';
+            tpl.Query_Config__c = 'Name, AboutMe';
             update tpl;
 
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
-            acc.Description = '<p><img src="https://myorg.salesforce.com/sfc/servlet.shepherd/version/download/069ABC" alt="img"/></p>';
-            update acc;
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
+            usr.AboutMe = '<p><img src="https://myorg.salesforce.com/sfc/servlet.shepherd/version/download/069ABC" alt="img"/></p>';
+            update usr;
 
             Compression.ZipWriter zw = new Compression.ZipWriter();
             zw.addEntry('[Content_Types].xml', Blob.valueOf(
@@ -1280,7 +1260,7 @@ private class DocGenControllerTests {
 
             Test.startTest();
             try {
-                Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, acc.Id);
+                Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, usr.Id);
                 System.assertNotEquals(null, result, 'Result should not be null');
             } catch (Exception e) {
                 System.assert(true, 'Exception during callout is expected in test context');
@@ -1294,14 +1274,13 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGenerateDocumentDataWithOutputFormatAndTitle() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
             tpl.Output_Format__c = 'PDF';
             tpl.Document_Title_Format__c = 'Invoice_{Name}';
             update tpl;
 
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Compression.ZipWriter zw = new Compression.ZipWriter();
             zw.addEntry('[Content_Types].xml', Blob.valueOf(
@@ -1336,7 +1315,7 @@ private class DocGenControllerTests {
             );
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, acc.Id);
+            Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, usr.Id);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null');
@@ -1350,14 +1329,12 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGenerateDocumentDataWithChildRelationship() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            tpl.Query_Config__c = 'Name, (SELECT LastName FROM Contacts)';
+            tpl.Query_Config__c = 'Name, (SELECT LastName FROM ManagedUsers)';
             update tpl;
 
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
-            insert new Contact(FirstName = 'Test', LastName = 'Child', AccountId = acc.Id);
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Compression.ZipWriter zw = new Compression.ZipWriter();
             zw.addEntry('[Content_Types].xml', Blob.valueOf(
@@ -1392,12 +1369,13 @@ private class DocGenControllerTests {
             );
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, acc.Id);
+            Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, usr.Id);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null');
             Map<String, Object> data = (Map<String, Object>) result.get('data');
-            System.assert(data.containsKey('Contacts'), 'Data should contain Contacts child relationship');
+			System.debug('data: ' + data);
+            System.assert(data.containsKey('ManagedUsers'), 'Data should contain ManagedUsers child relationship');
         }
     }
 
@@ -1406,8 +1384,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testSaveTemplateVersionDeactivatesPrevious() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             createTestFile();
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
@@ -1416,7 +1393,7 @@ private class DocGenControllerTests {
                 Template__c = tpl.Id,
                 Is_Active__c = true,
                 Type__c = 'Word',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Category__c = 'Old',
                 Description__c = 'Old version'
             );
@@ -1427,7 +1404,7 @@ private class DocGenControllerTests {
                 'Name' => 'Template With New Version',
                 'Category__c' => 'New',
                 'Type__c' => 'Word',
-                'Base_Object_API__c' => 'Account',
+                'Base_Object_API__c' => 'User',
                 'Description__c' => 'New version test',
                 'Query_Config__c' => 'Name',
                 'Test_Record_Id__c' => null,
@@ -1459,8 +1436,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetAllTemplatesWithFile() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             createTestFile();
 
             Test.startTest();
@@ -1485,8 +1461,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetContentVersionBase64() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             ContentVersion cv = new ContentVersion(
                 Title = 'Base64Test',
                 PathOnClient = 'Base64Test.txt',
@@ -1507,8 +1482,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGetContentVersionBase64NotFound() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             // Use a fake but valid-format ContentVersion ID
             Id fakeId = '068000000000000AAA';
 
@@ -1525,16 +1499,15 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGenerateDocumentPartsError() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             // Use a fake template ID to trigger an exception inside DocGenService
             Id fakeTemplateId = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.generateDocumentParts(fakeTemplateId, acc.Id);
+                DocGenController.generateDocumentParts(fakeTemplateId, usr.Id);
             } catch (AuraHandledException e) {
                 caughtException = true;
             }
@@ -1546,10 +1519,9 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGenerateDocumentPartsSuccess() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             // Build a minimal valid DOCX and attach to template
             Compression.ZipWriter zw = new Compression.ZipWriter();
@@ -1585,7 +1557,7 @@ private class DocGenControllerTests {
             );
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.generateDocumentParts(tpl.Id, acc.Id);
+            Map<String, Object> result = DocGenController.generateDocumentParts(tpl.Id, usr.Id);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Should return non-null result');
@@ -1598,9 +1570,8 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetRecordPdfs() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            User usr = getManagedUser();
 
             // Create a PDF ContentVersion linked to the account
             ContentVersion pdfCv = new ContentVersion(
@@ -1611,13 +1582,13 @@ private class DocGenControllerTests {
             insert pdfCv;
             Id pdfDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :pdfCv.Id].ContentDocumentId;
             insert new ContentDocumentLink(
-                LinkedEntityId = acc.Id,
+                LinkedEntityId = usr.Id,
                 ContentDocumentId = pdfDocId,
                 ShareType = 'V'
             );
 
             Test.startTest();
-            List<Map<String, String>> pdfs = DocGenController.getRecordPdfs(acc.Id);
+            List<Map<String, String>> pdfs = DocGenController.getRecordPdfs(usr.Id);
             Test.stopTest();
 
             System.assert(!pdfs.isEmpty(), 'Should return at least one PDF');
@@ -1635,12 +1606,11 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGetRecordPdfsEmpty() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Test.startTest();
-            List<Map<String, String>> pdfs = DocGenController.getRecordPdfs(acc.Id);
+            List<Map<String, String>> pdfs = DocGenController.getRecordPdfs(usr.Id);
             Test.stopTest();
 
             System.assertEquals(0, pdfs.size(), 'Should return empty list when no PDFs attached');
@@ -1652,14 +1622,8 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetChildRecordPdfs() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
-
-            // Create a child contact
-            Contact con = new Contact(FirstName = 'Pdf', LastName = 'Child', AccountId = acc.Id);
-            insert con;
-
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+			User managedUser = getManagedUser();
             // Attach a PDF to the contact
             ContentVersion pdfCv = new ContentVersion(
                 Title = 'ChildPdf',
@@ -1669,21 +1633,21 @@ private class DocGenControllerTests {
             insert pdfCv;
             Id pdfDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :pdfCv.Id].ContentDocumentId;
             insert new ContentDocumentLink(
-                LinkedEntityId = con.Id,
+                LinkedEntityId = managedUser.Id,
                 ContentDocumentId = pdfDocId,
                 ShareType = 'V'
             );
 
             Test.startTest();
             List<Map<String, Object>> result = DocGenController.getChildRecordPdfs(
-                acc.Id, 'Contact', 'AccountId', null
+                UserInfo.getUserId(), 'User', 'ManagerId', null
             );
             Test.stopTest();
 
             System.assert(!result.isEmpty(), 'Should return at least one child record group');
             Boolean foundChild = false;
             for (Map<String, Object> grp : result) {
-                if (grp.get('childRecordName') == 'Pdf Child') {
+                if (grp.get('childRecordName') == ManagedUser.Name) {
                     foundChild = true;
                     List<Map<String, String>> pdfs = (List<Map<String, String>>) grp.get('pdfs');
                     System.assert(!pdfs.isEmpty(), 'Child should have at least one PDF');
@@ -1691,18 +1655,17 @@ private class DocGenControllerTests {
                     break;
                 }
             }
-            System.assert(foundChild, 'Should find the child contact in results');
+            System.assert(foundChild, 'Should find the child users in results');
         }
     }
 
     @IsTest
     static void testGetChildRecordPdfsNullParams() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.getChildRecordPdfs(null, 'Contact', 'AccountId', null);
+                DocGenController.getChildRecordPdfs(null, 'User', 'CreatedById', null);
             } catch (AuraHandledException e) {
                 caughtException = true;
             }
@@ -1714,14 +1677,13 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGetChildRecordPdfsInvalidObject() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.getChildRecordPdfs(acc.Id, 'NonExistentObject__xyz', 'AccountId', null);
+                DocGenController.getChildRecordPdfs(usr.Id, 'NonExistentObject__xyz', 'CreatedById', null);
             } catch (AuraHandledException e) {
                 caughtException = true;
             }
@@ -1733,14 +1695,13 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGetChildRecordPdfsInvalidLookup() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.getChildRecordPdfs(acc.Id, 'Contact', 'FakeField__xyz', null);
+                DocGenController.getChildRecordPdfs(usr.Id, 'User', 'FakeField__xyz', null);
             } catch (AuraHandledException e) {
                 caughtException = true;
             }
@@ -1752,15 +1713,12 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGetChildRecordPdfsNoChildren() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // Create a fresh account with no child contacts
-            Account freshAcc = new Account(Name = 'No Children Account');
-            insert freshAcc;
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            User managedUser = getManagedUser();
 
             Test.startTest();
             List<Map<String, Object>> result = DocGenController.getChildRecordPdfs(
-                freshAcc.Id, 'Contact', 'AccountId', null
+                managedUser.Id, 'User', 'ManagerId', null
             );
             Test.stopTest();
 
@@ -1773,8 +1731,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetAvailableReportsNoTerm() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<Map<String, String>> reports = DocGenController.getAvailableReports(null);
             Test.stopTest();
@@ -1786,8 +1743,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGetAvailableReportsWithTerm() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<Map<String, String>> reports = DocGenController.getAvailableReports('ZZZNONEXISTENT999');
             Test.stopTest();
@@ -1800,8 +1756,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGetAvailableReportsBlankTerm() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<Map<String, String>> reports = DocGenController.getAvailableReports('');
             Test.stopTest();
@@ -1815,8 +1770,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testCreateSampleTemplates() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             Integer count = DocGenController.createSampleTemplates();
             Test.stopTest();
@@ -1847,16 +1801,15 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testOptionFourArgConstructor() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGenController.Option opt = new DocGenController.Option(
-                'Contacts', 'Contacts', 'Contact', 'AccountId'
+                'ManagedUsers', 'ManagedUsers', 'User', 'CreatedById'
             );
 
-            System.assertEquals('Contacts', opt.label, 'Label should match');
-            System.assertEquals('Contacts', opt.value, 'Value should match');
-            System.assertEquals('Contact', opt.childObjectApiName, 'Child object API name should match');
-            System.assertEquals('AccountId', opt.lookupField, 'Lookup field should match');
+            System.assertEquals('ManagedUsers', opt.label, 'Label should match');
+            System.assertEquals('ManagedUsers', opt.value, 'Value should match');
+            System.assertEquals('User', opt.childObjectApiName, 'Child object API name should match');
+            System.assertEquals('CreatedById', opt.lookupField, 'Lookup field should match');
         }
     }
 
@@ -1865,8 +1818,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testImportReportConfigNullId() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             Boolean caughtException = false;
             try {
@@ -1882,8 +1834,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testImportReportConfigInvalidId() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             // Use a fake report ID — will fail at Reports.ReportManager.describeReport
             Id fakeReportId = '00O000000000000AAA';
 
@@ -1907,8 +1858,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testImportReportConfigWithRealReport() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             List<Report> reports = [SELECT Id FROM Report LIMIT 1];
             if (reports.isEmpty()) {
                 // No reports in org — skip gracefully
@@ -1940,8 +1890,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testNormalizeImageUrlsServletPath() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             String html = '<img src="/servlet/rtaImage?eid=001&refid=0EM000000000001"/>';
 
             Test.startTest();
@@ -1957,8 +1906,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeImageUrlsSfcPath() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             String html = '<img src="/sfc/servlet.shepherd/version/download/069ABC"/>';
 
             Test.startTest();
@@ -1972,8 +1920,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeImageUrlsNoMatch() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             String html = '<img src="https://example.com/image.png"/>';
 
             Test.startTest();
@@ -1989,8 +1936,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testResolveRichTextImagesWithSfcUrl() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, Object> data = new Map<String, Object>{
                 'Description' => '<p><img src="/sfc/servlet.shepherd/version/download/069ABC" alt="test"/></p>',
                 'Name' => 'Test Account'
@@ -2010,8 +1956,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveRichTextImagesWithServletUrl() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, Object> data = new Map<String, Object>{
                 'RichField' => '<p><img src="/servlet/rtaImage?refid=0EM123" alt="test"/></p>'
             };
@@ -2028,8 +1973,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveRichTextImagesNestedList() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             // Test the List<Object> recursion path
             Map<String, Object> childRecord = new Map<String, Object>{
                 'Notes' => '<p><img src="/sfc/servlet.shepherd/version/download/069XYZ" alt="child"/></p>'
@@ -2052,8 +1996,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveRichTextImagesNoImageTags() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, Object> data = new Map<String, Object>{
                 'Description' => '<p>Just plain text with no images</p>'
             };
@@ -2072,21 +2015,19 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testResolveReportBaseObjectDirectMatch() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
-            // Strategy 1: Direct match — 'Account' is a real object
-            String result = DocGenController.resolveReportBaseObject('Account');
+            // Strategy 1: Direct match — 'User' is a real object
+            String result = DocGenController.resolveReportBaseObject('User');
             Test.stopTest();
 
-            System.assertEquals('Account', result, 'Direct object name should resolve');
+            System.assertEquals('User', result, 'Direct object name should resolve');
         }
     }
 
     @IsTest
     static void testResolveReportBaseObjectListSuffix() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             // Strategy 2: Strip 'List' suffix
             String result = DocGenController.resolveReportBaseObject('AccountList');
@@ -2098,8 +2039,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveReportBaseObjectLabelMatch() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             // Strategy 4: Label match — 'Accounts' is the plural label for Account
             String result = DocGenController.resolveReportBaseObject('UnknownType', 'Accounts');
@@ -2111,21 +2051,19 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveReportBaseObjectPrefixMatch() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
-            // Strategy 5: Prefix match — OpportunityLead starts with Opportunity
-            String result = DocGenController.resolveReportBaseObject('OpportunityLead');
+            // Strategy 5: Prefix match — UserLead starts with User
+            String result = DocGenController.resolveReportBaseObject('UserLead');
             Test.stopTest();
 
-            System.assertEquals('Opportunity', result, 'OpportunityLead should resolve to Opportunity');
+            System.assertEquals('User', result, 'UserLead should resolve to User');
         }
     }
 
     @IsTest
     static void testResolveReportBaseObjectCustomWithCommonName() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             // Strategy 6: Custom report type containing a known object name
             String result = DocGenController.resolveReportBaseObject('MyAccount__c');
@@ -2137,8 +2075,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveReportBaseObjectNull() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             String result = DocGenController.resolveReportBaseObject(null);
             Test.stopTest();
@@ -2149,8 +2086,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveReportBaseObjectBlank() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             String result = DocGenController.resolveReportBaseObject('');
             Test.stopTest();
@@ -2161,8 +2097,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveReportBaseObjectUnresolvable() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             String result = DocGenController.resolveReportBaseObject('ZZZNonExistent999');
             Test.stopTest();
@@ -2173,8 +2108,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveReportBaseObjectAccountContact() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             String result = DocGenController.resolveReportBaseObject('AccountContact');
             Test.stopTest();
@@ -2185,8 +2119,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveReportBaseObjectCaseContact() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             String result = DocGenController.resolveReportBaseObject('CaseContact');
             Test.stopTest();
@@ -2200,8 +2133,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testNormalizeReportColumnDirectApiMatch() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> fieldMap = Schema.SObjectType.Account.fields.getMap();
             Map<String, String> labelToApiName = new Map<String, String>();
             Map<String, String> properCaseMap = new Map<String, String>();
@@ -2222,8 +2154,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeReportColumnLabelMatch() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> fieldMap = Schema.SObjectType.Account.fields.getMap();
             Map<String, String> labelToApiName = new Map<String, String>();
             Map<String, String> properCaseMap = new Map<String, String>();
@@ -2235,7 +2166,7 @@ private class DocGenControllerTests {
 
             Test.startTest();
             // Label match — "Account Name" is the label for the Name field on Account
-            String result = DocGenController.normalizeReportColumn('SOMETHING_UNKNOWN', 'Account Name', fieldMap, labelToApiName, properCaseMap);
+            String result = DocGenController.normalizeReportColumn('SOMETHING_UNKNOWN', Account.Name.getDescribe().getLabel(), fieldMap, labelToApiName, properCaseMap);
             Test.stopTest();
 
             System.assertEquals('Name', result, 'Label "Account Name" should resolve to Name');
@@ -2244,8 +2175,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeReportColumnHardcodedMapping() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> fieldMap = Schema.SObjectType.Opportunity.fields.getMap();
             Map<String, String> labelToApiName = new Map<String, String>();
             Map<String, String> properCaseMap = new Map<String, String>();
@@ -2266,8 +2196,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeReportColumnCreatedDate() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> fieldMap = Schema.SObjectType.Account.fields.getMap();
             Map<String, String> labelToApiName = new Map<String, String>();
             Map<String, String> properCaseMap = new Map<String, String>();
@@ -2287,8 +2216,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeReportColumnWithObjectPrefix() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> fieldMap = Schema.SObjectType.Account.fields.getMap();
             Map<String, String> labelToApiName = new Map<String, String>();
             Map<String, String> properCaseMap = new Map<String, String>();
@@ -2309,8 +2237,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeReportColumnBlank() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> fieldMap = Schema.SObjectType.Account.fields.getMap();
 
             Test.startTest();
@@ -2323,8 +2250,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeReportColumnNull() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> fieldMap = Schema.SObjectType.Account.fields.getMap();
 
             Test.startTest();
@@ -2337,8 +2263,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeReportColumnUsersPrefix() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> fieldMap = Schema.SObjectType.Account.fields.getMap();
 
             Test.startTest();
@@ -2352,8 +2277,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeReportColumnNoMatch() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> fieldMap = Schema.SObjectType.Account.fields.getMap();
 
             Test.startTest();
@@ -2366,8 +2290,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeReportColumnStageName() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> fieldMap = Schema.SObjectType.Opportunity.fields.getMap();
             Map<String, String> labelToApiName = new Map<String, String>();
             Map<String, String> properCaseMap = new Map<String, String>();
@@ -2387,8 +2310,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testNormalizeReportColumnAmount() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> fieldMap = Schema.SObjectType.Opportunity.fields.getMap();
             Map<String, String> labelToApiName = new Map<String, String>();
             Map<String, String> properCaseMap = new Map<String, String>();
@@ -2411,8 +2333,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testMapReportOperatorEquals() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             System.assertEquals('=', DocGenController.mapReportOperator('equals'), 'equals should map to =');
             System.assertEquals('!=', DocGenController.mapReportOperator('notEqual'), 'notEqual should map to !=');
@@ -2430,8 +2351,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testMapReportOperatorNull() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             System.assertEquals('=', DocGenController.mapReportOperator(null), 'Null should default to =');
             System.assertEquals('=', DocGenController.mapReportOperator(''), 'Blank should default to =');
@@ -2441,8 +2361,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testMapReportOperatorUnknown() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             System.assertEquals('=', DocGenController.mapReportOperator('unknownOp'), 'Unknown operator should default to =');
             Test.stopTest();
@@ -2454,51 +2373,46 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testFindParentObjectDirectChild() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             // Contact is a direct child of Account — should return Account as parent
             Map<String, String> childRelNameByObject = new Map<String, String>{
-                'Contact' => 'Contacts'
+                'User' => 'Contacts'
             };
 
             Test.startTest();
-            String result = DocGenController.findParentObject('Contact', 'Account', childRelNameByObject);
+            String result = DocGenController.findParentObject('User', 'User', childRelNameByObject);
             Test.stopTest();
 
-            System.assertEquals('Account', result, 'Contact with only Account in hierarchy should return Account');
+            System.assertEquals('User', result, 'Contact with only Account in hierarchy should return Account');
         }
     }
 
     @IsTest
     static void testFindParentObjectGrandchild() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // OpportunityLineItem has a reference to Opportunity
-            // If Opportunity is also a known child, it should be the parent
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            // ManagedUsers are child Users, and User has CreatedBy lookup to User.
             Map<String, String> childRelNameByObject = new Map<String, String>{
-                'Opportunity' => 'Opportunities',
-                'OpportunityLineItem' => 'OpportunityLineItems'
+                'User' => 'ManagedUsers'
             };
 
             Test.startTest();
-            String result = DocGenController.findParentObject('OpportunityLineItem', 'Account', childRelNameByObject);
+            String result = DocGenController.findParentObject('User', 'User', childRelNameByObject);
             Test.stopTest();
 
-            System.assertEquals('Opportunity', result, 'OpportunityLineItem should resolve parent as Opportunity when Opportunity is a known child');
+            System.assertEquals('User', result, 'User child should resolve parent as User via CreatedBy');
         }
     }
 
     @IsTest
     static void testFindParentObjectInvalidObject() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, String> childRelNameByObject = new Map<String, String>();
 
             Test.startTest();
-            String result = DocGenController.findParentObject('NonExistentObj__xyz', 'Account', childRelNameByObject);
+            String result = DocGenController.findParentObject('NonExistentObj__xyz', 'User', childRelNameByObject);
             Test.stopTest();
 
-            System.assertEquals('Account', result, 'Invalid object should fall back to base object');
+            System.assertEquals('User', result, 'Invalid object should fall back to base object');
         }
     }
 
@@ -2507,8 +2421,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testFindJunctionRelationshipKnown() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             SObjectType oppType = Schema.getGlobalDescribe().get('Opportunity');
 
             Test.startTest();
@@ -2522,8 +2435,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testFindJunctionRelationshipCampaignContact() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             SObjectType campType = Schema.getGlobalDescribe().get('Campaign');
 
             Test.startTest();
@@ -2536,13 +2448,12 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testFindJunctionRelationshipNoMatch() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            SObjectType accType = Schema.getGlobalDescribe().get('Account');
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            SObjectType usrType = Schema.getGlobalDescribe().get('User');
 
             Test.startTest();
             // Account has no junction to Product2
-            String result = DocGenController.findJunctionRelationship('Account', 'Product2', accType);
+            String result = DocGenController.findJunctionRelationship('User', 'Product2', usrType);
             Test.stopTest();
 
             // May return null or a dynamically discovered junction
@@ -2556,31 +2467,29 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testHasReferenceToObjectTrue() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // OpportunityContactRole has a reference to Contact
-            SObjectType ocrType = Schema.getGlobalDescribe().get('OpportunityContactRole');
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            // User has a reference to Contact
+            SObjectType ocrType = Schema.getGlobalDescribe().get('User');
 
             Test.startTest();
-            Boolean result = DocGenController.hasReferenceToObject(ocrType, 'Contact');
+            Boolean result = DocGenController.hasReferenceToObject(ocrType, 'User');
             Test.stopTest();
 
-            System.assertEquals(true, result, 'OpportunityContactRole should have a reference to Contact');
+            System.assertEquals(true, result, 'User should have a reference to Contact');
         }
     }
 
     @IsTest
     static void testHasReferenceToObjectFalse() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // Account does not have a reference to OpportunityLineItem
-            SObjectType accType = Schema.getGlobalDescribe().get('Account');
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+            // Account does not have a reference to User
+            SObjectType usrType = Schema.getGlobalDescribe().get('User');
 
             Test.startTest();
-            Boolean result = DocGenController.hasReferenceToObject(accType, 'OpportunityLineItem');
+            Boolean result = DocGenController.hasReferenceToObject(usrType, 'Organization');
             Test.stopTest();
 
-            System.assertEquals(false, result, 'Account should not have a reference to OpportunityLineItem');
+            System.assertEquals(false, result, 'User should not have a reference to Organization');
         }
     }
 
@@ -2589,8 +2498,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testResolveParentFieldNameDirect() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> accFieldMap = Schema.SObjectType.Account.fields.getMap();
 
             Test.startTest();
@@ -2604,8 +2512,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveParentFieldNameCaseInsensitive() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> accFieldMap = Schema.SObjectType.Account.fields.getMap();
 
             Test.startTest();
@@ -2619,13 +2526,12 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveParentFieldNameLabelMatch() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> accFieldMap = Schema.SObjectType.Account.fields.getMap();
 
             Test.startTest();
             // Label-based match — "Email" is the label for Email on User
-            String result = DocGenController.resolveParentFieldName('Owner', 'EMAIL_FIELD', 'Email', accFieldMap);
+            String result = DocGenController.resolveParentFieldName('Owner', 'EMAIL_FIELD', User.Email.getDescribe().getLabel(), accFieldMap);
             Test.stopTest();
 
             System.assertEquals('Email', result, 'Label "Email" should resolve to Email on User');
@@ -2634,8 +2540,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveParentFieldNameNullRelationship() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> accFieldMap = Schema.SObjectType.Account.fields.getMap();
 
             Test.startTest();
@@ -2649,8 +2554,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testResolveParentFieldNameNoMatchingField() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Map<String, SObjectField> accFieldMap = Schema.SObjectType.Account.fields.getMap();
 
             Test.startTest();
@@ -2667,8 +2571,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGenerateDocumentDataFromCacheNullTemplateId() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             Boolean caughtException = false;
             try {
@@ -2686,8 +2589,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGenerateDocumentDataFromCacheTemplateNotFound() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Id fakeTemplateId = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
 
             Test.startTest();
@@ -2707,8 +2609,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGenerateDocumentDataFromCacheSuccess() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             // Build a minimal valid DOCX and attach to template
@@ -2763,8 +2664,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testGenerateDocumentDataFromCacheReusesCache() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             // Attach a valid DOCX
@@ -2826,14 +2726,10 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testGetChildRecordPdfsWithFilter() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
-            insert new Contact(FirstName = 'FilterTest', LastName = 'Contact', AccountId = acc.Id);
-
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<Map<String, Object>> result = DocGenController.getChildRecordPdfs(
-                acc.Id, 'Contact', 'AccountId', 'LastName = \'Contact\''
+                UserInfo.getUserId(), 'User', 'CreatedById', 'LastName != null'
             );
             Test.stopTest();
 
@@ -2847,11 +2743,10 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testProcessAndReturnDocumentWithImagesParam() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             createTestFile();
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            User usr = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
 
             Map<String, String> resolvedImages = new Map<String, String>{
                 'https://example.com/image.png' => 'data:image/png;base64,iVBOR...'
@@ -2862,7 +2757,7 @@ private class DocGenControllerTests {
             try {
                 // Will likely fail because the test template is not a real DOCX,
                 // but exercises the method signature with resolvedImages
-                DocGenController.processAndReturnDocumentWithImages(tpl.Id, acc.Id, resolvedImages);
+                DocGenController.processAndReturnDocumentWithImages(tpl.Id, usr.Id, resolvedImages);
             } catch (AuraHandledException e) {
                 caughtException = true;
             }
@@ -2877,8 +2772,7 @@ private class DocGenControllerTests {
     // -----------------------------------------------------------------------
     @IsTest
     static void testResolveReportBaseObjectContactList() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             String result = DocGenController.resolveReportBaseObject('ContactList');
             Test.stopTest();
@@ -2888,33 +2782,30 @@ private class DocGenControllerTests {
     }
 
     @IsTest
-    static void testResolveReportBaseObjectOpportunityProduct() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+    static void testResolveReportBaseObjectUserProduct() {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
-            String result = DocGenController.resolveReportBaseObject('OpportunityProduct');
+            String result = DocGenController.resolveReportBaseObject('UserProduct');
             Test.stopTest();
 
-            System.assertEquals('Opportunity', result, 'OpportunityProduct should resolve to Opportunity');
+            System.assertEquals('User', result, 'UserProduct should resolve to User');
         }
     }
 
     @IsTest
-    static void testResolveReportBaseObjectOpportunityContactProduct() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+    static void testResolveReportBaseObjectUserContactProduct() {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
-            String result = DocGenController.resolveReportBaseObject('OpportunityContactProduct');
+            String result = DocGenController.resolveReportBaseObject('UserContactProduct');
             Test.stopTest();
 
-            System.assertEquals('Opportunity', result, 'OpportunityContactProduct should resolve to Opportunity');
+            System.assertEquals('User', result, 'UserContactProduct should resolve to User');
         }
     }
 
     @IsTest
     static void testResolveReportBaseObjectLabelWithSuffix() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             // Label "Opportunities with Products" should match Opportunity plural label "Opportunities"
             String result = DocGenController.resolveReportBaseObject('UnknownXYZ', 'Opportunities with Products');
@@ -2930,8 +2821,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testSearchDataProvidersNoFilter() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<String> providers = DocGenController.searchDataProviders(null);
             Test.stopTest();
@@ -2944,8 +2834,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testSearchDataProvidersWithSearchTerm() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<String> providers = DocGenController.searchDataProviders('NonExistentClassName12345');
             Test.stopTest();
@@ -2957,8 +2846,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testSearchDataProvidersEmptyString() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             List<String> providers = DocGenController.searchDataProviders('');
             Test.stopTest();
@@ -2973,8 +2861,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testValidateDataProviderBlankClassName() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             Map<String, Object> result = DocGenController.validateDataProvider('');
             Test.stopTest();
@@ -2986,8 +2873,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testValidateDataProviderNullClassName() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             Map<String, Object> result = DocGenController.validateDataProvider(null);
             Test.stopTest();
@@ -2999,8 +2885,7 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testValidateDataProviderNonExistentClass() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
             Map<String, Object> result = DocGenController.validateDataProvider('CompletelyFakeClassName99999');
             Test.stopTest();
@@ -3013,11 +2898,10 @@ private class DocGenControllerTests {
 
     @IsTest
     static void testValidateDataProviderNonImplementingClass() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
             // Account is a real class/type but does not implement DocGenDataProvider
             Test.startTest();
-            Map<String, Object> result = DocGenController.validateDataProvider('Account');
+            Map<String, Object> result = DocGenController.validateDataProvider('User');
             Test.stopTest();
 
             System.assertEquals(false, result.get('valid'), 'Should be invalid for class that does not implement DocGenDataProvider');

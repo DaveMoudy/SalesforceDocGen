@@ -1,45 +1,56 @@
 @IsTest
 private class DocGenSharingTests {
-
+	private static String UNIQUE_IDENTIFIER = 'DocGenSharingTests';
+	private static final String TEST_GROUP_NAME = String.format('DocGenShareGroup_{0}', new List<String>{UserInfo.getUserId()});
     @TestSetup
     static void setup() {
-        DocGen_Template__c t = new DocGen_Template__c(
+        DocGen_Template__c templateRecord = new DocGen_Template__c(
             Name = 'Sharing Template',
-            Base_Object_API__c = 'Account'
+            Base_Object_API__c = 'User'
         );
-        insert t;
+        insert templateRecord;
 
-        Profile p = [SELECT Id FROM Profile WHERE Name='Standard User' LIMIT 1];
-        User u = new User(Alias = 'standt', Email='standarduser@testorg.com',
-            EmailEncodingKey='UTF-8', LastName='Testing', LanguageLocaleKey='en_US',
-            LocaleSidKey='en_US', ProfileId = p.Id,
-            TimeZoneSidKey='America/Los_Angeles', UserName='standarduser' + DateTime.now().getTime() + '@testorg.com');
-        insert u;
+		// avoid mixed dml
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+			Group shareGroup = new Group(
+				Name = TEST_GROUP_NAME,
+				DeveloperName = String.format('DocGenShareGroup_{0}', new List<String>{String.valueOf(DateTime.now().getTime())}),
+				Type = 'Regular'
+			);
+			insert shareGroup;
+
+			GroupMember groupMembership = new GroupMember(
+				GroupId = shareGroup.Id,
+				UserOrGroupId = UserInfo.getUserId()
+			);
+			insert groupMembership;
+		}
     }
 
     @IsTest
     static void testSharingOperations() {
-        User runAsUser = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(runAsUser) {
-            DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            User u = [SELECT Id FROM User WHERE LastName='Testing' LIMIT 1];
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            DocGen_Template__c templateRecord = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Group shareGroup = [SELECT Id FROM Group WHERE Name = :TEST_GROUP_NAME LIMIT 1];
 
             Test.startTest();
 
             // Share
-            DocGenController.shareTemplate(t.Id, u.Id, 'Read');
+            DocGenController.shareTemplate(templateRecord.Id, shareGroup.Id, 'Read');
 
             // Verify Share exists via actual SOQL to guarantee valid ID type
-            DocGen_Template__Share shareRef = [SELECT Id FROM DocGen_Template__Share WHERE ParentId = :t.Id AND UserOrGroupId = :u.Id LIMIT 1];
+            DocGen_Template__Share shareRef = [SELECT Id FROM DocGen_Template__Share WHERE ParentId = :templateRecord.Id AND UserOrGroupId = :shareGroup.Id LIMIT 1];
             System.assertNotEquals(null, shareRef, 'Share record should exist in DB');
 
             // Remove Share
             DocGenController.removeShare(shareRef.Id);
 
-            List<Map<String, String>> shares = DocGenController.getTemplateShares(t.Id);
+            List<Map<String, String>> shares = DocGenController.getTemplateShares(templateRecord.Id);
             Boolean found = false;
-            for (Map<String, String> s : shares) {
-                            if (s.get('UserOrGroupId') == u.Id) { found = true; }
+            for (Map<String, String> shareRecord : shares) {
+                if (shareRecord.get('UserOrGroupId') == shareGroup.Id) {
+					found = true; break;
+				}
             }
             System.assert(!found, 'Share should be removed');
 
@@ -49,10 +60,9 @@ private class DocGenSharingTests {
 
     @IsTest
     static void testSearch() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
+        System.runAs(new User(Id = UserInfo.getUserId())) {
             Test.startTest();
-            List<Map<String, String>> results = DocGenController.searchUsersAndGroups('Testing');
+            List<Map<String, String>> results = DocGenController.searchUsersAndGroups(UserInfo.getLastName());
             Test.stopTest();
             System.assert(results.size() > 0, 'Should find user');
         }

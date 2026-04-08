@@ -3,17 +3,13 @@ public with sharing class DocGenBulkControllerTest {
 
     @TestSetup
     static void setup() {
-        // Create an Account for testing
-        Account acc = new Account(Name = 'Heap Test Account');
-        insert acc;
-
         // Create a Template
         DocGen_Template__c temp = new DocGen_Template__c(
             Name = 'Heap Test Template',
-            Base_Object_API__c = 'Account',
-            Test_Record_Id__c = acc.Id,
+            Base_Object_API__c = 'User',
+            Test_Record_Id__c = UserInfo.getUserId(),
             Output_Format__c = 'PDF',
-            Query_Config__c = '{"v":3,"root":"Account","nodes":[{"id":"n0","object":"Account","fields":["Name"],"parentNode":null,"lookupField":null,"relationshipName":null}]}'
+            Query_Config__c = '{"v":3,"root":"User","nodes":[{"id":"n0","object":"User","fields":["Name"],"parentNode":null,"lookupField":null,"relationshipName":null}]}'
         );
         insert temp;
 
@@ -99,7 +95,7 @@ public with sharing class DocGenBulkControllerTest {
     @IsTest
     static void testValidateFilter() {
         Test.startTest();
-        Integer count = DocGenBulkController.validateFilter('Account', 'Name LIKE \'Heap%\'');
+        Integer count = DocGenBulkController.validateFilter('User', 'UserName = \'' + UserInfo.getUserName() + '\'');
         Test.stopTest();
 
         System.assertEquals(1, count, 'Should find 1 record');
@@ -108,7 +104,7 @@ public with sharing class DocGenBulkControllerTest {
     @IsTest
     static void testValidateFilterEmpty() {
         Test.startTest();
-        Integer count = DocGenBulkController.validateFilter('Account', '');
+        Integer count = DocGenBulkController.validateFilter('User', '');
         Test.stopTest();
 
         System.assert(count >= 1, 'Should count at least 1 account when no condition is provided');
@@ -185,7 +181,7 @@ public with sharing class DocGenBulkControllerTest {
         DocGen_Template__c temp = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         
         Test.startTest();
-        Id jobId = DocGenBulkController.submitJob(temp.Id, 'Name != null', 'Test Job', true, 10, false);
+        Id jobId = DocGenBulkController.submitJob(temp.Id, 'Id = \'' + UserInfo.getUserId() + '\'', 'Test Job', true, 10, false);
         Test.stopTest();
 
         System.assertNotEquals(null, jobId, 'Job ID should be returned');

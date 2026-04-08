@@ -5,13 +5,11 @@ private class DocGenBulkFlowActionTest {
     static void setup() {
         DocGen_Template__c temp = new DocGen_Template__c(
             Name = 'Test Bulk Template',
-            Base_Object_API__c = 'Account',
+            Base_Object_API__c = 'User',
             Type__c = 'Word'
         );
         insert temp;
 
-        insert new Account(Name = 'Test Account 1', Website = 'https://test1.com');
-        insert new Account(Name = 'Test Account 2', Website = 'https://test2.com');
     }
 
     @IsTest

@@ -5,16 +5,19 @@ private class DocGenBulkTests {
     static void setup() {
         DocGen_Template__c t = new DocGen_Template__c(
             Name = 'Test Template',
-            Base_Object_API__c = 'Account'
+            Base_Object_API__c = 'User'
         );
         insert t;
-
-        Account a = new Account(
-            Name = 'Test Account',
-            Website = 'https://www.example.com'
-        );
-        insert a;
     }
+
+	private static DocGen_Template__c createOrgTemplate() {
+		DocGen_Template__c t = new DocGen_Template__c(
+			Name = 'Test Template',
+			Base_Object_API__c = 'Organization'
+		);
+		insert t;
+		return t;	
+	}
 
     @IsTest
     static void testGetBulkTemplates() {
@@ -32,7 +35,7 @@ private class DocGenBulkTests {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
             Test.startTest();
-            Integer count = DocGenBulkController.validateFilter('Account', 'Name = \'Test Account\'');
+            Integer count = DocGenBulkController.validateFilter('User', 'UserName = \'' + UserInfo.getUserName() + '\'');
             Test.stopTest();
             System.assertEquals(1, count, 'Should find 1 record');
         }
@@ -111,7 +114,7 @@ private class DocGenBulkTests {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
             Test.startTest();
-            Integer count = DocGenBulkController.validateFilter('Account', null);
+            Integer count = DocGenBulkController.validateFilter('User', null);
             Test.stopTest();
             System.assert(count >= 1, 'Should count all accounts');
         }
@@ -124,7 +127,7 @@ private class DocGenBulkTests {
             Boolean caught = false;
             Test.startTest();
             try {
-                DocGenBulkController.validateFilter('Account', 'Name != null; DELETE Account');
+                DocGenBulkController.validateFilter('User', 'Name != null; DELETE Account');
             } catch (AuraHandledException e) {
                 caught = true;
             }
@@ -140,7 +143,7 @@ private class DocGenBulkTests {
             Boolean caught = false;
             Test.startTest();
             try {
-                DocGenBulkController.validateFilter('Account', 'Name IN (SELECT Name FROM Account)');
+                DocGenBulkController.validateFilter('User', 'Name IN (SELECT Name FROM User)');
             } catch (AuraHandledException e) {
                 caught = true;
             }
@@ -345,13 +348,13 @@ private class DocGenBulkTests {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
             // Create a template with V3 query config
-            String v3Config = '{"v":3,"root":"Account","nodes":[' +
-                '{"id":"n0","object":"Account","fields":["Name"],"parentFields":[],' +
+            String v3Config = '{"v":3,"root":"User","nodes":[' +
+                '{"id":"n0","object":"User","fields":["Name"],"parentFields":[],' +
                 '"parentNode":null,"lookupField":null,"relationshipName":null}' +
                 ']}';
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'V3 Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = v3Config,
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -362,29 +365,28 @@ private class DocGenBulkTests {
             createValidDocxForTemplate(t.Id, buildSimpleDocXml());
 
             // Create multiple accounts as bulk targets
-            List<Account> accs = new List<Account>();
-            for (Integer i = 0; i < 3; i++) {
-                accs.add(new Account(Name = 'V3 Acct ' + i));
+			Set<String> usrIds = new Set<String>();
+            for (User usr : [select Id from User limit 3]) {
+                usrIds.add(usr.Id);
             }
-            insert accs;
 
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = t.Id,
-                Query_Condition__c = 'Name LIKE \'V3 Acct%\'',
+                Query_Condition__c = 'Id IN (\'' + String.join(usrIds, '\',\'') + '\')',
                 Status__c = 'Queued'
             );
             insert job;
 
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
-            Database.executeBatch(batch, 3);
+            Database.executeBatch(batch, usrIds.size());
             Test.stopTest();
 
             // Verify job completed (cache may or may not have been created depending on
             // whether getRecordDataV3Bulk succeeds, but the batch should finish gracefully)
             DocGen_Job__c updated = [SELECT Status__c, Total_Records__c, Data_Cache_CV__c
                                      FROM DocGen_Job__c WHERE Id = :job.Id];
-            System.assertEquals(3, updated.Total_Records__c, 'Should have counted 3 records');
+            System.assertEquals(usrIds.size(), updated.Total_Records__c, 'Should have counted ' + usrIds.size() + ' records');
             System.assertNotEquals('Queued', updated.Status__c, 'Status should have progressed');
         }
     }
@@ -400,7 +402,7 @@ private class DocGenBulkTests {
             // Create a template with V1 query config and a valid DOCX
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'Success Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = 'Name',
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -409,12 +411,9 @@ private class DocGenBulkTests {
 
             createValidDocxForTemplate(t.Id, buildSimpleDocXml());
 
-            Account a = new Account(Name = 'Batch Success Account');
-            insert a;
-
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = t.Id,
-                Query_Condition__c = 'Name = \'Batch Success Account\'',
+                Query_Condition__c = 'UserName = \'' + UserInfo.getUserName() + '\'',
                 Status__c = 'Queued'
             );
             insert job;
@@ -444,7 +443,7 @@ private class DocGenBulkTests {
         System.runAs(u) {
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'Merge Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = 'Name',
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -453,11 +452,11 @@ private class DocGenBulkTests {
 
             createValidDocxForTemplate(t.Id, buildSimpleDocXml());
 
-            List<Account> accs = new List<Account>();
+            List<User> usrs = new List<User>();
+			User usr = [SELECT Id, Email FROM User WHERE Id = :UserInfo.getUserId() LIMIT 1];
             for (Integer i = 0; i < 2; i++) {
-                accs.add(new Account(Name = 'BulkAcct ' + i));
+                usrs.add(usr);
             }
-            insert accs;
 
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = t.Id,
@@ -490,7 +489,7 @@ private class DocGenBulkTests {
         System.runAs(u) {
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'MergeOnly Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = 'Name',
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -498,9 +497,6 @@ private class DocGenBulkTests {
             insert t;
 
             createValidDocxForTemplate(t.Id, buildSimpleDocXml());
-
-            Account a = new Account(Name = 'MergeOnly Account');
-            insert a;
 
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = t.Id,
@@ -578,11 +574,10 @@ private class DocGenBulkTests {
         System.runAs(u) {
             // Use a template with no DOCX file — all records will fail
             DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            Account a = [SELECT Id FROM Account WHERE Name = 'Test Account' LIMIT 1];
 
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = t.Id,
-                Query_Condition__c = 'Name = \'Test Account\'',
+                Query_Condition__c = 'UserName = \'' + UserInfo.getUserName() + '\'',
                 Status__c = 'Queued'
             );
             insert job;
@@ -639,13 +634,13 @@ private class DocGenBulkTests {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
             // Create a V3 config template to trigger buildDataCache
-            String v3Config = '{"v":3,"root":"Account","nodes":[' +
-                '{"id":"n0","object":"Account","fields":["Name"],"parentFields":[],' +
+            String v3Config = '{"v":3,"root":"User","nodes":[' +
+                '{"id":"n0","object":"User","fields":["Name"],"parentFields":[],' +
                 '"parentNode":null,"lookupField":null,"relationshipName":null}' +
                 ']}';
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'Cache Cleanup Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = v3Config,
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -653,9 +648,6 @@ private class DocGenBulkTests {
             insert t;
 
             createValidDocxForTemplate(t.Id, buildSimpleDocXml());
-
-            Account a = new Account(Name = 'Cache Cleanup Account');
-            insert a;
 
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = t.Id,
@@ -722,7 +714,7 @@ private class DocGenBulkTests {
         System.runAs(u) {
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'Merge Chain Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = 'Name',
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -730,9 +722,6 @@ private class DocGenBulkTests {
             insert t;
 
             createValidDocxForTemplate(t.Id, buildSimpleDocXml());
-
-            Account a = new Account(Name = 'ChainTestAcct');
-            insert a;
 
             // Submit via controller with mergePdf=true
             Test.startTest();
@@ -793,11 +782,10 @@ private class DocGenBulkTests {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
             DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            Account a = [SELECT Id FROM Account WHERE Name = 'Test Account' LIMIT 1];
 
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = t.Id,
-                Query_Condition__c = 'Name = \'Test Account\'',
+                Query_Condition__c = 'UserName = \'' + UserInfo.getUserName() + '\'',
                 Status__c = 'Completed'
             );
             insert job;
@@ -807,7 +795,7 @@ private class DocGenBulkTests {
                 Title = 'Generated PDF',
                 PathOnClient = 'Generated PDF.pdf',
                 VersionData = Blob.valueOf('fake pdf content'),
-                FirstPublishLocationId = a.Id
+                FirstPublishLocationId = UserInfo.getUserId()
             );
             insert cv;
 
@@ -860,7 +848,7 @@ private class DocGenBulkTests {
         System.runAs(u) {
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'Merge Submit Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = 'Name',
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -891,7 +879,7 @@ private class DocGenBulkTests {
         System.runAs(u) {
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'MergeOnly Submit Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = 'Name',
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -938,9 +926,9 @@ private class DocGenBulkTests {
 
     @IsTest
     static void testSubmitJobNullBatchSize() {
+		DocGen_Template__c t = createOrgTemplate();
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             Test.startTest();
             // null batchSize should default to 1
@@ -958,9 +946,9 @@ private class DocGenBulkTests {
 
     @IsTest
     static void testBatchNoCondition() {
+		DocGen_Template__c t = createOrgTemplate();
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = t.Id,
@@ -1030,7 +1018,7 @@ private class DocGenBulkTests {
             Boolean caught = false;
             Test.startTest();
             try {
-                DocGenBulkController.validateFilter('Account', 'Name != null /* hack */');
+                DocGenBulkController.validateFilter('User', 'Name != null /* hack */');
             } catch (AuraHandledException e) {
                 caught = true;
             }
@@ -1046,7 +1034,7 @@ private class DocGenBulkTests {
             Boolean caught = false;
             Test.startTest();
             try {
-                DocGenBulkController.validateFilter('Account', 'Name != null -- hack');
+                DocGenBulkController.validateFilter('User', 'Name != null -- hack');
             } catch (AuraHandledException e) {
                 caught = true;
             }
@@ -1066,7 +1054,7 @@ private class DocGenBulkTests {
             Boolean caught = false;
             Test.startTest();
             try {
-                DocGenBulkController.validateFilter('Account', 'Name != null UPDATE Account');
+                DocGenBulkController.validateFilter('User', 'Name != null UPDATE Account');
             } catch (AuraHandledException e) {
                 caught = true;
             }
@@ -1082,7 +1070,7 @@ private class DocGenBulkTests {
             Boolean caught = false;
             Test.startTest();
             try {
-                DocGenBulkController.validateFilter('Account', 'Name != null DELETE Account');
+                DocGenBulkController.validateFilter('User', 'Name != null DELETE Account');
             } catch (AuraHandledException e) {
                 caught = true;
             }
@@ -1100,13 +1088,13 @@ private class DocGenBulkTests {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
             // Create a V3 template so buildDataCache creates a cache CV
-            String v3Config = '{"v":3,"root":"Account","nodes":[' +
-                '{"id":"n0","object":"Account","fields":["Name"],"parentFields":[],' +
+            String v3Config = '{"v":3,"root":"User","nodes":[' +
+                '{"id":"n0","object":"User","fields":["Name"],"parentFields":[],' +
                 '"parentNode":null,"lookupField":null,"relationshipName":null}' +
                 ']}';
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'LazyLoad Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = v3Config,
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -1114,9 +1102,6 @@ private class DocGenBulkTests {
             insert t;
 
             createValidDocxForTemplate(t.Id, buildSimpleDocXml());
-
-            Account a = new Account(Name = 'LazyLoad Account');
-            insert a;
 
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = t.Id,
@@ -1148,7 +1133,7 @@ private class DocGenBulkTests {
             // 'DocGen_Job_Complete' does not exist — should return gracefully
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'Notify Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = 'Name',
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -1156,9 +1141,6 @@ private class DocGenBulkTests {
             insert t;
 
             createValidDocxForTemplate(t.Id, buildSimpleDocXml());
-
-            Account a = new Account(Name = 'Notify Account');
-            insert a;
 
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = t.Id,
@@ -1189,7 +1171,7 @@ private class DocGenBulkTests {
         System.runAs(u) {
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'MergeOnly Submit Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = 'Name',
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -1214,9 +1196,9 @@ private class DocGenBulkTests {
 
     @IsTest
     static void testSubmitJobDefaultBatchSize() {
+		DocGen_Template__c t = createOrgTemplate();
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             Test.startTest();
             Id jobId = DocGenBulkController.submitJob(t.Id, null, null, false, null, false);
@@ -1238,7 +1220,7 @@ private class DocGenBulkTests {
             Boolean caught = false;
             Test.startTest();
             try {
-                DocGenBulkController.validateFilter('Account', 'Name != null -- drop');
+                DocGenBulkController.validateFilter('User', 'Name != null -- drop');
             } catch (AuraHandledException e) {
                 caught = true;
             }
@@ -1254,7 +1236,7 @@ private class DocGenBulkTests {
             Boolean caught = false;
             Test.startTest();
             try {
-                DocGenBulkController.validateFilter('Account', 'Name != null /* evil */');
+                DocGenBulkController.validateFilter('User', 'Name != null /* evil */');
             } catch (AuraHandledException e) {
                 caught = true;
             }
@@ -1271,7 +1253,7 @@ private class DocGenBulkTests {
             Boolean caught = false;
             Test.startTest();
             try {
-                DocGenBulkController.validateFilter('Account', 'Name != null ORDER BY Name');
+                DocGenBulkController.validateFilter('User', 'Name != null ORDER BY Name');
             } catch (AuraHandledException e) {
                 caught = true;
             }
@@ -1407,7 +1389,7 @@ private class DocGenBulkTests {
             // Create template with valid DOCX so at least some records succeed
             DocGen_Template__c t = new DocGen_Template__c(
                 Name = 'Partial Fail Template',
-                Base_Object_API__c = 'Account',
+                Base_Object_API__c = 'User',
                 Query_Config__c = 'Name',
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
@@ -1416,12 +1398,9 @@ private class DocGenBulkTests {
 
             createValidDocxForTemplate(t.Id, buildSimpleDocXml());
 
-            // Create accounts that should be processed
-            insert new Account(Name = 'PartialFail Account');
-
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = t.Id,
-                Query_Condition__c = 'Name = \'PartialFail Account\'',
+                Query_Condition__c = 'Name = \'PartialFail User\'',
                 Status__c = 'Queued'
             );
             insert job;
@@ -1443,9 +1422,9 @@ private class DocGenBulkTests {
 
     @IsTest
     static void testSubmitJobWithLabel() {
+		DocGen_Template__c t = createOrgTemplate();
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             Test.startTest();
             Id jobId = DocGenBulkController.submitJob(t.Id, null, 'My Custom Label', false, 5, false);
@@ -1462,9 +1441,9 @@ private class DocGenBulkTests {
 
     @IsTest
     static void testSubmitJobWithBlankLabel() {
+		DocGen_Template__c t = createOrgTemplate();
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             Test.startTest();
             Id jobId = DocGenBulkController.submitJob(t.Id, null, '', false, 1, false);
